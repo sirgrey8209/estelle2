@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* React Native Paper TextInput flat mode - fix excessive padding/height */
+[data-testid="text-input-flat"] {
+  padding: 8px 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Parent container - remove forced min-height */
+.r-paddingBottom-1mdbw0j.r-paddingTop-wk8lta {
+  min-height: unset !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+

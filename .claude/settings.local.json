@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:alexop.dev)",
+      "Bash(pnpm test)",
+      "Bash(pnpm build)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm --filter *)"
+    ]
+  }
+}

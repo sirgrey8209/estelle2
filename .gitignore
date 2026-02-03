@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Temp files
+.dev-server.pid
+nul
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Expo
+.expo/
+packages/client/.expo/
+
+# Flutter (legacy)
+packages/app/.dart_tool/
+packages/app/.packages
+packages/app/build/
+packages/app/.flutter-plugins
+packages/app/.flutter-plugins-dependencies

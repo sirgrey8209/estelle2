@@ -1,0 +1,60 @@
+{
+  "activeWorkspaceId": "f0a1eca0-9253-47ec-a1b6-3c29d8427801",
+  "activeConversationId": "5c70640a-90c5-4b40-baf5-6592b67461e5",
+  "workspaces": [
+    {
+      "workspaceId": "7bdb5138-14f4-4ad3-a37a-632218ddd742",
+      "name": "estelle2",
+      "workingDir": "C:\\workspace\\estelle2",
+      "conversations": [
+        {
+          "conversationId": "9896de93-f0c4-475b-996f-9d07e9ed9c2b",
+          "name": "새 대화",
+          "claudeSessionId": null,
+          "status": "idle",
+          "unread": false,
+          "permissionMode": "default",
+          "createdAt": 1770010138377
+        },
+        {
+          "conversationId": "76893b2a-08a3-4b79-ae14-49a5d8e8a7f5",
+          "name": "테스트2",
+          "claudeSessionId": null,
+          "status": "idle",
+          "unread": false,
+          "permissionMode": "default",
+          "createdAt": 1770085923438
+        }
+      ],
+      "createdAt": 1770010138377,
+      "lastUsed": 1770085923438
+    },
+    {
+      "workspaceId": "f0a1eca0-9253-47ec-a1b6-3c29d8427801",
+      "name": "eb",
+      "workingDir": "C:\\workspace\\eb",
+      "conversations": [
+        {
+          "conversationId": "64060c24-25cf-4a40-91e9-4608fa2967b5",
+          "name": "새 대화",
+          "claudeSessionId": null,
+          "status": "idle",
+          "unread": false,
+          "permissionMode": "default",
+          "createdAt": 1770086186893
+        },
+        {
+          "conversationId": "5c70640a-90c5-4b40-baf5-6592b67461e5",
+          "name": "테스트 대화2",
+          "claudeSessionId": null,
+          "status": "idle",
+          "unread": false,
+          "permissionMode": "default",
+          "createdAt": 1770093808110
+        }
+      ],
+      "createdAt": 1770086186893,
+      "lastUsed": 1770093808110
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@estelle/relay",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/bin.js",
+    "dev": "cross-env PORT=8081 node dist/bin.js"
+  },
+  "dependencies": {
+    "@estelle/core": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "cross-env": "^10.1.0"
+  }
+}

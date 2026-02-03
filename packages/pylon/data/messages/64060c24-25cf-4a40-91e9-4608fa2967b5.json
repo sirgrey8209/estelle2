@@ -1,0 +1,32 @@
+{
+  "sessionId": "64060c24-25cf-4a40-91e9-4608fa2967b5",
+  "messages": [
+    {
+      "role": "user",
+      "type": "text",
+      "content": "ㅁㅁㅁㅁㅁㅁ",
+      "id": "msg_1770100518057_0",
+      "timestamp": 1770100518057
+    },
+    {
+      "role": "assistant",
+      "type": "text",
+      "content": "안녕하세요! 무엇을 도와드릴까요? \n\nEB 프로젝트 관련 작업이나 다른 요청이 있으시면 말씀해 주세요. 😊",
+      "id": "msg_1770100524184_1",
+      "timestamp": 1770100524184
+    },
+    {
+      "role": "system",
+      "type": "result",
+      "resultInfo": {
+        "durationMs": 6133,
+        "inputTokens": 3,
+        "outputTokens": 68,
+        "cacheReadTokens": 13837
+      },
+      "id": "msg_1770100524192_2",
+      "timestamp": 1770100524192
+    }
+  ],
+  "updatedAt": 1770100526203
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@estelle/pylon",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/bin.js",
+    "dev": "cross-env RELAY_URL=ws://localhost:8081 LOCAL_PORT=9101 DEVICE_ID=1 node dist/bin.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@estelle/core": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "cross-env": "^10.1.0"
+  }
+}
