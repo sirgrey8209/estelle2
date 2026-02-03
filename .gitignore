@@ -31,6 +31,8 @@ Thumbs.db
 # Expo
 .expo/
 packages/client/.expo/
+packages/client/android/
+packages/client/ios/
 
 # Flutter (legacy)
 packages/app/.dart_tool/

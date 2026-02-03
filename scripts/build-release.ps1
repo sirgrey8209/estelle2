@@ -11,6 +11,13 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReleaseDir = Join-Path $RepoRoot "release"
 
+# UTF8 without BOM 헬퍼 함수
+function Write-Utf8File {
+    param([string]$Path, [string]$Content)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 Write-Host "=== Estelle v2 Release Build ===" -ForegroundColor Cyan
 
 # 0. 빌드
@@ -47,6 +54,9 @@ $CoreSrc = Join-Path $RepoRoot "packages\core"
 $CoreDst = Join-Path $ReleaseDir "core"
 Copy-Item -Path "$CoreSrc\dist" -Destination "$CoreDst\dist" -Recurse
 Copy-Item -Path "$CoreSrc\package.json" -Destination "$CoreDst\package.json"
+if (Test-Path "$CoreSrc\node_modules") {
+    Copy-Item -Path "$CoreSrc\node_modules" -Destination "$CoreDst\node_modules" -Recurse
+}
 Write-Host "Core package copied" -ForegroundColor Green
 
 # 3. Pylon 패키지 복사
@@ -55,9 +65,16 @@ $PylonSrc = Join-Path $RepoRoot "packages\pylon"
 $PylonDst = Join-Path $ReleaseDir "pylon"
 Copy-Item -Path "$PylonSrc\dist" -Destination "$PylonDst\dist" -Recurse
 Copy-Item -Path "$PylonSrc\package.json" -Destination "$PylonDst\package.json"
+if (Test-Path "$PylonSrc\node_modules") {
+    Copy-Item -Path "$PylonSrc\node_modules" -Destination "$PylonDst\node_modules" -Recurse
+}
+# data 폴더도 복사 (워크스페이스 데이터)
+if (Test-Path "$PylonSrc\data") {
+    Copy-Item -Path "$PylonSrc\data" -Destination "$PylonDst\data" -Recurse
+}
 
 # Pylon 배포 설정
-@"
+$ecosystemConfig = @"
 module.exports = {
   apps: [
     {
@@ -78,10 +95,11 @@ module.exports = {
     }
   ]
 };
-"@ | Out-File -FilePath "$PylonDst\ecosystem.config.js" -Encoding UTF8
+"@
+Write-Utf8File -Path "$PylonDst\ecosystem.config.cjs" -Content $ecosystemConfig
 
 # Pylon 설치 스크립트
-@'
+$installScript = @'
 # install.ps1 - Pylon PM2 설치 스크립트
 # 관리자 권한으로 실행하면 시작프로그램 등록까지 수행
 
@@ -90,14 +108,8 @@ $PylonDir = $PSScriptRoot
 
 Write-Host "=== Estelle Pylon Setup ===" -ForegroundColor Cyan
 
-# 1. 의존성 설치
-Write-Host "`n[1/4] Installing dependencies..." -ForegroundColor Yellow
-Push-Location $PylonDir
-npm install --omit=dev
-Pop-Location
-
-# 2. PM2 확인/설치
-Write-Host "`n[2/4] Checking PM2..." -ForegroundColor Yellow
+# 1. PM2 확인/설치
+Write-Host "`n[1/3] Checking PM2..." -ForegroundColor Yellow
 $pm2 = npm list -g pm2 2>$null | Select-String "pm2@"
 if (-not $pm2) {
     Write-Host "Installing PM2..." -ForegroundColor Gray
@@ -105,17 +117,17 @@ if (-not $pm2) {
 }
 Write-Host "PM2 ready: $(pm2 -v)" -ForegroundColor Green
 
-# 3. PM2로 시작
-Write-Host "`n[3/4] Starting Pylon..." -ForegroundColor Yellow
+# 2. PM2로 시작
+Write-Host "`n[2/3] Starting Pylon..." -ForegroundColor Yellow
 Push-Location $PylonDir
 pm2 delete estelle-pylon 2>$null
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 Pop-Location
 Write-Host "Pylon started" -ForegroundColor Green
 
-# 4. 시작프로그램 등록 (관리자 권한 필요)
-Write-Host "`n[4/4] Registering startup..." -ForegroundColor Yellow
+# 3. 시작프로그램 등록 (관리자 권한 필요)
+Write-Host "`n[3/3] Registering startup..." -ForegroundColor Yellow
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isAdmin) {
     pm2-startup install
@@ -126,7 +138,8 @@ if ($isAdmin) {
 
 Write-Host "`n=== Setup Complete ===" -ForegroundColor Cyan
 Write-Host "Commands: pm2 status | pm2 logs estelle-pylon | pm2 restart estelle-pylon" -ForegroundColor Gray
-'@ | Out-File -FilePath "$PylonDst\install.ps1" -Encoding UTF8
+'@
+Write-Utf8File -Path "$PylonDst\install.ps1" -Content $installScript
 
 Write-Host "Pylon package copied" -ForegroundColor Green
 
@@ -136,9 +149,12 @@ $RelaySrc = Join-Path $RepoRoot "packages\relay"
 $RelayDst = Join-Path $ReleaseDir "relay"
 Copy-Item -Path "$RelaySrc\dist" -Destination "$RelayDst\dist" -Recurse
 Copy-Item -Path "$RelaySrc\package.json" -Destination "$RelayDst\package.json"
+if (Test-Path "$RelaySrc\node_modules") {
+    Copy-Item -Path "$RelaySrc\node_modules" -Destination "$RelayDst\node_modules" -Recurse
+}
 
 # Relay Dockerfile
-@'
+$dockerfile = @'
 FROM node:20-alpine
 
 WORKDIR /app
@@ -161,10 +177,11 @@ RUN npm install --omit=dev
 EXPOSE 8080
 
 CMD ["node", "dist/bin.js"]
-'@ | Out-File -FilePath "$RelayDst\Dockerfile" -Encoding UTF8
+'@
+Write-Utf8File -Path "$RelayDst\Dockerfile" -Content $dockerfile
 
 # Relay fly.toml
-@'
+$flyToml = @'
 app = "estelle-relay-v2"
 primary_region = "nrt"
 
@@ -189,10 +206,11 @@ primary_region = "nrt"
   [[services.ports]]
     port = 80
     handlers = ["http"]
-'@ | Out-File -FilePath "$RelayDst\fly.toml" -Encoding UTF8
+'@
+Write-Utf8File -Path "$RelayDst\fly.toml" -Content $flyToml
 
 # Relay 배포 스크립트
-@'
+$deployScript = @'
 # deploy.ps1 - Relay Fly.io 배포 스크립트
 # 사용법: .\deploy.ps1
 
@@ -223,7 +241,8 @@ try {
 } finally {
     Pop-Location
 }
-'@ | Out-File -FilePath "$RelayDst\deploy.ps1" -Encoding UTF8
+'@
+Write-Utf8File -Path "$RelayDst\deploy.ps1" -Content $deployScript
 
 Write-Host "Relay package copied" -ForegroundColor Green
 
@@ -234,8 +253,8 @@ Write-Host @"
 Release packages created in: $ReleaseDir
 
   release/
-  ├── core/      (shared library)
-  ├── pylon/     (run: .\install.ps1)
-  └── relay/     (run: .\deploy.ps1)
+  +-- core/      (shared library)
+  +-- pylon/     (run: .\install.ps1)
+  +-- relay/     (run: .\deploy.ps1)
 
 "@ -ForegroundColor Gray
