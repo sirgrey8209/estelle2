@@ -160,8 +160,8 @@ async function start() {
   savePids(pids);
 
   console.log('');
-  console.log('  Relay:  http://localhost:8081');
-  console.log('  Pylon:  ws://localhost:9101 (local)');
+  console.log('  Relay:  http://localhost:8080');
+  console.log('  Pylon:  ws://localhost:9000 (local)');
   console.log('  App:    Expo (new terminal)');
   console.log('');
   console.log('  Stop:   pnpm dev:stop');

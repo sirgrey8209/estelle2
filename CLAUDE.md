@@ -193,8 +193,8 @@ pnpm ios        # iOS
 
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
-| Relay | 8081 | WebSocket 라우터 |
-| Pylon | 9101 | 로컬 연결용 |
+| Relay | 8080 | WebSocket 라우터 |
+| Pylon | 9000 | 로컬 연결용 |
 | Expo Dev | 10000 | Metro bundler |
 
 ## 자주 쓰는 명령어

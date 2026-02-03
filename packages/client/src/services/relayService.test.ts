@@ -45,7 +45,7 @@ describe('RelayService', () => {
   let mockAdapter: MockWebSocketAdapter;
 
   const config: RelayConfig = {
-    url: 'ws://localhost:8081',
+    url: 'ws://localhost:8080',
     authToken: 'test-token',
     deviceType: 'app',
   };

@@ -11,7 +11,7 @@ export const RelayConfig = {
   url: process.env.EXPO_PUBLIC_RELAY_URL ?? 'wss://estelle-relay.example.com',
 
   /** 로컬 개발 URL */
-  localUrl: 'ws://localhost:8081',
+  localUrl: 'ws://localhost:8080',
 
   /** 재연결 시도 횟수 */
   maxReconnectAttempts: 5,

@@ -9,7 +9,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "start": "node dist/bin.js",
-    "dev": "cross-env RELAY_URL=ws://localhost:8081 LOCAL_PORT=9101 DEVICE_ID=1 node dist/bin.js"
+    "dev": "cross-env RELAY_URL=ws://localhost:8080 LOCAL_PORT=9000 DEVICE_ID=1 node dist/bin.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.27",

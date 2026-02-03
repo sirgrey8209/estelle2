@@ -9,7 +9,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "start": "node dist/bin.js",
-    "dev": "cross-env PORT=8081 node dist/bin.js"
+    "dev": "cross-env PORT=8080 node dist/bin.js"
   },
   "dependencies": {
     "@estelle/core": "workspace:*",
