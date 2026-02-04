@@ -5,7 +5,6 @@
  *
  * 환경변수:
  * - RELAY_URL: Relay 서버 URL (기본: ws://localhost:8080)
- * - LOCAL_PORT: 로컬 서버 포트 (기본: 9000)
  * - DEVICE_ID: 디바이스 ID (기본: 1)
  * - UPLOADS_DIR: 업로드 디렉토리 (기본: ./uploads)
  */
@@ -17,7 +16,6 @@ import { Pylon, type PylonConfig, type PylonDependencies } from './pylon.js';
 import { WorkspaceStore } from './stores/workspace-store.js';
 import { MessageStore } from './stores/message-store.js';
 import { createRelayClient } from './network/relay-client.js';
-import { createLocalServer } from './network/local-server.js';
 import { ClaudeManager } from './claude/claude-manager.js';
 import { ClaudeSDKAdapter } from './claude/claude-sdk-adapter.js';
 import { BlobHandler, type FileSystemAdapter } from './handlers/blob-handler.js';
@@ -33,7 +31,6 @@ import { FileSystemPersistence, type FileSystemInterface } from './persistence/f
 const config: PylonConfig = {
   deviceId: parseInt(process.env['DEVICE_ID'] || '1', 10),
   relayUrl: process.env['RELAY_URL'] || 'ws://localhost:8080',
-  localPort: parseInt(process.env['LOCAL_PORT'] || '9000', 10),
   uploadsDir: process.env['UPLOADS_DIR'] || './uploads',
 };
 
@@ -194,11 +191,6 @@ function createDependencies(): PylonDependencies {
     reconnectInterval: 5000,
   });
 
-  // LocalServer
-  const localServer = createLocalServer({
-    port: config.localPort,
-  });
-
   // ClaudeSDKAdapter
   const claudeAdapter = new ClaudeSDKAdapter();
 
@@ -245,7 +237,6 @@ function createDependencies(): PylonDependencies {
     workspaceStore,
     messageStore,
     relayClient,
-    localServer,
     claudeManager,
     blobHandler: blobHandler as unknown as PylonDependencies['blobHandler'],
     taskManager,
@@ -266,7 +257,6 @@ async function main(): Promise<void> {
   logger.log(`[Estelle Pylon v2] Starting...`);
   logger.log(`  Device ID: ${config.deviceId}`);
   logger.log(`  Relay URL: ${config.relayUrl}`);
-  logger.log(`  Local Port: ${config.localPort}`);
   logger.log(`  Uploads Dir: ${config.uploadsDir}`);
   logger.log(`  Data Dir: ${dataDir}`);
 
@@ -295,7 +285,7 @@ async function main(): Promise<void> {
   });
 
   await pylon.start();
-  logger.log(`[Estelle Pylon v2] Started on port ${config.localPort}`);
+  logger.log(`[Estelle Pylon v2] Started`);
 }
 
 main().catch((error) => {

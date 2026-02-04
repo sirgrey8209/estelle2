@@ -24,9 +24,14 @@ const treeKill = require('tree-kill');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const pidFile = join(rootDir, '.dev-server.pid');
+const configPath = join(rootDir, 'config', 'environments.json');
 
 // .env 파일 로드
 loadEnv({ path: join(rootDir, '.env') });
+
+// 환경 설정 로드
+const envConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+const devConfig = envConfig.dev;
 
 // ============================================================================
 // PID 파일 관리
@@ -160,9 +165,9 @@ async function start() {
   savePids(pids);
 
   console.log('');
-  console.log('  Relay:  http://localhost:8080');
-  console.log('  Pylon:  ws://localhost:9000 (local)');
-  console.log('  App:    Expo (new terminal)');
+  console.log(`  Relay:  ws://localhost:${devConfig.relay.port}`);
+  console.log(`  Pylon:  ${devConfig.pylon.relayUrl} (relay connection)`);
+  console.log(`  Expo:   http://localhost:${devConfig.expo.port} (new terminal)`);
   console.log('');
   console.log('  Stop:   pnpm dev:stop');
   console.log('');

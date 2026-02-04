@@ -7,7 +7,6 @@ export {
   type PylonConfig,
   type PylonDependencies,
   type RelayClientAdapter,
-  type LocalServerAdapter,
   type ClaudeManagerAdapter,
   type BlobHandlerAdapter,
   type TaskManagerAdapter,
@@ -47,14 +46,9 @@ export {
 
 // network - 네트워크 통신 모듈
 export {
-  LocalServer,
-  createLocalServer,
-  DEFAULT_LOCAL_PORT,
   RelayClient,
   createRelayClient,
   DEFAULT_RECONNECT_INTERVAL,
-  type LocalServerOptions,
-  type LocalServerCallbacks,
   type RelayClientOptions,
   type RelayClientCallbacks,
 } from './network/index.js';

@@ -7,3 +7,5 @@ export { StatusDot } from './StatusDot';
 export { LoadingOverlay } from './LoadingOverlay';
 export { BugReportDialog } from './BugReportDialog';
 export { SessionMenuButton } from './SessionMenuButton';
+export { ThemedScrollView } from './ThemedScrollView';
+export { ThemedFlatList } from './ThemedFlatList';

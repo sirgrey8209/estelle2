@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global Scrollbar Styling - 기본 폴백 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.5) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.7);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ThemedScrollView/ThemedFlatList용 - 네이티브 스크롤바 완전 숨김 */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* React Native Paper TextInput flat mode - fix excessive padding/height */
 [data-testid="text-input-flat"] {
   padding: 8px 12px !important;

@@ -8,7 +8,6 @@
  *
  * 주요 기능:
  * - Relay 서버 연결 및 인증
- * - LocalServer를 통한 데스크톱 앱 연결
  * - 워크스페이스/대화 관리
  * - Claude SDK 연동 및 이벤트 전달
  * - Blob(이미지) 전송 처리
@@ -24,9 +23,8 @@
  * import { Pylon, createDefaultDependencies } from './pylon.js';
  *
  * const config = {
- *   deviceId: 'pylon-1',
+ *   deviceId: 1,
  *   relayUrl: 'ws://relay.example.com',
- *   localPort: 9000,
  *   uploadsDir: './uploads',
  * };
  *
@@ -60,9 +58,6 @@ export interface PylonConfig {
   /** Relay 서버 URL */
   relayUrl: string;
 
-  /** 로컬 서버 포트 */
-  localPort: number;
-
   /** 업로드 파일 저장 디렉토리 */
   uploadsDir: string;
 }
@@ -77,20 +72,6 @@ export interface RelayClientAdapter {
   isConnected(): boolean;
   onMessage(callback: (data: unknown) => void): void;
   onStatusChange(callback: (isConnected: boolean) => void): void;
-}
-
-/**
- * LocalServer 인터페이스 (의존성 주입용)
- */
-export interface LocalServerAdapter {
-  start(): void;
-  stop(): void;
-  broadcast(message: unknown): void;
-  isRunning(): boolean;
-  onMessage(callback: (data: unknown, ws: unknown) => void): void;
-  onConnect(callback: (ws: unknown) => void): void;
-  setRelayStatusCallback(callback: () => boolean): void;
-  getClientCount(): number;
 }
 
 /**
@@ -178,7 +159,6 @@ export interface PylonDependencies {
   workspaceStore: WorkspaceStore;
   messageStore: MessageStore;
   relayClient: RelayClientAdapter;
-  localServer: LocalServerAdapter;
   claudeManager: ClaudeManagerAdapter;
   blobHandler: BlobHandlerAdapter;
   taskManager: TaskManagerAdapter;
@@ -297,13 +277,12 @@ export class Pylon {
    * Pylon 시작
    *
    * @description
-   * 영속 데이터를 로드하고, LocalServer를 시작하고, Relay에 연결합니다.
+   * 영속 데이터를 로드하고 Relay에 연결합니다.
    */
   async start(): Promise<void> {
     this.log(`[Estelle Pylon] Starting...`);
     this.log(`Device ID: ${this.config.deviceId}`);
     this.log(`Relay URL: ${this.config.relayUrl}`);
-    this.log(`Local Port: ${this.config.localPort}`);
 
     // 영속 데이터 로드
     await this.loadPersistedData();
@@ -319,9 +298,6 @@ export class Pylon {
     if (resetIds.length > 0) {
       await this.saveWorkspaceStore();
     }
-
-    // LocalServer 시작
-    this.deps.localServer.start();
 
     // Relay 연결
     this.deps.relayClient.connect();
@@ -344,9 +320,6 @@ export class Pylon {
 
     // Claude 세션 정리
     this.deps.claudeManager.cleanup();
-
-    // LocalServer 종료
-    this.deps.localServer.stop();
 
     // Relay 연결 종료
     this.deps.relayClient.disconnect();
@@ -396,7 +369,7 @@ export class Pylon {
   // ==========================================================================
 
   /**
-   * 메시지 처리 (Relay 및 LocalServer에서 호출)
+   * 메시지 처리 (Relay에서 호출)
    *
    * @param message - 수신된 메시지
    */
@@ -619,8 +592,7 @@ export class Pylon {
       return;
     }
 
-    // 알 수 없는 메시지는 로컬 서버로 전달
-    this.deps.localServer.broadcast({ type: 'from_relay', data: message });
+    // 알 수 없는 메시지는 무시
   }
 
   /**
@@ -672,9 +644,6 @@ export class Pylon {
       });
     }
 
-    // 로컬 서버는 그대로 브로드캐스트
-    this.deps.localServer.broadcast(message);
-
     // 상태 변경은 모든 클라이언트에게 브로드캐스트
     if (event.type === 'state') {
       const state = (event as Record<string, unknown>).state as ConversationStatusValue;
@@ -720,40 +689,7 @@ export class Pylon {
         this.authenticated = false;
         this.deviceInfo = null;
       }
-      this.deps.localServer.broadcast({ type: 'relay_status', connected: isConnected });
     });
-
-    // LocalServer 메시지 콜백
-    this.deps.localServer.onMessage((data, ws) => {
-      const message = data as Record<string, unknown>;
-      if (message.type !== 'ping') {
-        this.deps.packetLogger.logRecv('desktop', message);
-      }
-
-      // ping 처리
-      if (message.type === 'ping') {
-        // ws에 직접 응답 필요 (테스트에서는 mock)
-        return;
-      }
-
-      // get_status 처리
-      if (message.type === 'get_status') {
-        // ws에 직접 응답 필요
-        return;
-      }
-
-      // 메시지 처리
-      this.handleMessage(message);
-    });
-
-    // LocalServer 연결 콜백
-    this.deps.localServer.onConnect(() => {
-      // 워크스페이스 목록 전송
-      this.broadcastWorkspaceList();
-    });
-
-    // Relay 상태 콜백
-    this.deps.localServer.setRelayStatusCallback(() => this.authenticated);
   }
 
   // ==========================================================================
@@ -793,8 +729,7 @@ export class Pylon {
   /**
    * 디바이스 상태 처리
    */
-  private handleDeviceStatus(payload: Record<string, unknown> | undefined): void {
-    this.deps.localServer.broadcast({ type: 'device_status', devices: payload?.devices });
+  private handleDeviceStatus(_payload: Record<string, unknown> | undefined): void {
     this.broadcastPylonStatus();
   }
 
@@ -1150,7 +1085,6 @@ export class Pylon {
       },
     };
     this.send({ ...userMessageEvent, broadcast: 'clients' });
-    this.deps.localServer.broadcast(userMessageEvent);
 
     // Claude에게 메시지 전송
     if (workingDir) {
@@ -1617,11 +1551,6 @@ Message: ${message}
       broadcast: 'clients',
     });
 
-    this.deps.localServer.broadcast({
-      type: 'workspace_list_result',
-      payload,
-    });
-
     // 워크스페이스 저장 (비동기)
     this.saveWorkspaceStore().catch((err) => {
       this.deps.logger.error(`[Persistence] Failed to save workspace store: ${err}`);
@@ -1650,11 +1579,6 @@ Message: ${message}
       payload,
       broadcast: 'clients',
     });
-
-    this.deps.localServer.broadcast({
-      type: 'task_list_result',
-      payload,
-    });
   }
 
   /**
@@ -1676,11 +1600,6 @@ Message: ${message}
       type: 'worker_status_result',
       payload,
       broadcast: 'clients',
-    });
-
-    this.deps.localServer.broadcast({
-      type: 'worker_status_result',
-      payload,
     });
   }
 
@@ -1884,7 +1803,6 @@ Message: ${message}
         this.send({ ...message, to: Array.from(viewers) });
       }
 
-      this.deps.localServer.broadcast(message);
       this.deps.messageStore.addFileAttachment(sessionId, result.file);
     } catch (err) {
       this.log(`[send_file] Failed to parse result: ${(err as Error).message}`);

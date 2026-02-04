@@ -1,14 +1,26 @@
 import '../global.css';
 import { useEffect, useRef, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
 import { theme } from '../src/theme';
 import { useRelayStore } from '../src/stores';
-import { RelayConfig } from '../src/utils/config';
+import { RelayConfig, AppConfig } from '../src/utils/config';
 import { routeMessage } from '../src/hooks/useMessageRouter';
 import { setWebSocket, requestWorkspaceList } from '../src/services/relaySender';
 import type { RelayMessage } from '../src/services/relayService';
+
+/**
+ * 웹 문서 타이틀 설정
+ */
+function useDocumentTitle() {
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      document.title = AppConfig.title;
+    }
+  }, []);
+}
 
 /**
  * WebSocket 연결 및 메시지 처리
@@ -115,6 +127,7 @@ function useRelayConnection() {
 }
 
 export default function RootLayout() {
+  useDocumentTitle();
   useRelayConnection();
 
   return (

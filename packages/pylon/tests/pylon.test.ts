@@ -44,16 +44,6 @@ function createMockDependencies(): PylonDependencies {
       onMessage: vi.fn(),
       onStatusChange: vi.fn(),
     },
-    localServer: {
-      start: vi.fn(),
-      stop: vi.fn(),
-      broadcast: vi.fn(),
-      isRunning: vi.fn().mockReturnValue(false),
-      onMessage: vi.fn(),
-      onConnect: vi.fn(),
-      setRelayStatusCallback: vi.fn(),
-      getClientCount: vi.fn().mockReturnValue(0),
-    },
     claudeManager: {
       sendMessage: vi.fn(),
       stop: vi.fn(),
@@ -162,7 +152,6 @@ describe('Pylon', () => {
     it('should start local server and connect to relay', async () => {
       await pylon.start();
 
-      expect(deps.localServer.start).toHaveBeenCalled();
       expect(deps.relayClient.connect).toHaveBeenCalled();
     });
 
@@ -170,7 +159,6 @@ describe('Pylon', () => {
       await pylon.start();
       await pylon.stop();
 
-      expect(deps.localServer.stop).toHaveBeenCalled();
       expect(deps.relayClient.disconnect).toHaveBeenCalled();
       expect(deps.claudeManager.cleanup).toHaveBeenCalled();
     });

@@ -1,0 +1,36 @@
+{
+  "dev": {
+    "name": "Development",
+    "relay": {
+      "port": 3000,
+      "url": "ws://localhost:3000"
+    },
+    "pylon": {
+      "deviceId": "1",
+      "relayUrl": "ws://localhost:3000"
+    },
+    "expo": {
+      "port": 10000
+    },
+    "client": {
+      "relayUrl": "ws://localhost:3000",
+      "title": "Estelle (dev)"
+    }
+  },
+  "release": {
+    "name": "Production",
+    "relay": {
+      "port": 8080,
+      "url": "wss://estelle-relay-v2.fly.dev"
+    },
+    "pylon": {
+      "deviceId": "1",
+      "relayUrl": "wss://estelle-relay-v2.fly.dev"
+    },
+    "client": {
+      "webPort": 8080,
+      "relayUrl": "wss://estelle-relay-v2.fly.dev",
+      "title": "Estelle"
+    }
+  }
+}

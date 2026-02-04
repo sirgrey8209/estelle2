@@ -8,10 +8,10 @@
  */
 export const RelayConfig = {
   /** Relay 서버 URL */
-  url: process.env.EXPO_PUBLIC_RELAY_URL ?? 'wss://estelle-relay.example.com',
+  url: process.env.EXPO_PUBLIC_RELAY_URL ?? 'wss://estelle-relay-v2.fly.dev',
 
   /** 로컬 개발 URL */
-  localUrl: 'ws://localhost:8080',
+  localUrl: 'ws://localhost:3000',
 
   /** 재연결 시도 횟수 */
   maxReconnectAttempts: 5,
@@ -43,6 +43,9 @@ export const ImageCacheConfig = {
 export const AppConfig = {
   /** 디버그 모드 */
   debug: __DEV__,
+
+  /** 앱 타이틀 (웹) */
+  title: __DEV__ ? 'Estelle (dev)' : 'Estelle',
 
   /** 최대 메시지 수 (per desk) */
   maxMessages: 1000,

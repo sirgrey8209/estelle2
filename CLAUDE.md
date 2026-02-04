@@ -160,9 +160,42 @@ function routeMessage(msg, connections): RouteResult { ... }
 - `cd /d C:\path` 형식 동작 안 함
 - 절대경로 실패 시 상대경로로 재시도
 
-## 개발 서버
+## 환경 설정
 
-통합 개발 서버로 Relay, Pylon, Expo 앱을 관리한다.
+환경별 설정은 `config/environments.json`에서 중앙 관리한다.
+
+```json
+{
+  "dev": {
+    "relay": { "port": 3000, "url": "ws://localhost:3000" },
+    "client": { "relayUrl": "ws://localhost:3000", "title": "Estelle (dev)" }
+  },
+  "release": {
+    "relay": { "url": "wss://estelle-relay-v2.fly.dev" },
+    "client": { "webPort": 8080, "title": "Estelle" }
+  }
+}
+```
+
+- 스크립트들이 이 파일을 읽어 포트/URL 설정
+- `.env`는 Expo 환경변수용 (EXPO_PUBLIC_RELAY_URL)
+- Dev 환경에서 웹 타이틀에 "(dev)" 표시됨
+
+## 빌드 환경
+
+### Dev 빌드 vs Release 빌드
+
+| 구분 | Dev 빌드 | Release 빌드 |
+|------|----------|--------------|
+| 명령어 | `pnpm dev` | `.\scripts\build-release.ps1` |
+| Relay | 로컬 (ws://localhost:3000) | Fly.io (wss://estelle-relay-v2.fly.dev) |
+| Pylon | packages/pylon 직접 실행 | release/pylon (PM2) |
+| Client | Expo Dev Server | 웹: PM2 (8080), APK |
+| 데이터 | packages/pylon/data | release/pylon/data (분리됨) |
+| 웹 타이틀 | Estelle (dev) | Estelle |
+| 용도 | 개발/디버깅 | 실제 사용 |
+
+### Dev 빌드 (개발 서버)
 
 ```bash
 # 시작 (Relay + Pylon + Expo)
@@ -178,6 +211,55 @@ pnpm dev:status
 pnpm dev:restart
 ```
 
+### Release 빌드
+
+```powershell
+# 풀 빌드 (TypeScript + 웹 + APK + PM2 시작 + 헬스체크)
+.\scripts\build-release.ps1
+
+# GitHub Release 생성
+.\scripts\release-github.ps1 -Version "v2.1.0"
+
+# Release → Dev 데이터 동기화
+.\scripts\sync-data.ps1
+```
+
+**Release 빌드 과정:**
+1. TypeScript 빌드
+2. release/ 폴더 초기화
+3. Core/Pylon/Relay 패키지 복사
+4. Client 웹 빌드 + APK 빌드
+5. PM2 서비스 시작
+6. 헬스체크 (Relay 연결, 웹 서버 응답)
+
+### 데이터 관리
+
+Dev와 Release는 **별도의 데이터**를 사용한다 (대화, 워크스페이스 등).
+
+| 환경 | 데이터 경로 |
+|------|------------|
+| Dev | `packages/pylon/data/` |
+| Release | `release/pylon/data/` |
+
+```powershell
+# Release 데이터를 Dev로 복사 (백업 후 덮어쓰기)
+.\scripts\sync-data.ps1
+
+# 확인 없이 강제 실행
+.\scripts\sync-data.ps1 -Force
+```
+
+- Release에서 실사용한 대화를 Dev에서 디버깅할 때 유용
+- 기존 Dev 데이터는 `packages/pylon/data.backup/`에 백업됨
+
+### 포트 구성
+
+| 서비스 | Dev | Release |
+|--------|-----|---------|
+| Relay | 3000 | Fly.io (443) |
+| Expo/Metro | 10000 | - |
+| Client Web | - | 8080 |
+
 ### Expo 앱 (별도 실행 시)
 
 ```bash
@@ -188,14 +270,6 @@ pnpm web        # 웹 브라우저
 pnpm android    # Android
 pnpm ios        # iOS
 ```
-
-### 포트 구성
-
-| 서비스 | 포트 | 설명 |
-|--------|------|------|
-| Relay | 8080 | WebSocket 라우터 |
-| Pylon | 9000 | 로컬 연결용 |
-| Expo Dev | 10000 | Metro bundler |
 
 ## 자주 쓰는 명령어
 

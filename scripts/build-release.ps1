@@ -1,15 +1,16 @@
 # build-release.ps1 - 릴리즈 패키지 빌드 스크립트
 #
 # 사용법: .\scripts\build-release.ps1
-# 결과: release/ 폴더에 배포 가능한 패키지 생성
-
-param(
-    [switch]$SkipBuild  # 빌드 스킵 (dist가 이미 있을 때)
-)
+# 결과: release/ 폴더에 배포 가능한 패키지 생성 + PM2 서비스 시작 + 헬스체크
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReleaseDir = Join-Path $RepoRoot "release"
+$ConfigPath = Join-Path $RepoRoot "config\environments.json"
+
+# 환경 설정 로드
+$EnvConfig = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+$ReleaseConfig = $EnvConfig.release
 
 # UTF8 without BOM 헬퍼 함수
 function Write-Utf8File {
@@ -20,26 +21,30 @@ function Write-Utf8File {
 
 Write-Host "=== Estelle v2 Release Build ===" -ForegroundColor Cyan
 
-# 0. 빌드
-if (-not $SkipBuild) {
-    Write-Host "`n[0/4] Building packages..." -ForegroundColor Yellow
-    Push-Location $RepoRoot
-    try {
-        pnpm build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Build failed" -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "Build completed" -ForegroundColor Green
-    } finally {
-        Pop-Location
+# 1. TypeScript 빌드
+Write-Host "`n[1/7] Building packages..." -ForegroundColor Yellow
+Push-Location $RepoRoot
+try {
+    pnpm build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Build failed" -ForegroundColor Red
+        exit 1
     }
-} else {
-    Write-Host "`n[0/4] Skipping build (--SkipBuild)" -ForegroundColor Gray
+    Write-Host "Build completed" -ForegroundColor Green
+} finally {
+    Pop-Location
 }
 
-# 1. release 폴더 초기화
-Write-Host "`n[1/4] Initializing release folder..." -ForegroundColor Yellow
+# 2. release 폴더 초기화
+Write-Host "`n[2/7] Initializing release folder..." -ForegroundColor Yellow
+
+# PM2 프로세스 종료 (release 폴더 사용 중일 수 있음)
+$pm2Exists = Get-Command pm2 -ErrorAction SilentlyContinue
+if ($pm2Exists) {
+    Write-Host "  Stopping PM2 processes..." -ForegroundColor Gray
+    try { pm2 stop all 2>&1 | Out-Null } catch { }
+}
+
 if (Test-Path $ReleaseDir) {
     Remove-Item -Recurse -Force $ReleaseDir
 }
@@ -48,8 +53,8 @@ New-Item -ItemType Directory -Path "$ReleaseDir\pylon" -Force | Out-Null
 New-Item -ItemType Directory -Path "$ReleaseDir\relay" -Force | Out-Null
 Write-Host "Release folder initialized" -ForegroundColor Green
 
-# 2. Core 패키지 복사
-Write-Host "`n[2/4] Copying core package..." -ForegroundColor Yellow
+# 3. Core 패키지 복사
+Write-Host "`n[3/7] Copying core package..." -ForegroundColor Yellow
 $CoreSrc = Join-Path $RepoRoot "packages\core"
 $CoreDst = Join-Path $ReleaseDir "core"
 Copy-Item -Path "$CoreSrc\dist" -Destination "$CoreDst\dist" -Recurse
@@ -59,18 +64,14 @@ if (Test-Path "$CoreSrc\node_modules") {
 }
 Write-Host "Core package copied" -ForegroundColor Green
 
-# 3. Pylon 패키지 복사
-Write-Host "`n[3/4] Copying pylon package..." -ForegroundColor Yellow
+# 4. Pylon 패키지 복사
+Write-Host "`n[4/7] Copying pylon package..." -ForegroundColor Yellow
 $PylonSrc = Join-Path $RepoRoot "packages\pylon"
 $PylonDst = Join-Path $ReleaseDir "pylon"
 Copy-Item -Path "$PylonSrc\dist" -Destination "$PylonDst\dist" -Recurse
 Copy-Item -Path "$PylonSrc\package.json" -Destination "$PylonDst\package.json"
 if (Test-Path "$PylonSrc\node_modules") {
     Copy-Item -Path "$PylonSrc\node_modules" -Destination "$PylonDst\node_modules" -Recurse
-}
-# data 폴더도 복사 (워크스페이스 데이터)
-if (Test-Path "$PylonSrc\data") {
-    Copy-Item -Path "$PylonSrc\data" -Destination "$PylonDst\data" -Recurse
 }
 
 # Pylon 배포 설정
@@ -86,7 +87,9 @@ module.exports = {
       max_restarts: 10,
       restart_delay: 5000,
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        RELAY_URL: '$($ReleaseConfig.pylon.relayUrl)',
+        DEVICE_ID: '$($ReleaseConfig.pylon.deviceId)'
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: './logs/pm2-error.log',
@@ -143,8 +146,8 @@ Write-Utf8File -Path "$PylonDst\install.ps1" -Content $installScript
 
 Write-Host "Pylon package copied" -ForegroundColor Green
 
-# 4. Relay 패키지 복사
-Write-Host "`n[4/4] Copying relay package..." -ForegroundColor Yellow
+# 5. Relay 패키지 복사
+Write-Host "`n[5/7] Copying relay package..." -ForegroundColor Yellow
 $RelaySrc = Join-Path $RepoRoot "packages\relay"
 $RelayDst = Join-Path $ReleaseDir "relay"
 Copy-Item -Path "$RelaySrc\dist" -Destination "$RelayDst\dist" -Recurse
@@ -246,6 +249,171 @@ Write-Utf8File -Path "$RelayDst\deploy.ps1" -Content $deployScript
 
 Write-Host "Relay package copied" -ForegroundColor Green
 
+# 6. Client 패키지 (웹 + APK)
+Write-Host "`n[6/7] Building client..." -ForegroundColor Yellow
+$ClientSrc = Join-Path $RepoRoot "packages\client"
+$ClientDst = Join-Path $ReleaseDir "client"
+New-Item -ItemType Directory -Path $ClientDst -Force | Out-Null
+
+# 6a. 웹 빌드
+Write-Host "  Building web..." -ForegroundColor Gray
+Push-Location $ClientSrc
+try {
+    # Production Relay URL 설정
+    $env:EXPO_PUBLIC_RELAY_URL = $ReleaseConfig.client.relayUrl
+    pnpm exec expo export --platform web
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Web build failed" -ForegroundColor Red
+        exit 1
+    }
+} finally {
+    Pop-Location
+}
+
+if (Test-Path "$ClientSrc\dist") {
+    Copy-Item -Path "$ClientSrc\dist" -Destination "$ClientDst\web" -Recurse
+    Write-Host "  Web build copied" -ForegroundColor Green
+}
+
+# Client 웹 서버 설정
+$clientEcosystem = @"
+module.exports = {
+  apps: [
+    {
+      name: 'estelle-client',
+      script: 'serve.cjs',
+      cwd: __dirname,
+      watch: false,
+      autorestart: true,
+      env: {
+        NODE_ENV: 'production'
+      }
+    }
+  ]
+};
+"@
+Write-Utf8File -Path "$ClientDst\ecosystem.config.cjs" -Content $clientEcosystem
+
+$webPort = $ReleaseConfig.client.webPort
+$serveScript = @"
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const PORT = $webPort;
+const WEB_DIR = path.join(__dirname, 'web');
+
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf'
+};
+
+const server = http.createServer((req, res) => {
+  let filePath = path.join(WEB_DIR, req.url === '/' ? 'index.html' : req.url);
+
+  // SPA fallback
+  if (!fs.existsSync(filePath) && !path.extname(filePath)) {
+    filePath = path.join(WEB_DIR, 'index.html');
+  }
+
+  const ext = path.extname(filePath);
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('Not Found');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log('Estelle Client running at http://localhost:' + PORT);
+});
+"@
+Write-Utf8File -Path "$ClientDst\serve.cjs" -Content $serveScript
+
+# 6b. APK 빌드
+Write-Host "  Building APK..." -ForegroundColor Gray
+& "$PSScriptRoot\build-apk.ps1"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "APK build failed" -ForegroundColor Red
+    exit 1
+}
+
+$ApkSrc = Join-Path $ClientSrc "android\app\build\outputs\apk\release\app-release.apk"
+if (Test-Path $ApkSrc) {
+    Copy-Item -Path $ApkSrc -Destination "$ClientDst\estelle-v2.apk"
+    $apkSize = (Get-Item "$ClientDst\estelle-v2.apk").Length / 1MB
+    Write-Host "  APK copied ($([math]::Round($apkSize, 1)) MB)" -ForegroundColor Green
+}
+
+Write-Host "Client package copied" -ForegroundColor Green
+
+# 7. PM2 시작 + 헬스체크
+Write-Host "`n[7/7] Starting PM2 services..." -ForegroundColor Yellow
+$pm2Exists = Get-Command pm2 -ErrorAction SilentlyContinue
+if ($pm2Exists) {
+    # 기존 프로세스 삭제 후 새로 시작
+    try { pm2 delete estelle-pylon 2>&1 | Out-Null } catch { }
+    try { pm2 delete estelle-client 2>&1 | Out-Null } catch { }
+
+    # Pylon 시작
+    Write-Host "  Starting Pylon..." -ForegroundColor Gray
+    $pylonConfig = "$ReleaseDir\pylon\ecosystem.config.cjs"
+    $pylonCwd = "$ReleaseDir\pylon"
+    & pm2 start $pylonConfig --cwd $pylonCwd
+
+    # Client 시작
+    Write-Host "  Starting Client..." -ForegroundColor Gray
+    $clientConfig = "$ReleaseDir\client\ecosystem.config.cjs"
+    $clientCwd = "$ReleaseDir\client"
+    & pm2 start $clientConfig --cwd $clientCwd
+
+    try { pm2 save 2>&1 | Out-Null } catch { }
+    Write-Host "PM2 services started" -ForegroundColor Green
+
+    # 헬스체크 대기
+    Write-Host "`n  Waiting for services to start..." -ForegroundColor Gray
+    Start-Sleep -Seconds 3
+
+    # Pylon 로그에서 Relay 연결 확인
+    Write-Host "  Checking Pylon connection..." -ForegroundColor Gray
+    $pylonLog = pm2 logs estelle-pylon --lines 20 --nostream 2>&1 | Out-String
+    if ($pylonLog -match "Connected to Relay") {
+        Write-Host "  Pylon: Connected to Relay" -ForegroundColor Green
+    } else {
+        Write-Host "  Pylon: Waiting for Relay connection..." -ForegroundColor Yellow
+    }
+
+    # 웹 서버 헬스체크
+    Write-Host "  Checking web server..." -ForegroundColor Gray
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:$($ReleaseConfig.client.webPort)" -Method Head -UseBasicParsing -TimeoutSec 5
+        if ($response.StatusCode -eq 200) {
+            Write-Host "  Web Server: OK (http://localhost:$($ReleaseConfig.client.webPort))" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  Web Server: Not responding yet" -ForegroundColor Yellow
+    }
+
+    pm2 status
+} else {
+    Write-Host "PM2 not installed, skipping auto-start" -ForegroundColor Yellow
+}
+
 # 완료
 Write-Host "`n=== Release Build Complete ===" -ForegroundColor Cyan
 Write-Host @"
@@ -256,5 +424,8 @@ Release packages created in: $ReleaseDir
   +-- core/      (shared library)
   +-- pylon/     (run: .\install.ps1)
   +-- relay/     (run: .\deploy.ps1)
+  +-- client/
+      +-- web/           (http://localhost:8080)
+      +-- estelle-v2.apk (Android app)
 
 "@ -ForegroundColor Gray

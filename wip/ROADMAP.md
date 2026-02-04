@@ -23,8 +23,9 @@
   - [x] 필수 환경변수 정리
 
 - [x] **환경 설정 표준화**
-  - [x] `.env` 파일 (루트 레벨)
-  - [x] 포트 번호 통일 (Relay: 8080, Pylon: 9000, App: 10000)
+  - [x] `config/environments.json` (Dev/Release 설정 중앙 관리)
+  - [x] `.env` 파일 (Expo 환경변수용)
+  - [x] 포트 번호 통일 (Dev: Relay 3000, Expo 10000 / Release: Web 8080)
 
 ### Phase 2: v1 기능 마이그레이션 ✅
 
@@ -54,23 +55,32 @@
 - [x] 메시지 라우팅
 - [x] 브로드캐스트
 
-### Phase 3: 배포 시스템 구축
+### Phase 3: 배포 시스템 구축 (진행 중)
 
 **목표**: 안정적인 프로덕션 배포
 
-- [ ] **Relay 배포**
-  - [ ] Fly.io 설정
-  - [ ] 환경변수 관리
-  - [ ] 도메인 설정
+- [x] **릴리즈 빌드 시스템**
+  - [x] `release/` 폴더 구조 (dist만 복사)
+  - [x] `scripts/build-release.ps1` 빌드 스크립트
+  - [x] PM2 ecosystem 설정 (.cjs 확장자)
 
-- [ ] **Pylon 배포**
-  - [ ] Windows 서비스 등록 스크립트
-  - [ ] 자동 시작 설정
+- [x] **Relay 배포** ✅
+  - [x] Fly.io 설정 (estelle-relay-v2)
+  - [x] Dockerfile, fly.toml 생성
+  - [x] 배포 완료: https://estelle-relay-v2.fly.dev
 
-- [ ] **App 배포 (Expo)**
-  - [ ] Web 빌드 & 호스팅
-  - [ ] Android APK/AAB 빌드 (EAS Build)
-  - [ ] iOS 빌드 (선택)
+- [x] **Pylon 배포** ✅
+  - [x] PM2 ecosystem 설정
+  - [x] 로컬 실행 완료 (포트 9000)
+
+- [x] **App 웹 배포** ✅
+  - [x] Expo web export
+  - [x] PM2 + serve 설정 (포트 3000)
+
+- [x] **App 모바일 빌드** ✅
+  - [x] Android SDK, 에뮬레이터 설치
+  - [x] AVD 생성 (Pixel6)
+  - [x] APK 빌드 (react-native bundle + afterEvaluate 해결)
 
 - [ ] **v1 제거**
   - [ ] v1 Relay 중단
@@ -81,11 +91,13 @@
 
 ## 현재 상태
 
-| 컴포넌트 | 상태 | 포트 | 비고 |
-|----------|------|------|------|
-| Relay v2 | ✅ 동작 | 8080 | `pnpm dev` |
-| Pylon v2 | ✅ 동작 | 9000 | 핵심 기능 완료 |
-| Client (Expo) | ✅ 동작 | 10000 | `pnpm dev:client` |
+| 컴포넌트 | 상태 | Dev 포트 | Release |
+|----------|------|----------|---------|
+| Relay v2 | ✅ 동작 | 3000 | Fly.io (wss://estelle-relay-v2.fly.dev) |
+| Pylon v2 | ✅ 동작 | - | PM2 (release/pylon) |
+| Client (Expo) | ✅ 동작 | 10000 | PM2 웹 (8080) + APK |
+
+환경 설정: `config/environments.json`
 
 ### v1 → v2 마이그레이션 완료 (2026-02-02)
 
@@ -111,15 +123,18 @@
 
 ## 다음 작업
 
-**Phase 3: 배포 시스템 구축**
-- [ ] Relay Fly.io 배포
-- [ ] Pylon Windows 서비스 등록
-- [ ] App 빌드 및 배포
+**Phase 3 마무리**
+- [x] APK 빌드 ✅
+- [x] GitHub Release 업로드 ✅
+- [ ] v1 제거
 
 ---
 
 ## 작업 로그
 
+- [260204 11:15] 환경 설정 중앙화 (config/environments.json), 웹 타이틀 (dev) 표시, 커스텀 스크롤바 컴포넌트
+- [260203 23:55] APK 빌드 성공 + GitHub Release v2.0.0 배포
+- [260203 22:xx] 릴리즈 배포 시스템 구축 (Relay→Fly.io, Pylon/Client→PM2)
 - [260203 16:20] AutoResizeTextInput 구현 및 InputBar 통합 (TDD, 24개 테스트)
 - [260203 10:50] Material Design 3 마이그레이션 완료 (NativeWind → React Native Paper, 40+개 컴포넌트)
 - [260203 09:20] Jest 컴포넌트 테스트 환경 구축 (61개 테스트 추가)
@@ -133,4 +148,4 @@
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-03*
+*갱신일: 2026-02-04*
