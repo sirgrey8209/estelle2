@@ -46,7 +46,7 @@ function useRelayConnection() {
 
       // blob 메시지는 blobService로 전달
       if (message.type.startsWith('blob_')) {
-        blobService.handleMessage(message as Record<string, unknown>);
+        blobService.handleMessage(message as unknown as Record<string, unknown>);
         return;
       }
 

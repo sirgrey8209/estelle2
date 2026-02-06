@@ -66,17 +66,21 @@ Write-Host "Core package copied" -ForegroundColor Green
 
 # 4. Pylon 패키지 복사
 Write-Host "`n[4/6] Copying pylon package..." -ForegroundColor Yellow
-$PylonSrc = Join-Path $RepoRoot "packages\pylon"
-$PylonDst = Join-Path $ReleaseDir "pylon"
-Copy-Item -Path "$PylonSrc\dist" -Destination "$PylonDst\dist" -Recurse
-Copy-Item -Path "$PylonSrc\package.json" -Destination "$PylonDst\package.json"
-if (Test-Path "$PylonSrc\node_modules") {
-    Copy-Item -Path "$PylonSrc\node_modules" -Destination "$PylonDst\node_modules" -Recurse
+$script:PylonSrc = Join-Path $RepoRoot "packages\pylon"
+$script:PylonDst = Join-Path $ReleaseDir "pylon"
+Write-Host "  PylonSrc: $script:PylonSrc" -ForegroundColor Gray
+Write-Host "  PylonDst: $script:PylonDst" -ForegroundColor Gray
+Copy-Item -Path (Join-Path $script:PylonSrc "dist") -Destination (Join-Path $script:PylonDst "dist") -Recurse -Force
+Copy-Item -Path (Join-Path $script:PylonSrc "package.json") -Destination (Join-Path $script:PylonDst "package.json") -Force
+$pylonNodeModules = Join-Path $script:PylonSrc "node_modules"
+if (Test-Path $pylonNodeModules) {
+    Copy-Item -Path $pylonNodeModules -Destination (Join-Path $script:PylonDst "node_modules") -Recurse -Force
 }
 
 # workspace:* -> file:../core 변환
-$pylonPkgPath = "$PylonDst\package.json"
-$pylonPkgContent = Get-Content $pylonPkgPath -Raw
+$script:pylonPkgPath = Join-Path $script:PylonDst "package.json"
+Write-Host "  Pylon package.json path: $script:pylonPkgPath" -ForegroundColor Gray
+$pylonPkgContent = Get-Content -Path $script:pylonPkgPath -Raw
 $pylonPkgContent = $pylonPkgContent -replace '"workspace:\*"', '"file:../core"'
 Write-Utf8File -Path $pylonPkgPath -Content $pylonPkgContent
 Write-Host "  Fixed workspace:* -> file:../core" -ForegroundColor Gray
