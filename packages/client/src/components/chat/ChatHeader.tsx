@@ -1,12 +1,12 @@
-import React, { useState, useContext } from 'react';
-import { View, Pressable } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useState, useContext } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { useWorkspaceStore, useDeviceConfigStore } from '../../stores';
 import { useResponsive } from '../../hooks/useResponsive';
 import { SessionMenuButton } from '../common/SessionMenuButton';
 import { BugReportDialog } from '../common/BugReportDialog';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
+import { getDeviceIcon } from '../../utils/device-icons';
+import { setPermissionMode } from '../../services';
 
 interface ChatHeaderProps {
   showSessionMenu?: boolean;
@@ -20,111 +20,78 @@ interface ChatHeaderProps {
  * - SessionMenuButton (데스크탑에서)
  */
 export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
-  const theme = useTheme();
   const [showBugReport, setShowBugReport] = useState(false);
-  const { selectedConversation } = useWorkspaceStore();
+  const { selectedConversation, updatePermissionMode } = useWorkspaceStore();
   const { getIcon } = useDeviceConfigStore();
   const { isDesktop } = useResponsive();
   const { openSidebar } = useContext(MobileLayoutContext);
 
   if (!selectedConversation) {
     return (
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          backgroundColor: theme.colors.secondaryContainer,
-        }}
-      >
-        <Text
-          variant="bodyMedium"
-          style={{ opacity: 0.6, color: theme.colors.onSecondaryContainer }}
-        >
+      <div className="px-3 py-1 bg-secondary/30 flex items-center">
+        {/* 뒤로 가기 버튼 (모바일) */}
+        {!isDesktop && (
+          <button
+            onClick={openSidebar}
+            className="p-1.5 hover:bg-secondary/50 rounded transition-colors mr-1"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+        )}
+        <span className="text-sm text-muted-foreground">
           워크스페이스를 선택하세요
-        </Text>
-      </View>
+        </span>
+      </div>
     );
   }
 
-  const pylonIcon = getIcon(selectedConversation.pylonId);
+  const pylonIconName = getIcon(selectedConversation.pylonId);
+  const IconComponent = getDeviceIcon(pylonIconName);
 
   return (
     <>
-      <View
-        style={{
-          paddingHorizontal: isDesktop ? 12 : 4,
-          paddingVertical: 4,
-          backgroundColor: theme.colors.secondaryContainer,
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}
-      >
+      <div className="px-3 py-1 bg-secondary/30 flex items-center">
         {/* 뒤로 가기 버튼 (모바일) */}
         {!isDesktop && (
-          <Pressable
-            onPress={openSidebar}
-            style={({ pressed }) => ({
-              padding: 6,
-              opacity: pressed ? 0.5 : 1,
-            })}
+          <button
+            onClick={openSidebar}
+            className="p-1.5 hover:bg-secondary/50 rounded transition-colors mr-1"
           >
-            <Icon
-              name="arrow-left"
-              size={20}
-              color={theme.colors.onSecondaryContainer}
-            />
-          </Pressable>
+            <ArrowLeft className="h-5 w-5" />
+          </button>
         )}
 
         {/* 대화명 + 워크스페이스 */}
-        <View
-          style={{
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginLeft: isDesktop ? 0 : 4,
-          }}
-        >
-          <Text
-            variant="titleMedium"
-            numberOfLines={1}
-            style={{
-              fontWeight: '600',
-              color: theme.colors.onSecondaryContainer,
-              flexShrink: 1,
-            }}
-          >
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="font-semibold truncate">
             {selectedConversation.conversationName}
-          </Text>
+          </span>
 
           {/* 워크스페이스 아이콘 + 이름 (작게) */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-            <Icon
-              name={pylonIcon}
-              size={12}
-              color={theme.colors.onSecondaryContainer}
-              style={{ opacity: 0.6 }}
-            />
-            <Text
-              variant="labelSmall"
-              style={{ color: theme.colors.onSecondaryContainer, opacity: 0.6 }}
-              numberOfLines={1}
-            >
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <IconComponent className="h-3 w-3 opacity-60" />
+            <span className="text-xs truncate opacity-60">
               {selectedConversation.workspaceName}
-            </Text>
-          </View>
-        </View>
+            </span>
+          </div>
+        </div>
 
         {/* 세션 메뉴 */}
         {showSessionMenu && (
-          <SessionMenuButton onBugReport={() => setShowBugReport(true)} />
+          <SessionMenuButton
+            permissionMode={selectedConversation.permissionMode}
+            onPermissionModeChange={(mode) => {
+              setPermissionMode(selectedConversation.conversationId, mode);
+              updatePermissionMode(selectedConversation.conversationId, mode);
+            }}
+            onBugReport={() => setShowBugReport(true)}
+          />
         )}
-      </View>
+      </div>
 
       {/* 버그 리포트 다이얼로그 */}
       <BugReportDialog
-        visible={showBugReport}
+        open={showBugReport}
         onClose={() => setShowBugReport(false)}
       />
     </>

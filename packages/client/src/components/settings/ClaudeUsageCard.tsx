@@ -1,14 +1,10 @@
-import React from 'react';
-import { View } from 'react-native';
-import { Card, Text, ProgressBar, useTheme } from 'react-native-paper';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useSettingsStore } from '../../stores';
-import { semanticColors } from '../../theme';
 
 /**
  * Claude 사용량 카드
  */
 export function ClaudeUsageCard() {
-  const theme = useTheme();
   const claudeUsage = useSettingsStore((s) => s.claudeUsage);
 
   const formatTokens = (tokens: number) => {
@@ -40,74 +36,75 @@ export function ClaudeUsageCard() {
   const cacheEfficiency = calculateCacheEfficiency();
 
   const getGaugeColor = () => {
-    if (cacheEfficiency >= 70) return semanticColors.success;
-    if (cacheEfficiency >= 40) return semanticColors.warning;
-    return theme.colors.error;
+    if (cacheEfficiency >= 70) return 'bg-green-500';
+    if (cacheEfficiency >= 40) return 'bg-yellow-500';
+    return 'bg-destructive';
   };
 
   return (
-    <Card mode="outlined" style={{ marginBottom: 8 }}>
-      <Card.Title
-        title="Claude Usage"
-        titleVariant="titleSmall"
-        left={() => <Text>📊</Text>}
-        right={() =>
-          claudeUsage && claudeUsage.sessionCount > 0 ? (
-            <Text variant="labelSmall" style={{ marginRight: 16, opacity: 0.6 }}>
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-2">
+            <span>📊</span>
+            Claude Usage
+          </span>
+          {claudeUsage && claudeUsage.sessionCount > 0 && (
+            <span className="text-xs text-muted-foreground font-normal">
               {claudeUsage.sessionCount} sessions
-            </Text>
-          ) : null
-        }
-      />
-      <Card.Content>
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
         {!claudeUsage ? (
-          <Text style={{ textAlign: 'center', opacity: 0.6, paddingVertical: 12 }}>
+          <p className="text-center text-muted-foreground py-3">
             No usage data yet
-          </Text>
+          </p>
         ) : (
           <>
-            <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+            <div className="grid grid-cols-3 gap-4 mb-3">
               <StatItem
                 icon="💰"
                 value={formatCost(claudeUsage.totalCostUsd || 0)}
                 label="Cost"
-                color={semanticColors.warning}
+                colorClass="text-yellow-500"
               />
               <StatItem
                 icon="🔢"
                 value={formatTokens(totalTokens)}
                 label="Tokens"
-                color={theme.colors.primary}
+                colorClass="text-primary"
               />
               <StatItem
                 icon="💾"
                 value={`${cacheEfficiency.toFixed(0)}%`}
                 label="Cache"
-                color={semanticColors.success}
+                colorClass="text-green-500"
               />
-            </View>
+            </div>
 
             {cacheEfficiency > 0 && (
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                  <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">
                     Cache Efficiency
-                  </Text>
-                  <View style={{ flex: 1 }} />
-                  <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
                     {cacheEfficiency.toFixed(1)}%
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={Math.min(cacheEfficiency / 100, 1)}
-                  color={getGaugeColor()}
-                  style={{ height: 4, borderRadius: 2 }}
-                />
-              </View>
+                  </span>
+                </div>
+                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${getGaugeColor()} transition-all`}
+                    style={{ width: `${Math.min(cacheEfficiency, 100)}%` }}
+                  />
+                </div>
+              </div>
             )}
           </>
         )}
-      </Card.Content>
+      </CardContent>
     </Card>
   );
 }
@@ -116,19 +113,19 @@ interface StatItemProps {
   icon: string;
   value: string;
   label: string;
-  color: string;
+  colorClass: string;
 }
 
-function StatItem({ icon, value, label, color }: StatItemProps) {
+function StatItem({ icon, value, label, colorClass }: StatItemProps) {
   return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={{ fontSize: 16 }}>{icon}</Text>
-      <Text variant="titleMedium" style={{ color, fontWeight: 'bold', marginTop: 4 }}>
+    <div className="text-center">
+      <span className="text-base">{icon}</span>
+      <p className={`text-lg font-bold ${colorClass} mt-1`}>
         {value}
-      </Text>
-      <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+      </p>
+      <p className="text-xs text-muted-foreground">
         {label}
-      </Text>
-    </View>
+      </p>
+    </div>
   );
 }

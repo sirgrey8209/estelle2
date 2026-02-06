@@ -1,16 +1,31 @@
-import React, { useState } from 'react';
-import { View, Alert } from 'react-native';
-import { IconButton, Menu, Text, useTheme } from 'react-native-paper';
+import { useState } from 'react';
+import { Lock, Pencil, AlertTriangle, MoreVertical, RefreshCw, Package, Bug } from 'lucide-react';
+import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '../ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 
 type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
 
 const PERMISSION_CONFIG: Record<
   PermissionMode,
-  { label: string; icon: string }
+  { label: string; icon: typeof Lock }
 > = {
-  default: { label: 'Default', icon: 'lock' },
-  acceptEdits: { label: 'Accept Edits', icon: 'pencil' },
-  bypassPermissions: { label: 'Bypass All', icon: 'alert' },
+  default: { label: 'Default', icon: Lock },
+  acceptEdits: { label: 'Accept Edits', icon: Pencil },
+  bypassPermissions: { label: 'Bypass All', icon: AlertTriangle },
 };
 
 const PERMISSION_MODES: PermissionMode[] = [
@@ -37,9 +52,9 @@ export function SessionMenuButton({
   onCompact,
   onBugReport,
 }: SessionMenuButtonProps) {
-  const theme = useTheme();
-  const [showMenu, setShowMenu] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const config = PERMISSION_CONFIG[permissionMode];
+  const Icon = config.icon;
 
   const handlePermissionCycle = () => {
     const currentIndex = PERMISSION_MODES.indexOf(permissionMode);
@@ -49,67 +64,70 @@ export function SessionMenuButton({
   };
 
   const handleNewSession = () => {
-    setShowMenu(false);
-    Alert.alert(
-      '새 세션',
-      '현재 세션을 종료하고 새 세션을 시작할까요?\n기존 대화 내용은 삭제됩니다.',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '새 세션 시작',
-          style: 'destructive',
-          onPress: onNewSession,
-        },
-      ]
-    );
+    setShowConfirmDialog(true);
   };
 
-  const handleCompact = () => {
-    setShowMenu(false);
-    onCompact?.();
-  };
-
-  const handleBugReport = () => {
-    setShowMenu(false);
-    onBugReport?.();
+  const confirmNewSession = () => {
+    setShowConfirmDialog(false);
+    onNewSession?.();
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <IconButton
-        icon={config.icon}
-        size={18}
-        onPress={handlePermissionCycle}
-      />
+    <>
+      <div className="flex items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handlePermissionCycle}
+          title={config.label}
+        >
+          <Icon className="h-4 w-4" />
+        </Button>
 
-      <Menu
-        visible={showMenu}
-        onDismiss={() => setShowMenu(false)}
-        anchor={
-          <IconButton
-            icon="dots-vertical"
-            size={18}
-            onPress={() => setShowMenu(true)}
-          />
-        }
-      >
-        <Menu.Item
-          onPress={handleNewSession}
-          leadingIcon="refresh"
-          title="새 세션"
-        />
-        <Menu.Item
-          onPress={handleCompact}
-          leadingIcon="package-variant"
-          title="컴팩트"
-        />
-        <Menu.Item
-          onPress={handleBugReport}
-          leadingIcon="bug"
-          title="버그 리포트"
-          titleStyle={{ color: theme.colors.error }}
-        />
-      </Menu>
-    </View>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleNewSession}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              새 세션
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCompact}>
+              <Package className="mr-2 h-4 w-4" />
+              컴팩트
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onBugReport} className="text-destructive">
+              <Bug className="mr-2 h-4 w-4" />
+              버그 리포트
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>새 세션</DialogTitle>
+            <DialogDescription>
+              현재 세션을 종료하고 새 세션을 시작할까요?
+              <br />
+              기존 대화 내용은 삭제됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={confirmNewSession}>
+              새 세션 시작
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

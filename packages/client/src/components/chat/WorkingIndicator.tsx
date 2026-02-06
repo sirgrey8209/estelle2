@@ -1,45 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Animated, Easing } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { useEffect, useState } from 'react';
 import { useClaudeStore } from '../../stores';
-import { semanticColors } from '../../theme';
 
 interface WorkingIndicatorProps {
   startTime?: number | null;
 }
 
 /**
- * 작업 표시기 (펄스 점 + 경과 시간)
+ * 작업 표시기 (펄스 점 + 경과 시간 + 토큰 정보)
  */
 export function WorkingIndicator({ startTime }: WorkingIndicatorProps = {}) {
-  const theme = useTheme();
   const storeStartTime = useClaudeStore((s) => s.workStartTime);
+  const realtimeUsage = useClaudeStore((s) => s.realtimeUsage);
   const workStartTime = startTime ?? storeStartTime;
   const [elapsed, setElapsed] = useState(0);
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 600,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    return () => {
-      pulseAnim.stopAnimation();
-    };
-  }, [pulseAnim]);
 
   useEffect(() => {
     if (!workStartTime) return;
@@ -51,30 +24,57 @@ export function WorkingIndicator({ startTime }: WorkingIndicatorProps = {}) {
     return () => clearInterval(interval);
   }, [workStartTime]);
 
-  const opacity = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.4, 1.0],
-  });
+  const formatTokens = (n: number) => {
+    if (n >= 1000) {
+      return `${(n / 1000).toFixed(1)}k`;
+    }
+    return n.toString();
+  };
+
+  const formatTime = (seconds: number) => {
+    if (seconds >= 60) {
+      const min = Math.floor(seconds / 60);
+      const sec = seconds % 60;
+      return `${min}m ${sec}s`;
+    }
+    return `${seconds}s`;
+  };
+
+  // 마지막 업데이트 타입에 따라 표시할 토큰 결정
+  const getTokenDisplay = () => {
+    if (!realtimeUsage) return null;
+
+    const { lastUpdateType, inputTokens, outputTokens } = realtimeUsage;
+
+    if (lastUpdateType === 'output' && outputTokens > 0) {
+      return `${formatTokens(outputTokens)}↑`;
+    } else if (inputTokens > 0) {
+      return `${formatTokens(inputTokens)}↓`;
+    }
+    return null;
+  };
+
+  const tokenDisplay = getTokenDisplay();
 
   return (
-    <View style={{ paddingHorizontal: 12, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ paddingHorizontal: 12, paddingVertical: 4, backgroundColor: theme.colors.surfaceVariant, borderRadius: 16, flexDirection: 'row', alignItems: 'center' }}>
-        <Animated.View
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: semanticColors.warning,
-            opacity,
-          }}
-        />
-        <Text
-          variant="labelSmall"
-          style={{ marginLeft: 8, fontFamily: 'monospace', opacity: 0.7 }}
-        >
-          {elapsed}s
-        </Text>
-      </View>
-    </View>
+    <div className="px-2 py-1 flex items-center justify-start">
+      <div className="px-3 py-1 bg-muted rounded-full flex items-center">
+        {/* 펄스 점 */}
+        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+
+        <span className="ml-2 text-xs text-muted-foreground">
+          {formatTime(elapsed)}
+        </span>
+
+        {tokenDisplay && (
+          <>
+            <span className="ml-2 text-xs text-muted-foreground/40">|</span>
+            <span className="ml-2 text-xs text-muted-foreground/60">
+              {tokenDisplay}
+            </span>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,6 +1,4 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing } from 'react-native';
-import { statusColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 /**
  * 상태 타입
@@ -17,27 +15,28 @@ type StatusType =
 
 interface StatusDotProps {
   status: StatusType;
-  size?: number;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
 }
 
 /**
- * 상태별 색상 매핑
+ * 상태별 색상 클래스
  */
-function getStatusColor(status: StatusType): string | null {
+function getStatusColorClass(status: StatusType): string {
   switch (status) {
     case 'error':
     case 'permission':
     case 'waiting':
-      return statusColors.permission;
+      return 'bg-destructive';
     case 'working':
-      return statusColors.working;
+      return 'bg-yellow-500';
     case 'unread':
     case 'done':
-      return statusColors.ready;
+      return 'bg-green-500';
     case 'idle':
     case 'offline':
     default:
-      return statusColors.idle;
+      return 'bg-muted-foreground';
   }
 }
 
@@ -48,54 +47,28 @@ function shouldBlink(status: StatusType): boolean {
   return status === 'working' || status === 'waiting' || status === 'permission';
 }
 
+const sizeClasses = {
+  sm: 'h-1.5 w-1.5',
+  md: 'h-2 w-2',
+  lg: 'h-3 w-3',
+};
+
 /**
  * 상태 표시점
  */
-export function StatusDot({ status, size = 8 }: StatusDotProps) {
-  const blinkAnim = useRef(new Animated.Value(1)).current;
-  const color = getStatusColor(status);
-
-  useEffect(() => {
-    if (shouldBlink(status)) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(blinkAnim, {
-            toValue: 0.3,
-            duration: 600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(blinkAnim, {
-            toValue: 1.0,
-            duration: 600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      blinkAnim.stopAnimation();
-      blinkAnim.setValue(1);
-    }
-
-    return () => {
-      blinkAnim.stopAnimation();
-    };
-  }, [status, blinkAnim]);
-
-  if (!color) {
-    return null;
-  }
+export function StatusDot({ status, size = 'md', className }: StatusDotProps) {
+  const colorClass = getStatusColorClass(status);
+  const blink = shouldBlink(status);
 
   return (
-    <Animated.View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: color,
-        opacity: blinkAnim,
-      }}
+    <span
+      className={cn(
+        'inline-block rounded-full',
+        sizeClasses[size],
+        colorClass,
+        blink && 'animate-pulse',
+        className
+      )}
     />
   );
 }

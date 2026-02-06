@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 페르소나
+
+[Persona.md](Persona.md) 참조 - 스텔라(Stella)로서 주인님을 모심
+
 ## 대화 스타일
 
 - 항상 경어체(존댓말)로 답변할 것
@@ -47,15 +51,15 @@ Claude Code를 여러 PC와 모바일에서 원격 제어하는 시스템 (estel
 ```
 packages/
 ├── core/         # 공유 타입, 메시지 스키마
-├── relay/        # Relay 서버 (순수 라우터)
+├── relay/        # Relay 서버 (순수 라우터 + 정적 파일 서빙)
 ├── pylon/        # Pylon 서비스 (상태 관리, Claude SDK)
-└── client/       # Expo (React Native) 앱
+└── client/       # React 웹 클라이언트 (Vite + shadcn/ui)
 ```
 
 - `@estelle/core`: 다른 패키지에서 공유하는 타입 (Pylon ↔ App 타입 공유)
-- `@estelle/relay`: 상태 없음, 순수 함수로 구성
+- `@estelle/relay`: 상태 없음, 순수 함수로 구성, 정적 파일 서빙 포함
 - `@estelle/pylon`: PylonState 순수 데이터 클래스 중심
-- `packages/client`: Expo 클라이언트 (TypeScript, Zustand, NativeWind)
+- `packages/client`: Vite 웹 클라이언트 (TypeScript, Zustand, Tailwind, shadcn/ui)
 
 ## TDD 개발 원칙
 
@@ -178,7 +182,6 @@ function routeMessage(msg, connections): RouteResult { ... }
 ```
 
 - 스크립트들이 이 파일을 읽어 포트/URL 설정
-- `.env`는 Expo 환경변수용 (EXPO_PUBLIC_RELAY_URL)
 - Dev 환경에서 웹 타이틀에 "(dev)" 표시됨
 
 ## 빌드 환경
@@ -190,7 +193,7 @@ function routeMessage(msg, connections): RouteResult { ... }
 | 명령어 | `pnpm dev` | `.\scripts\build-release.ps1` |
 | Relay | 로컬 (ws://localhost:3000) | Fly.io (wss://estelle-relay-v2.fly.dev) |
 | Pylon | packages/pylon 직접 실행 | release/pylon (PM2) |
-| Client | Expo Dev Server | 웹: PM2 (8080), APK |
+| Client | Vite Dev Server (5173) | Relay 내장 (Fly.io) |
 | 데이터 | packages/pylon/data | release/pylon/data (분리됨) |
 | 웹 타이틀 | Estelle (dev) | Estelle |
 | 용도 | 개발/디버깅 | 실제 사용 |
@@ -198,7 +201,7 @@ function routeMessage(msg, connections): RouteResult { ... }
 ### Dev 빌드 (개발 서버)
 
 ```bash
-# 시작 (Relay + Pylon + Expo)
+# 시작 (Relay + Pylon + Vite)
 pnpm dev
 
 # 종료
@@ -214,11 +217,12 @@ pnpm dev:restart
 ### Release 빌드
 
 ```powershell
-# 풀 빌드 (TypeScript + 웹 + APK + PM2 시작 + 헬스체크)
+# 풀 빌드 (TypeScript + 웹 + PM2 시작 + 헬스체크)
 .\scripts\build-release.ps1
 
-# GitHub Release 생성
-.\scripts\release-github.ps1 -Version "v2.1.0"
+# Fly.io 배포
+cd release\relay
+.\deploy.ps1
 
 # Release → Dev 데이터 동기화
 .\scripts\sync-data.ps1
@@ -228,9 +232,9 @@ pnpm dev:restart
 1. TypeScript 빌드
 2. release/ 폴더 초기화
 3. Core/Pylon/Relay 패키지 복사
-4. Client 웹 빌드 + APK 빌드
-5. PM2 서비스 시작
-6. 헬스체크 (Relay 연결, 웹 서버 응답)
+4. Client 웹 빌드 (Vite → relay/public)
+5. PM2 서비스 시작 (Pylon)
+6. 헬스체크 (Relay 연결)
 
 ### 데이터 관리
 
@@ -257,18 +261,16 @@ Dev와 Release는 **별도의 데이터**를 사용한다 (대화, 워크스페�
 | 서비스 | Dev | Release |
 |--------|-----|---------|
 | Relay | 3000 | Fly.io (443) |
-| Expo/Metro | 10000 | - |
-| Client Web | - | 8080 |
+| Client (Vite) | 5173 | Relay 내장 |
 
-### Expo 앱 (별도 실행 시)
+### Client 앱 (별도 실행 시)
 
 ```bash
 cd packages/client
 
-pnpm start      # Metro bundler
-pnpm web        # 웹 브라우저
-pnpm android    # Android
-pnpm ios        # iOS
+pnpm dev        # Vite dev server
+pnpm build      # 빌드 (→ relay/public)
+pnpm preview    # 빌드 결과 미리보기
 ```
 
 ## 자주 쓰는 명령어

@@ -102,7 +102,7 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
       cwd: options.cwd,
       abortController: options.abortController,
       includePartialMessages: options.includePartialMessages ?? true,
-      settingSources: (options.settingSources ?? ['project']) as SettingSource[],
+      settingSources: (options.settingSources ?? ['user', 'project', 'local']) as SettingSource[],
       resume: options.resume,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),

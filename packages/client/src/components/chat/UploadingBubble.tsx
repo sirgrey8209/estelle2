@@ -1,9 +1,6 @@
-import React from 'react';
-import { View, Image } from 'react-native';
-import { Surface, Text, ProgressBar, useTheme } from 'react-native-paper';
 import { useUploadStore, useImageUploadStore } from '../../stores';
 import { imageCache } from '../../services/imageCacheService';
-import { semanticColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 interface UploadingBubbleProps {
   blobId: string;
@@ -19,7 +16,6 @@ interface UploadingBubbleProps {
  * - 같이 전송한 메시지 표시
  */
 export function UploadingBubble({ blobId, message }: UploadingBubbleProps) {
-  const theme = useTheme();
   const { uploads, getProgress } = useUploadStore();
   const upload = uploads[blobId];
   const progress = getProgress(blobId);
@@ -35,79 +31,72 @@ export function UploadingBubble({ blobId, message }: UploadingBubbleProps) {
   const isUploading = upload.status === 'uploading';
 
   // 테두리 색상
-  const borderColor = isFailed
-    ? theme.colors.error
+  const borderColorClass = isFailed
+    ? 'border-destructive'
     : isCompleted
-    ? semanticColors.success
-    : theme.colors.primary;
+    ? 'border-green-500'
+    : 'border-primary';
 
   return (
-    <View style={{ marginVertical: 4, maxWidth: '90%' }}>
-      <Surface
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 4,
-          borderLeftWidth: 2,
-          borderLeftColor: borderColor,
-        }}
-        elevation={1}
+    <div className="my-1 max-w-[90%]">
+      <div
+        className={cn(
+          'px-3 py-2 rounded border-l-2 bg-card shadow-sm',
+          borderColorClass
+        )}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <div className="flex items-start">
           {/* 이미지 미리보기 */}
           <ImagePreview uri={attachedImage?.uri} filename={upload.filename} />
 
           {/* 정보 영역 */}
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          <div className="flex-1 ml-3 min-w-0">
             {/* 파일명 */}
-            <Text
-              variant="labelSmall"
-              numberOfLines={1}
-              ellipsizeMode="middle"
-            >
+            <p className="text-sm truncate">
               {upload.filename}
-            </Text>
+            </p>
 
             {/* 상태 텍스트 */}
-            <View style={{ marginTop: 4 }}>
+            <div className="mt-1">
               {isFailed && (
-                <Text variant="labelSmall" style={{ color: theme.colors.error }}>
+                <p className="text-xs text-destructive">
                   업로드 실패
-                </Text>
+                </p>
               )}
               {isCompleted && (
-                <Text variant="labelSmall" style={{ color: semanticColors.success }}>
+                <p className="text-xs text-green-500">
                   업로드 완료
-                </Text>
+                </p>
               )}
               {isUploading && (
-                <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+                <p className="text-xs text-muted-foreground">
                   업로드 중... {progress}%
-                </Text>
+                </p>
               )}
-            </View>
-          </View>
-        </View>
+            </div>
+          </div>
+        </div>
 
         {/* 진행률 바 (업로드 중일 때만) */}
         {isUploading && (
-          <View style={{ marginTop: 8 }}>
-            <ProgressBar
-              progress={progress / 100}
-              color={theme.colors.primary}
-              style={{ height: 4, borderRadius: 2 }}
-            />
-          </View>
+          <div className="mt-2">
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
         )}
 
         {/* 같이 보낸 메시지 */}
         {message && message.trim().length > 0 && (
-          <Text variant="bodySmall" style={{ marginTop: 8, lineHeight: 20 }}>
+          <p className="text-sm mt-2 leading-5">
             {message}
-          </Text>
+          </p>
         )}
-      </Surface>
-    </View>
+      </div>
+    </div>
   );
 }
 
@@ -115,49 +104,43 @@ export function UploadingBubble({ blobId, message }: UploadingBubbleProps) {
  * 이미지 미리보기
  */
 function ImagePreview({ uri, filename }: { uri?: string; filename: string }) {
-  const theme = useTheme();
   // 캐시에서 이미지 확인
   const cachedData = imageCache.get(filename);
 
   if (uri) {
     return (
-      <Image
-        source={{ uri }}
-        style={{ width: 64, height: 64, borderRadius: 4 }}
-        resizeMode="cover"
+      <img
+        src={uri}
+        alt={filename}
+        className="w-16 h-16 rounded object-cover"
       />
     );
   }
 
   if (cachedData) {
     // Uint8Array를 base64로 변환
-    const base64 = Buffer.from(cachedData).toString('base64');
+    const base64 = btoa(
+      Array.from(cachedData)
+        .map((byte) => String.fromCharCode(byte))
+        .join('')
+    );
     const mimeType = getMimeType(filename);
     return (
-      <Image
-        source={{ uri: `data:${mimeType};base64,${base64}` }}
-        style={{ width: 64, height: 64, borderRadius: 4 }}
-        resizeMode="cover"
+      <img
+        src={`data:${mimeType};base64,${base64}`}
+        alt={filename}
+        className="w-16 h-16 rounded object-cover"
       />
     );
   }
 
   // 플레이스홀더
   return (
-    <View
-      style={{
-        width: 64,
-        height: 64,
-        borderRadius: 4,
-        backgroundColor: theme.colors.surfaceVariant,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.outlineVariant,
-      }}
+    <div
+      className="w-16 h-16 rounded bg-muted flex items-center justify-center border border-border"
     >
-      <Text style={{ fontSize: 20 }}>📷</Text>
-    </View>
+      <span className="text-xl">📷</span>
+    </div>
   );
 }
 

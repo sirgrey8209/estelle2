@@ -161,8 +161,10 @@ describe('claudeStore', () => {
     const questionRequest: PendingRequest = {
       type: 'question',
       toolUseId: 'tool-2',
-      question: 'Which framework?',
-      options: ['React', 'Vue', 'Angular'],
+      questions: [{
+        question: 'Which framework?',
+        options: ['React', 'Vue', 'Angular'],
+      }],
     };
 
     it('should add pending request', () => {

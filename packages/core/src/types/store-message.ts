@@ -204,6 +204,12 @@ export interface ToolStartMessage extends BaseStoreMessage {
 
   /** 도구 입력 파라미터 */
   toolInput: Record<string, unknown>;
+
+  /** 실행 경과 시간 (초) - toolProgress 이벤트에서 업데이트 */
+  elapsedSeconds?: number;
+
+  /** 부모 도구 사용 ID (서브에이전트 내부 호출 시) */
+  parentToolUseId?: string | null;
 }
 
 /**
@@ -234,6 +240,9 @@ export interface ToolCompleteMessage extends BaseStoreMessage {
 
   /** 에러 메시지 (실패 시) */
   error?: string;
+
+  /** 부모 도구 사용 ID (서브에이전트 내부 호출 시) */
+  parentToolUseId?: string | null;
 }
 
 /**

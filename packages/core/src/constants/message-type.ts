@@ -66,6 +66,12 @@ export const MessageType = {
   WORKSPACE_DELETE: 'workspace_delete',
   /** 워크스페이스 삭제 응답 */
   WORKSPACE_DELETE_RESULT: 'workspace_delete_result',
+  /** 워크스페이스 수정 요청 */
+  WORKSPACE_UPDATE: 'workspace_update',
+  /** 워크스페이스 수정 응답 */
+  WORKSPACE_UPDATE_RESULT: 'workspace_update_result',
+  /** 워크스페이스 순서 변경 요청 */
+  WORKSPACE_REORDER: 'workspace_reorder',
 
   // === Conversation ===
   /** 대화 생성 요청 */
@@ -78,6 +84,8 @@ export const MessageType = {
   CONVERSATION_STATUS: 'conversation_status',
   /** 메시지 히스토리 응답 */
   HISTORY_RESULT: 'history_result',
+  /** 대화 순서 변경 요청 */
+  CONVERSATION_REORDER: 'conversation_reorder',
 
   // === Claude ===
   /** Claude에 메시지 전송 */

@@ -134,6 +134,38 @@ const bugReportWriter = {
   },
 };
 
+/**
+ * SDK 로그 디렉토리
+ */
+const sdkLogDir = path.join(dataDir, 'sdk-logs');
+
+/**
+ * SDK raw 메시지 로거
+ * 날짜별 JSONL 파일로 저장
+ */
+function logSdkRawMessage(sessionId: string, message: unknown): void {
+  try {
+    // 로그 디렉토리 생성
+    if (!fs.existsSync(sdkLogDir)) {
+      fs.mkdirSync(sdkLogDir, { recursive: true });
+    }
+
+    // 날짜별 파일명
+    const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const logFile = path.join(sdkLogDir, `sdk-${date}.jsonl`);
+
+    // JSONL 형식으로 저장
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      sessionId,
+      message,
+    };
+    fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n', 'utf-8');
+  } catch (err) {
+    logger.error(`[SDK Log] Failed to write log: ${err}`);
+  }
+}
+
 // ============================================================================
 // 의존성 생성
 // ============================================================================
@@ -212,6 +244,10 @@ function createDependencies(): PylonDependencies {
       } else {
         logger.warn(`[Claude] Event received but pylon not ready: ${event.type}`);
       }
+    },
+    onRawMessage: (sessionId, message) => {
+      // SDK raw 메시지 로깅
+      logSdkRawMessage(sessionId, message);
     },
   });
 

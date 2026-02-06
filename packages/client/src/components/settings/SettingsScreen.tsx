@@ -1,6 +1,3 @@
-import React from 'react';
-import { View, ScrollView } from 'react-native';
-import { useTheme } from 'react-native-paper';
 import { ClaudeUsageCard } from './ClaudeUsageCard';
 import { DeploySection } from './DeploySection';
 import { AppUpdateSection } from './AppUpdateSection';
@@ -9,16 +6,14 @@ import { AppUpdateSection } from './AppUpdateSection';
  * 설정 화면 메인
  */
 export function SettingsScreen() {
-  const theme = useTheme();
-
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+    <div className="flex-1 bg-background">
+      <div className="h-full overflow-y-auto p-4">
         <ClaudeUsageCard />
         <DeploySection />
         <AppUpdateSection />
-      </ScrollView>
-    </View>
+      </div>
+    </div>
   );
 }
 
@@ -27,10 +22,10 @@ export function SettingsScreen() {
  */
 export function SettingsContent() {
   return (
-    <View>
+    <div className="space-y-4">
       <ClaudeUsageCard />
       <DeploySection />
       <AppUpdateSection />
-    </View>
+    </div>
   );
 }

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { View, Linking, Platform } from 'react-native';
-import { Card, Text, Button, IconButton, ProgressBar, useTheme } from 'react-native-paper';
+import { useState } from 'react';
+import { RefreshCw, Monitor, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
 import { useSettingsStore } from '../../stores';
-import { semanticColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 const BUILD_INFO = {
   version: '0.0.1',
@@ -13,7 +14,6 @@ const BUILD_INFO = {
  * 앱 업데이트 섹션
  */
 export function AppUpdateSection() {
-  const theme = useTheme();
   const { versionInfo } = useSettingsStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -29,110 +29,108 @@ export function AppUpdateSection() {
   };
 
   const handleUpdate = async () => {
-    const isAndroid = Platform.OS === 'android';
-
-    let url: string;
-    if (isAndroid && versionInfo?.apkUrl) {
-      url = versionInfo.apkUrl;
-    } else if (Platform.OS === 'windows' && versionInfo?.exeUrl) {
-      url = versionInfo.exeUrl;
-    } else {
-      url = 'https://github.com/sirgrey8209/estelle/releases/tag/deploy';
-    }
+    // Web에서는 항상 GitHub releases 페이지로 이동
+    const url = 'https://github.com/sirgrey8209/estelle/releases/tag/deploy';
 
     try {
-      await Linking.openURL(url);
+      window.open(url, '_blank');
     } catch (e) {
       console.error('Failed to open URL:', e);
     }
   };
 
   return (
-    <Card mode="outlined" style={{ marginBottom: 8 }}>
-      <Card.Title
-        title="App Update"
-        titleVariant="titleSmall"
-        left={() => (
-          <Text style={{ fontSize: 16 }}>
-            {hasUpdate ? '🔄' : '✅'}
-          </Text>
-        )}
-        right={() => (
-          <IconButton
-            icon="refresh"
-            size={18}
-            onPress={handleCheckVersion}
-            loading={isLoading}
-          />
-        )}
-      />
-      <Card.Content>
-        <View style={{ flexDirection: 'row', marginBottom: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text variant="labelSmall" style={{ opacity: 0.6 }}>배포</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Text variant="titleSmall" style={{ fontWeight: '600' }}>
+    <Card className="mb-2">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-2">
+            <span>{hasUpdate ? '🔄' : '✅'}</span>
+            App Update
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCheckVersion}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex mb-3">
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">배포</p>
+            <div className="flex items-center mt-0.5">
+              <span className="text-sm font-semibold">
                 {versionInfo?.version ?? '-'}
-              </Text>
+              </span>
               {versionInfo?.commit && (
-                <Text variant="labelSmall" style={{ marginLeft: 4, opacity: 0.6 }}>
+                <span className="text-xs text-muted-foreground ml-1">
                   ({versionInfo.commit})
-                </Text>
+                </span>
               )}
-            </View>
-          </View>
+            </div>
+          </div>
 
-          <View style={{ flex: 1 }}>
-            <Text variant="labelSmall" style={{ opacity: 0.6 }}>앱</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Text variant="titleSmall" style={{ fontWeight: '600' }}>
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">앱</p>
+            <div className="flex items-center mt-0.5">
+              <span className="text-sm font-semibold">
                 {BUILD_INFO.version}
-              </Text>
-              <Text variant="labelSmall" style={{ marginLeft: 4, opacity: 0.6 }}>
+              </span>
+              <span className="text-xs text-muted-foreground ml-1">
                 ({BUILD_INFO.commit})
-              </Text>
-            </View>
-          </View>
-        </View>
+              </span>
+            </div>
+          </div>
+        </div>
 
         {isDownloading && (
-          <View style={{ marginBottom: 12 }}>
-            <ProgressBar
-              progress={downloadProgress}
-              color={theme.colors.primary}
-              style={{ height: 4, borderRadius: 2 }}
-            />
-            <Text variant="labelSmall" style={{ textAlign: 'right', marginTop: 4, opacity: 0.6 }}>
+          <div className="mb-3">
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${downloadProgress * 100}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground text-right mt-1">
               {Math.round(downloadProgress * 100)}%
-            </Text>
-          </View>
+            </p>
+          </div>
         )}
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <div className="flex items-center justify-end">
           {!isDownloading && hasUpdate && (
-            <Text variant="labelSmall" style={{ color: semanticColors.warning, marginRight: 8 }}>
+            <span className="text-xs text-yellow-500 mr-2">
               새 버전 있음
-            </Text>
+            </span>
           )}
           {!isDownloading && !hasUpdate && versionInfo?.version && (
-            <Text variant="labelSmall" style={{ color: semanticColors.success, marginRight: 8 }}>
+            <span className="text-xs text-green-500 mr-2">
               최신 버전
-            </Text>
+            </span>
           )}
 
           <Button
-            mode="contained"
-            onPress={handleUpdate}
+            size="sm"
+            onClick={handleUpdate}
             disabled={isLoading || isDownloading}
-            loading={isDownloading}
-            buttonColor={hasUpdate ? semanticColors.warning : undefined}
-            compact
-            icon={Platform.OS === 'android' ? 'cellphone' : 'laptop'}
+            className={cn(hasUpdate && 'bg-yellow-500 hover:bg-yellow-600')}
           >
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            ) : (
+              <Monitor className="h-4 w-4 mr-1" />
+            )}
             업데이트
           </Button>
-        </View>
-      </Card.Content>
+        </div>
+      </CardContent>
     </Card>
   );
 }

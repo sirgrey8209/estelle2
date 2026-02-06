@@ -1,6 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { View, Platform } from 'react-native';
-import { Surface, useTheme } from 'react-native-paper';
+import { useState, useEffect } from 'react';
 import { AppHeader } from './AppHeader';
 import { BugReportDialog } from '../components/common/BugReportDialog';
 
@@ -13,13 +11,10 @@ interface DesktopLayoutProps {
  * 데스크톱 레이아웃
  */
 export function DesktopLayout({ sidebar, main }: DesktopLayoutProps) {
-  const theme = useTheme();
   const [showBugReport, setShowBugReport] = useState(false);
 
   // 키보드 단축키 (백틱 → 버그 리포트)
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '`' && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const target = e.target as HTMLElement;
@@ -40,30 +35,23 @@ export function DesktopLayout({ sidebar, main }: DesktopLayoutProps) {
   }, []);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <div className="flex h-screen flex-col bg-background">
       <AppHeader />
 
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+      <div className="flex flex-1 overflow-hidden">
         {/* 사이드바 */}
-        <Surface
-          style={{
-            width: 260,
-            borderRightWidth: 1,
-            borderRightColor: theme.colors.outlineVariant,
-          }}
-          elevation={0}
-        >
+        <aside className="w-64 shrink-0 border-r border-border">
           {sidebar}
-        </Surface>
+        </aside>
 
         {/* 메인 영역 */}
-        <View style={{ flex: 1 }}>{main}</View>
-      </View>
+        <main className="flex-1 overflow-hidden">{main}</main>
+      </div>
 
       <BugReportDialog
-        visible={showBugReport}
+        open={showBugReport}
         onClose={() => setShowBugReport(false)}
       />
-    </View>
+    </div>
   );
 }

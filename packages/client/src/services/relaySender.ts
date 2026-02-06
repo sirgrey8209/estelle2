@@ -72,6 +72,39 @@ export function deleteWorkspace(workspaceId: string): boolean {
   });
 }
 
+/**
+ * 워크스페이스 수정 요청
+ */
+export function updateWorkspace(
+  workspaceId: string,
+  updates: { name?: string; workingDir?: string }
+): boolean {
+  return sendMessage({
+    type: MessageType.WORKSPACE_UPDATE,
+    payload: { workspaceId, ...updates },
+  });
+}
+
+/**
+ * 워크스페이스 순서 변경 요청
+ */
+export function reorderWorkspaces(workspaceIds: string[]): boolean {
+  return sendMessage({
+    type: MessageType.WORKSPACE_REORDER,
+    payload: { workspaceIds },
+  });
+}
+
+/**
+ * 대화 순서 변경 요청
+ */
+export function reorderConversations(workspaceId: string, conversationIds: string[]): boolean {
+  return sendMessage({
+    type: MessageType.CONVERSATION_REORDER,
+    payload: { workspaceId, conversationIds },
+  });
+}
+
 // ============================================================================
 // 대화 관련
 // ============================================================================

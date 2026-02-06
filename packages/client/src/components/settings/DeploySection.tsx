@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { View, ScrollView } from 'react-native';
-import { Card, Text, Button, Chip, ActivityIndicator, Icon, useTheme } from 'react-native-paper';
+import { useState } from 'react';
+import { ChevronUp, ChevronDown, Rocket, RefreshCw, Check, X, Cloud, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
+import { Button } from '../ui/button';
 import { useSettingsStore, useWorkspaceStore, DeployPhase, BuildTaskStatus } from '../../stores';
-import { semanticColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 /**
  * 배포 섹션 (컴팩트)
  */
 export function DeploySection() {
-  const theme = useTheme();
   const {
     deployPhase,
     deployErrorMessage,
@@ -36,25 +36,31 @@ export function DeploySection() {
       case 'building':
       case 'preparing':
       case 'deploying':
-        return semanticColors.success;
+        return 'border-green-500';
       case 'error':
-        return theme.colors.error;
+        return 'border-destructive';
       default:
-        return theme.colors.outline;
+        return 'border-border';
     }
   };
 
-  const getStatusIcon = (phase: DeployPhase): string => {
-    const icons: Record<DeployPhase, string> = {
-      initial: 'rocket-launch',
-      building: 'sync',
-      buildReady: 'check-circle',
-      preparing: 'sync',
-      ready: 'check-circle',
-      deploying: 'cloud-upload',
-      error: 'close-circle',
-    };
-    return icons[phase];
+  const getStatusIcon = (phase: DeployPhase) => {
+    switch (phase) {
+      case 'initial':
+        return <Rocket className="h-4 w-4" />;
+      case 'building':
+      case 'preparing':
+        return <RefreshCw className="h-4 w-4 animate-spin" />;
+      case 'buildReady':
+      case 'ready':
+        return <Check className="h-4 w-4" />;
+      case 'deploying':
+        return <Cloud className="h-4 w-4" />;
+      case 'error':
+        return <X className="h-4 w-4" />;
+      default:
+        return <Rocket className="h-4 w-4" />;
+    }
   };
 
   const getStatusText = (): string => {
@@ -68,10 +74,10 @@ export function DeploySection() {
 
   const getTaskColor = (status: BuildTaskStatus): string => {
     const colors: Record<BuildTaskStatus, string> = {
-      pending: theme.colors.outline,
-      building: semanticColors.warning,
-      ready: semanticColors.success,
-      error: theme.colors.error,
+      pending: 'bg-muted',
+      building: 'bg-yellow-500',
+      ready: 'bg-green-500',
+      error: 'bg-destructive',
     };
     return colors[status];
   };
@@ -96,10 +102,9 @@ export function DeploySection() {
       case 'initial':
         return (
           <Button
-            mode="contained"
-            onPress={handleStartBuild}
+            size="sm"
+            onClick={handleStartBuild}
             disabled={!selectedPylonId}
-            compact
           >
             Deploy
           </Button>
@@ -109,10 +114,10 @@ export function DeploySection() {
       case 'buildReady':
         return (
           <Button
-            mode="contained"
-            onPress={handleToggleConfirm}
-            buttonColor={confirmed ? semanticColors.warning : theme.colors.primary}
-            compact
+            size="sm"
+            onClick={handleToggleConfirm}
+            variant={confirmed ? 'outline' : 'default'}
+            className={confirmed ? 'border-yellow-500 text-yellow-500' : ''}
           >
             {confirmed ? '취소' : deployPhase === 'building' ? '미리승인' : '승인'}
           </Button>
@@ -121,10 +126,9 @@ export function DeploySection() {
       case 'ready':
         return (
           <Button
-            mode="contained"
-            onPress={handleExecuteDeploy}
-            buttonColor={semanticColors.success}
-            compact
+            size="sm"
+            onClick={handleExecuteDeploy}
+            className="bg-green-500 hover:bg-green-600"
           >
             GO
           </Button>
@@ -133,13 +137,12 @@ export function DeploySection() {
       case 'error':
         return (
           <Button
-            mode="contained"
-            onPress={() => {
+            size="sm"
+            onClick={() => {
               resetDeploy();
               handleStartBuild();
             }}
-            buttonColor={semanticColors.warning}
-            compact
+            className="bg-yellow-500 hover:bg-yellow-600"
           >
             재시도
           </Button>
@@ -148,7 +151,7 @@ export function DeploySection() {
       case 'preparing':
       case 'deploying':
         return (
-          <ActivityIndicator size="small" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         );
 
       default:
@@ -158,111 +161,107 @@ export function DeploySection() {
 
   return (
     <Card
-      mode="outlined"
-      style={{
-        marginBottom: 8,
-        borderColor: getBorderColor(deployPhase),
-        borderWidth: 2,
-      }}
-      onPress={() => setLogExpanded(!logExpanded)}
+      className={cn(
+        'mb-2 border-2 cursor-pointer transition-colors',
+        getBorderColor(deployPhase)
+      )}
+      onClick={() => setLogExpanded(!logExpanded)}
     >
-      <Card.Content>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+      <CardContent className="p-3">
+        <div className="flex items-center mb-2">
+          <div className="flex-1 flex flex-wrap gap-1">
             {pylons.length === 0 ? (
-              <Text variant="labelSmall" style={{ opacity: 0.6 }}>Pylon 없음</Text>
+              <span className="text-xs text-muted-foreground">Pylon 없음</span>
             ) : (
               pylons.map((pylon) => (
-                <Chip
+                <button
                   key={pylon.pcId}
-                  mode={selectedPylonId === pylon.pcId ? 'flat' : 'outlined'}
-                  selected={selectedPylonId === pylon.pcId}
-                  onPress={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (deployPhase === 'initial' || deployPhase === 'error') {
                       setSelectedPylonId(pylon.pcId);
                     }
                   }}
-                  compact
-                  textStyle={{ fontSize: 11 }}
+                  className={cn(
+                    'px-2 py-0.5 text-xs rounded-full border transition-colors',
+                    selectedPylonId === pylon.pcId
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-foreground border-border hover:border-primary'
+                  )}
                 >
                   🖥️ {pylon.pcName}
-                </Chip>
+                </button>
               ))
             )}
-          </View>
-          {renderActionButton()}
-        </View>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            {renderActionButton()}
+          </div>
+        </div>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Icon
-            source={getStatusIcon(deployPhase)}
-            size={16}
-            color={deployPhase === 'error' ? theme.colors.error : theme.colors.onSurface}
-          />
-          <Text
-            variant="labelSmall"
-            style={{
-              flex: 1,
-              marginLeft: 8,
-              color: deployPhase === 'error' ? theme.colors.error : undefined,
-              opacity: deployPhase === 'error' ? 1 : 0.7,
-            }}
-            numberOfLines={1}
+        <div className="flex items-center">
+          <span className={cn(
+            deployPhase === 'error' ? 'text-destructive' : 'text-foreground'
+          )}>
+            {getStatusIcon(deployPhase)}
+          </span>
+          <span
+            className={cn(
+              'flex-1 ml-2 text-xs truncate',
+              deployPhase === 'error' ? 'text-destructive' : 'text-muted-foreground'
+            )}
           >
             {getStatusText()}
-          </Text>
+          </span>
 
           {Object.keys(buildTasks).length > 0 && (
-            <View style={{ flexDirection: 'row', gap: 2, marginLeft: 8 }}>
+            <div className="flex gap-0.5 ml-2">
               {Object.entries(buildTasks).map(([task, status]) => (
-                <View
+                <div
                   key={task}
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: getTaskColor(status),
-                  }}
+                  className={cn('w-1.5 h-1.5 rounded-full', getTaskColor(status))}
                 />
               ))}
-            </View>
+            </div>
           )}
 
-          <Icon
-            source={logExpanded ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </View>
-      </Card.Content>
+          {logExpanded ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground ml-1" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
+          )}
+        </div>
+      </CardContent>
 
       {logExpanded && (
-        <View style={{ height: 120, backgroundColor: theme.colors.background, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
+        <div
+          className="h-[120px] bg-background rounded-b-lg border-t"
+          onClick={(e) => e.stopPropagation()}
+        >
           {deployLogs.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text variant="labelSmall" style={{ opacity: 0.5 }}>로그가 없습니다</Text>
-            </View>
+            <div className="flex items-center justify-center h-full">
+              <span className="text-xs text-muted-foreground">로그가 없습니다</span>
+            </div>
           ) : (
-            <ScrollView contentContainerStyle={{ padding: 8 }}>
+            <div className="h-full overflow-y-auto p-2">
               {deployLogs.map((line, index) => {
                 const isError = line.startsWith('[ERR]');
                 const isHeader = line.startsWith('▶');
                 return (
-                  <Text
+                  <p
                     key={index}
-                    variant="labelSmall"
-                    style={{
-                      fontFamily: 'monospace',
-                      color: isError ? theme.colors.error : isHeader ? theme.colors.primary : theme.colors.onSurfaceVariant,
-                    }}
+                    className={cn(
+                      'text-xs font-mono',
+                      isError ? 'text-destructive' : isHeader ? 'text-primary' : 'text-muted-foreground'
+                    )}
                   >
                     {line}
-                  </Text>
+                  </p>
                 );
               })}
-            </ScrollView>
+            </div>
           )}
-        </View>
+        </div>
       )}
     </Card>
   );

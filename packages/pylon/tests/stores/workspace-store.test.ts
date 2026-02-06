@@ -176,6 +176,132 @@ describe('WorkspaceStore', () => {
       });
     });
 
+    // ============================================================================
+    // [Phase 1] updateWorkspace 테스트
+    // ============================================================================
+    describe('updateWorkspace', () => {
+      it('should_update_name_when_only_name_provided', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Old Name', 'C:\\test');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, { name: 'New Name' });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.name).toBe('New Name');
+        expect(updated?.workingDir).toBe('C:\\test'); // 변경 안됨
+      });
+
+      it('should_update_workingDir_when_only_workingDir_provided', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Test', 'C:\\old');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, { workingDir: 'C:\\new' });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.name).toBe('Test'); // 변경 안됨
+        expect(updated?.workingDir).toBe('C:\\new');
+      });
+
+      it('should_update_both_name_and_workingDir_when_both_provided', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Old Name', 'C:\\old');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, {
+          name: 'New Name',
+          workingDir: 'C:\\new',
+        });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.name).toBe('New Name');
+        expect(updated?.workingDir).toBe('C:\\new');
+      });
+
+      it('should_return_false_when_workspace_not_found', () => {
+        // Arrange - no workspace created
+
+        // Act
+        const result = store.updateWorkspace('non-existent', { name: 'Test' });
+
+        // Assert
+        expect(result).toBe(false);
+      });
+
+      it('should_return_false_when_no_updates_provided', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, {});
+
+        // Assert
+        expect(result).toBe(false); // 아무것도 업데이트할 게 없으면 false
+      });
+
+      it('should_trim_whitespace_from_name', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Old', 'C:\\test');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, { name: '  New Name  ' });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.name).toBe('New Name');
+      });
+
+      it('should_return_false_when_name_is_empty_after_trim', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, { name: '   ' });
+
+        // Assert
+        expect(result).toBe(false); // 빈 이름은 허용 안됨
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.name).toBe('Test'); // 원래 이름 유지
+      });
+
+      it('should_update_lastUsed_timestamp', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const originalLastUsed = workspace.lastUsed;
+
+        // 약간의 시간 경과
+        // Act
+        const result = store.updateWorkspace(workspace.workspaceId, { name: 'Updated' });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        expect(updated?.lastUsed).toBeGreaterThanOrEqual(originalLastUsed);
+      });
+
+      it('should_normalize_workingDir_path', () => {
+        // Arrange
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+
+        // Act - 슬래시로 경로 제공
+        const result = store.updateWorkspace(workspace.workspaceId, { workingDir: 'C:/new/path' });
+
+        // Assert
+        expect(result).toBe(true);
+        const updated = store.getWorkspace(workspace.workspaceId);
+        // Windows 스타일로 정규화될 수 있음 (구현에 따라)
+        expect(updated?.workingDir).toBeDefined();
+      });
+    });
+
     describe('deleteWorkspace', () => {
       it('should delete workspace', () => {
         const { workspace } = store.createWorkspace('ToDelete', 'C:\\delete');

@@ -4,7 +4,7 @@
  */
 
 import React, { ReactElement } from 'react';
-import { render, RenderOptions } from '@testing-library/react-native';
+import { render, RenderOptions } from '@testing-library/react';
 import { vi } from 'vitest';
 
 // Store mocks
@@ -144,5 +144,5 @@ const customRender = (
   options?: Omit<RenderOptions, 'wrapper'>
 ) => render(ui, { wrapper: AllTheProviders, ...options });
 
-export * from '@testing-library/react-native';
+export * from '@testing-library/react';
 export { customRender as render };

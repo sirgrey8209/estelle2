@@ -1,4 +1,4 @@
-import { useWindowDimensions } from 'react-native';
+import { useState, useEffect } from 'react';
 
 /**
  * 브레이크포인트
@@ -27,19 +27,39 @@ export interface ResponsiveInfo {
 }
 
 /**
- * 반응형 훅
+ * 디바이스 타입 계산
+ */
+function getDeviceType(width: number): DeviceType {
+  if (width >= BREAKPOINTS.desktop) return 'desktop';
+  if (width >= BREAKPOINTS.tablet) return 'tablet';
+  return 'mobile';
+}
+
+/**
+ * 반응형 훅 (웹 버전)
  *
  * 화면 크기에 따른 디바이스 타입을 반환합니다.
  */
 export function useResponsive(): ResponsiveInfo {
-  const { width, height } = useWindowDimensions();
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
+    height: typeof window !== 'undefined' ? window.innerHeight : 768,
+  });
 
-  let deviceType: DeviceType = 'mobile';
-  if (width >= BREAKPOINTS.desktop) {
-    deviceType = 'desktop';
-  } else if (width >= BREAKPOINTS.tablet) {
-    deviceType = 'tablet';
-  }
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const { width, height } = dimensions;
+  const deviceType = getDeviceType(width);
 
   return {
     width,

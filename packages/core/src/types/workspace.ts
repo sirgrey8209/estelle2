@@ -173,6 +173,35 @@ export interface WorkspaceDeletePayload {
 }
 
 /**
+ * 워크스페이스 수정 요청 페이로드
+ *
+ * @description
+ * `workspace_update` 메시지의 페이로드입니다.
+ * name과 workingDir 중 최소 하나는 제공되어야 합니다.
+ */
+export interface WorkspaceUpdatePayload {
+  /** 수정할 워크스페이스 ID */
+  workspaceId: string;
+
+  /** 새 워크스페이스 이름 (선택) */
+  name?: string;
+
+  /** 새 작업 디렉토리 경로 (선택) */
+  workingDir?: string;
+}
+
+/**
+ * 워크스페이스 순서 변경 요청 페이로드
+ *
+ * @description
+ * `workspace_reorder` 메시지의 페이로드입니다.
+ */
+export interface WorkspaceReorderPayload {
+  /** 새 순서의 워크스페이스 ID 배열 */
+  workspaceIds: string[];
+}
+
+/**
  * 대화 생성 요청 페이로드
  *
  * @description
@@ -229,4 +258,18 @@ export interface ConversationStatusPayload {
 
   /** 읽지 않음 여부 (선택) */
   unread?: boolean;
+}
+
+/**
+ * 대화 순서 변경 요청 페이로드
+ *
+ * @description
+ * `conversation_reorder` 메시지의 페이로드입니다.
+ */
+export interface ConversationReorderPayload {
+  /** 워크스페이스 ID */
+  workspaceId: string;
+
+  /** 새 순서의 대화 ID 배열 */
+  conversationIds: string[];
 }

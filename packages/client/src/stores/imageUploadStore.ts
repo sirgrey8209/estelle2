@@ -23,6 +23,10 @@ export interface AttachedImage {
   uri: string;
   /** 파일명 */
   fileName: string;
+  /** 원본 File 객체 (업로드 시 필요) */
+  file?: File;
+  /** MIME 타입 (예: image/png) */
+  mimeType?: string;
 }
 
 /**

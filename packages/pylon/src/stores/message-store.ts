@@ -195,11 +195,43 @@ export function summarizeToolInput(
 ): Record<string, unknown> {
   if (!input) return {} as Record<string, unknown>;
 
-  // 파일 관련 도구는 경로만 유지
-  if (['Read', 'Edit', 'Write', 'NotebookEdit'].includes(toolName)) {
+  // Read, NotebookEdit는 경로만 유지
+  if (['Read', 'NotebookEdit'].includes(toolName)) {
     const result: Record<string, unknown> = {};
     if (input.file_path) result.file_path = input.file_path;
     if (input.notebook_path) result.notebook_path = input.notebook_path;
+    return result;
+  }
+
+  // Edit은 경로 + old_string/new_string (요약)
+  if (toolName === 'Edit') {
+    const result: Record<string, unknown> = {};
+    if (input.file_path) result.file_path = input.file_path;
+    if (input.old_string) {
+      const oldStr = input.old_string as string;
+      result.old_string = oldStr.length > MAX_INPUT_LENGTH
+        ? oldStr.slice(0, MAX_INPUT_LENGTH) + '...'
+        : oldStr;
+    }
+    if (input.new_string) {
+      const newStr = input.new_string as string;
+      result.new_string = newStr.length > MAX_INPUT_LENGTH
+        ? newStr.slice(0, MAX_INPUT_LENGTH) + '...'
+        : newStr;
+    }
+    return result;
+  }
+
+  // Write는 경로 + content (요약)
+  if (toolName === 'Write') {
+    const result: Record<string, unknown> = {};
+    if (input.file_path) result.file_path = input.file_path;
+    if (input.content) {
+      const content = input.content as string;
+      result.content = content.length > MAX_INPUT_LENGTH
+        ? content.slice(0, MAX_INPUT_LENGTH) + '...'
+        : content;
+    }
     return result;
   }
 
@@ -384,15 +416,20 @@ export class MessageStore {
 
   /**
    * 내부: 메시지 타입 별 Omit<id | timestamp> 유니온
+   *
+   * @param sessionId - 세션 ID
+   * @param message - 메시지 데이터 (id, timestamp 제외)
+   * @param externalId - 외부에서 지정한 ID (선택적, 주로 toolUseId)
    */
   private _addMessageInternal<T extends StoreMessage>(
     sessionId: string,
-    message: Omit<T, 'id' | 'timestamp'>
+    message: Omit<T, 'id' | 'timestamp'>,
+    externalId?: string
   ): StoreMessage[] {
     const messages = this._ensureCache(sessionId);
     const fullMessage = {
       ...message,
-      id: generateMessageId(),
+      id: externalId || generateMessageId(),
       timestamp: Date.now(),
     } as T;
     messages.push(fullMessage);
@@ -456,24 +493,30 @@ export class MessageStore {
    *
    * @description
    * toolInput은 자동으로 요약되어 저장됩니다.
+   * toolUseId가 제공되면 메시지 id로 사용됩니다 (하위 툴 매핑용).
    *
    * @param sessionId - 세션 ID
    * @param toolName - 도구 이름
    * @param toolInput - 도구 입력
+   * @param parentToolUseId - 부모 도구 ID (서브에이전트 내부 호출 시)
+   * @param toolUseId - SDK에서 제공하는 도구 사용 ID (메시지 id로 사용)
    * @returns 업데이트된 메시지 배열
    */
   addToolStart(
     sessionId: string,
     toolName: string,
-    toolInput: Record<string, unknown>
+    toolInput: Record<string, unknown>,
+    parentToolUseId?: string | null,
+    toolUseId?: string
   ): StoreMessage[] {
     const message: Omit<ToolStartMessage, 'id' | 'timestamp'> = {
       role: 'assistant',
       type: 'tool_start',
       toolName,
       toolInput: summarizeToolInput(toolName, toolInput),
+      ...(parentToolUseId ? { parentToolUseId } : {}),
     };
-    return this._addMessageInternal<ToolStartMessage>(sessionId, message);
+    return this._addMessageInternal<ToolStartMessage>(sessionId, message, toolUseId);
   }
 
   /**
@@ -514,6 +557,7 @@ export class MessageStore {
           output: summarizeOutput(result) as string | undefined,
           error: summarizeOutput(error) as string | undefined,
           timestamp: msg.timestamp,
+          ...(toolStartMsg.parentToolUseId ? { parentToolUseId: toolStartMsg.parentToolUseId } : {}),
         };
         messages[i] = completeMsg;
         break;

@@ -1,31 +1,23 @@
 /**
  * @file utils/buildInfo.ts
- * @description 빌드 정보
+ * @description 빌드 정보 (웹)
  */
-
-import Constants from 'expo-constants';
 
 /**
  * 빌드 정보
  */
 export const BuildInfo = {
   /** 앱 버전 */
-  version: Constants.expoConfig?.version ?? '0.0.1',
+  version: import.meta.env?.VITE_APP_VERSION ?? '2.0.0',
 
   /** 커밋 해시 (빌드 시 주입) */
-  commit: process.env.EXPO_PUBLIC_COMMIT_HASH ?? 'dev',
+  commit: import.meta.env?.VITE_COMMIT_HASH ?? 'dev',
 
   /** 빌드 시간 (빌드 시 주입) */
-  buildTime: process.env.EXPO_PUBLIC_BUILD_TIME ?? new Date().toISOString(),
+  buildTime: import.meta.env?.VITE_BUILD_TIME ?? new Date().toISOString(),
 
   /** 앱 이름 */
-  appName: Constants.expoConfig?.name ?? 'Estelle',
-
-  /** 번들 ID */
-  bundleId: Constants.expoConfig?.ios?.bundleIdentifier ?? 'com.estelle.app',
-
-  /** 안드로이드 패키지명 */
-  packageName: Constants.expoConfig?.android?.package ?? 'com.estelle.app',
+  appName: 'Estelle',
 } as const;
 
 /**

@@ -87,19 +87,40 @@ export interface PermissionRequest {
 }
 
 /**
+ * 개별 질문 항목
+ */
+export interface QuestionItem {
+  question: string;
+  header?: string;
+  options: string[];
+  multiSelect?: boolean;
+}
+
+/**
  * 질문 요청
  */
 export interface QuestionRequest {
   type: 'question';
   toolUseId: string;
-  question: string;
-  options: string[];
+  questions: QuestionItem[];
 }
 
 /**
  * 대기 중인 요청 타입
  */
 export type PendingRequest = PermissionRequest | QuestionRequest;
+
+/**
+ * 실시간 토큰 사용량
+ */
+export interface RealtimeUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  /** 마지막 업데이트 타입 */
+  lastUpdateType: 'input' | 'output';
+}
 
 /**
  * Claude 상태 인터페이스
@@ -119,6 +140,9 @@ export interface ClaudeState {
 
   /** 작업 시작 시간 */
   workStartTime: number | null;
+
+  /** 실시간 토큰 사용량 */
+  realtimeUsage: RealtimeUsage | null;
 
   /** 대기 중인 요청 존재 여부 (계산된 값) */
   hasPendingRequests: boolean;
@@ -153,6 +177,7 @@ const initialState = {
   textBuffer: '',
   pendingRequests: [] as PendingRequest[],
   workStartTime: null as number | null,
+  realtimeUsage: null as RealtimeUsage | null,
   hasPendingRequests: false,
   _messageCache: new Map<string, StoreMessage[]>(),
   _requestCache: new Map<string, PendingRequest[]>(),
@@ -178,8 +203,16 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
 
     if (status === 'working') {
       updates.workStartTime = Date.now();
+      updates.realtimeUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        lastUpdateType: 'input',
+      };
     } else if (status === 'idle') {
       updates.workStartTime = null;
+      updates.realtimeUsage = null;
     }
 
     set(updates);
@@ -196,7 +229,7 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [] });
+    set({ messages: [], pendingRequests: [], hasPendingRequests: false });
   },
 
   appendTextBuffer: (text) => {
@@ -305,47 +338,78 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
       // Pylon sends 'toolInfo', client also accepts 'tool_start' for compatibility
       case 'toolInfo':
       case 'tool_start': {
+        const toolUseId = event.toolUseId as string | undefined;
+        const parentToolUseId = event.parentToolUseId as string | null | undefined;
         const message: ToolStartMessage = {
-          id: generateId(),
+          id: toolUseId || generateId(),
           role: 'assistant',
           type: 'tool_start',
           timestamp: Date.now(),
           toolName: event.toolName as string,
           toolInput: (event.toolInput || event.input) as Record<string, unknown>,
+          ...(parentToolUseId ? { parentToolUseId } : {}),
         };
         state.addMessage(message);
+        break;
+      }
+
+      case 'toolProgress': {
+        // tool_start 메시지를 찾아서 elapsedSeconds 업데이트
+        const toolName = event.toolName as string;
+        const elapsedSeconds = event.elapsedSeconds as number | undefined;
+
+        const messages = [...state.messages];
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.type === 'tool_start' && (msg as ToolStartMessage).toolName === toolName) {
+            (messages[i] as ToolStartMessage).elapsedSeconds = elapsedSeconds;
+            set({ messages });
+            break;
+          }
+        }
         break;
       }
 
       // Pylon sends 'toolComplete', client also accepts 'tool_complete' for compatibility
       case 'toolComplete':
       case 'tool_complete': {
+        const toolUseId = event.toolUseId as string | undefined;
         const toolName = event.toolName as string;
         const toolInput = (event.toolInput || event.input || {}) as Record<string, unknown>;
         const success = (event.success as boolean) ?? true;
         const output = (event.toolOutput || event.result) as string | undefined;
+        const parentToolUseId = event.parentToolUseId as string | null | undefined;
 
-        // 기존 tool_start 메시지를 찾아서 tool_complete로 교체 (Pylon과 동일한 동작)
+        // 기존 tool_start 메시지를 찾아서 tool_complete로 교체
+        // toolUseId가 있으면 id로 매칭, 없으면 toolName으로 매칭 (하위 호환)
         const messages = [...state.messages];
         let replaced = false;
 
         for (let i = messages.length - 1; i >= 0; i--) {
           const msg = messages[i];
-          if (msg.type === 'tool_start' && (msg as ToolStartMessage).toolName === toolName) {
+          if (msg.type === 'tool_start') {
             const toolStartMsg = msg as ToolStartMessage;
-            const completeMsg: ToolCompleteMessage = {
-              id: toolStartMsg.id,
-              role: 'assistant',
-              type: 'tool_complete',
-              timestamp: toolStartMsg.timestamp,
-              toolName,
-              toolInput: toolStartMsg.toolInput,
-              success,
-              ...(success ? { output } : { error: output }),
-            };
-            messages[i] = completeMsg;
-            replaced = true;
-            break;
+            // toolUseId가 있으면 정확히 매칭, 없으면 toolName으로 매칭
+            const isMatch = toolUseId
+              ? toolStartMsg.id === toolUseId
+              : toolStartMsg.toolName === toolName;
+
+            if (isMatch) {
+              const completeMsg: ToolCompleteMessage = {
+                id: toolStartMsg.id,
+                role: 'assistant',
+                type: 'tool_complete',
+                timestamp: toolStartMsg.timestamp,
+                toolName,
+                toolInput: toolStartMsg.toolInput,
+                success,
+                ...(success ? { output } : { error: output }),
+                ...(toolStartMsg.parentToolUseId ? { parentToolUseId: toolStartMsg.parentToolUseId } : {}),
+              };
+              messages[i] = completeMsg;
+              replaced = true;
+              break;
+            }
           }
         }
 
@@ -354,7 +418,7 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
         } else {
           // tool_start가 없으면 새 메시지로 추가 (fallback)
           const message: ToolCompleteMessage = {
-            id: generateId(),
+            id: toolUseId || generateId(),
             role: 'assistant',
             type: 'tool_complete',
             timestamp: Date.now(),
@@ -362,6 +426,7 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
             toolInput,
             success,
             ...(success ? { output } : { error: output }),
+            ...(parentToolUseId ? { parentToolUseId } : {}),
           };
           state.addMessage(message);
         }
@@ -380,12 +445,31 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
         break;
       }
 
+      // Pylon sends 'askQuestion', client also accepts 'ask_question' for compatibility
+      case 'askQuestion':
       case 'ask_question': {
+        // questions 배열 전체 변환 (AskUserQuestion 형식)
+        const rawQuestions = event.questions as Array<{
+          question: string;
+          header?: string;
+          options?: Array<{ label: string }>;
+          multiSelect?: boolean;
+        }> | undefined;
+
+        const questionItems: QuestionItem[] = rawQuestions?.map(q => ({
+          question: q.question,
+          header: q.header,
+          options: q.options?.map(o => o.label) || [],
+          multiSelect: q.multiSelect,
+        })) || [{
+          question: (event.question as string) || '',
+          options: (event.options as string[]) || [],
+        }];
+
         const request: QuestionRequest = {
           type: 'question',
           toolUseId: event.toolUseId as string,
-          question: event.question as string,
-          options: (event.options as string[]) || [],
+          questions: questionItems,
         };
         state.addPendingRequest(request);
         state.setStatus('permission');
@@ -461,6 +545,39 @@ export const useClaudeStore = create<ClaudeState>((set, get) => ({
             },
           };
           state.addMessage(message);
+        }
+        break;
+      }
+
+      case 'usage_update': {
+        // 실시간 토큰 사용량 업데이트
+        const usage = event.usage as Record<string, number> | undefined;
+        if (usage) {
+          const prev = get().realtimeUsage;
+          const newInput = usage.inputTokens || 0;
+          const newOutput = usage.outputTokens || 0;
+
+          // 이전 값과 비교해서 어떤 값이 바뀌었는지 확인
+          let lastUpdateType: 'input' | 'output' = 'input';
+          if (prev) {
+            if (newOutput > prev.outputTokens) {
+              lastUpdateType = 'output';
+            } else if (newInput > prev.inputTokens) {
+              lastUpdateType = 'input';
+            } else {
+              lastUpdateType = prev.lastUpdateType;
+            }
+          }
+
+          set({
+            realtimeUsage: {
+              inputTokens: newInput,
+              outputTokens: newOutput,
+              cacheReadInputTokens: usage.cacheReadInputTokens || 0,
+              cacheCreationInputTokens: usage.cacheCreationInputTokens || 0,
+              lastUpdateType,
+            },
+          });
         }
         break;
       }

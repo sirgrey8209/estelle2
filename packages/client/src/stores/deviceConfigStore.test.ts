@@ -100,8 +100,14 @@ describe('deviceConfigStore', () => {
     });
 
     it('설정이 없으면 기본 이름을 반환해야 한다', () => {
-      expect(getStore().getName(1)).toBe('Pylon 1');
-      expect(getStore().getName(2)).toBe('Pylon 2');
+      // 초기값이 없는 deviceId에 대해 기본 이름 반환
+      expect(getStore().getName(99)).toBe('Pylon 99');
+    });
+
+    it('초기값이 있으면 해당 이름을 반환해야 한다', () => {
+      // initialState에 설정된 값
+      expect(getStore().getName(1)).toBe('Office');
+      expect(getStore().getName(2)).toBe('Home');
     });
   });
 
@@ -136,17 +142,21 @@ describe('deviceConfigStore', () => {
   });
 
   describe('reset', () => {
-    it('모든 설정을 초기화해야 한다', () => {
+    it('설정을 초기 상태로 복원해야 한다', () => {
       act(() => {
-        getStore().setConfig(1, 'Home PC', '🏠');
-        getStore().setConfig(2, 'Office PC', '🏢');
+        getStore().setConfig(1, 'Changed Name', '🏠');
+        getStore().setConfig(3, 'New Device', '🖥️');
       });
 
       act(() => {
         getStore().reset();
       });
 
-      expect(Object.keys(getStore().configs).length).toBe(0);
+      // 초기 상태로 복원 (Office, Home)
+      expect(getStore().getName(1)).toBe('Office');
+      expect(getStore().getName(2)).toBe('Home');
+      // 추가된 설정은 제거됨
+      expect(getStore().getConfig(3)).toBeUndefined();
     });
   });
 });

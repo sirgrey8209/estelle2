@@ -9,10 +9,8 @@
       "deviceId": "1",
       "relayUrl": "ws://localhost:3000"
     },
-    "expo": {
-      "port": 10000
-    },
     "client": {
+      "port": 5173,
       "relayUrl": "ws://localhost:3000",
       "title": "Estelle (dev)"
     }

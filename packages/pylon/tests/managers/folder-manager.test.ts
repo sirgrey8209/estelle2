@@ -134,6 +134,60 @@ class InMemoryFolderFileSystem implements FolderFileSystem {
 // FolderManager 테스트
 // ============================================================================
 
+// ============================================================================
+// 드라이브 목록 결과 타입 (Phase 1에서 추가될 예정)
+// ============================================================================
+
+/**
+ * 드라이브 정보
+ */
+interface DriveInfo {
+  /** 드라이브 경로 (예: 'C:\\') */
+  path: string;
+  /** 드라이브 레이블 (예: 'C:') */
+  label: string;
+  /** 하위 폴더 유무 */
+  hasChildren: boolean;
+}
+
+/**
+ * 드라이브 목록 조회 결과
+ */
+interface ListDrivesResult {
+  /** 성공 여부 */
+  success: boolean;
+  /** 드라이브 목록 */
+  drives: DriveInfo[];
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+}
+
+/**
+ * hasChildren이 포함된 폴더 정보
+ */
+interface FolderInfo {
+  /** 폴더 이름 */
+  name: string;
+  /** 하위 폴더 유무 */
+  hasChildren: boolean;
+}
+
+/**
+ * hasChildren이 포함된 폴더 목록 결과
+ */
+interface ListFoldersResultWithChildren {
+  /** 성공 여부 */
+  success: boolean;
+  /** 정규화된 경로 */
+  path: string;
+  /** 폴더 정보 목록 (hasChildren 포함) */
+  foldersWithChildren: FolderInfo[];
+  /** 폴더 이름 목록 (하위 호환용) */
+  folders: string[];
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+}
+
 describe('FolderManager', () => {
   let fs: InMemoryFolderFileSystem;
   let folderManager: FolderManager;
@@ -451,6 +505,178 @@ describe('FolderManager', () => {
       expect(result.success).toBe(true);
       // 마지막 백슬래시는 유지될 수 있음
       expect(result.path.startsWith('C:\\workspace')).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // [Phase 1] 드라이브 목록 조회 테스트
+  // ============================================================================
+  describe('listDrives', () => {
+    it('should_return_drives_list_when_called', () => {
+      // Arrange
+      fs._addDirectory('C:\\');
+      fs._addDirectory('D:\\');
+
+      // Act
+      const result = (folderManager as any).listDrives() as ListDrivesResult;
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.drives).toBeDefined();
+      expect(result.drives.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should_include_hasChildren_for_each_drive', () => {
+      // Arrange
+      fs._addDirectory('C:\\');
+      fs._addDirectory('C:\\folder1');
+      fs._addDirectory('D:\\');
+
+      // Act
+      const result = (folderManager as any).listDrives() as ListDrivesResult;
+
+      // Assert
+      expect(result.success).toBe(true);
+      const cDrive = result.drives.find((d: DriveInfo) => d.path === 'C:\\');
+      const dDrive = result.drives.find((d: DriveInfo) => d.path === 'D:\\');
+
+      expect(cDrive).toBeDefined();
+      expect(cDrive!.hasChildren).toBe(true); // C:\ has folder1
+
+      expect(dDrive).toBeDefined();
+      expect(dDrive!.hasChildren).toBe(false); // D:\ is empty
+    });
+
+    it('should_include_drive_label', () => {
+      // Arrange
+      fs._addDirectory('C:\\');
+
+      // Act
+      const result = (folderManager as any).listDrives() as ListDrivesResult;
+
+      // Assert
+      expect(result.success).toBe(true);
+      const cDrive = result.drives.find((d: DriveInfo) => d.path === 'C:\\');
+      expect(cDrive).toBeDefined();
+      expect(cDrive!.label).toBe('C:');
+    });
+
+    it('should_return_empty_drives_when_no_drives_exist', () => {
+      // Arrange - 새 파일시스템 (드라이브 없이)
+      const emptyFs = new InMemoryFolderFileSystem();
+      // InMemoryFolderFileSystem은 기본으로 C:\를 추가하므로 제거할 방법이 필요
+      // 테스트 목적상 이 케이스는 에러 핸들링을 확인
+
+      // Act
+      const result = (folderManager as any).listDrives() as ListDrivesResult;
+
+      // Assert - 최소한 드라이브 배열이 존재해야 함
+      expect(result.drives).toBeDefined();
+      expect(Array.isArray(result.drives)).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // [Phase 1] listFolders with hasChildren 테스트
+  // ============================================================================
+  describe('listFolders with hasChildren', () => {
+    it('should_include_hasChildren_in_result_when_folders_have_subfolders', () => {
+      // Arrange
+      fs._addDirectory('C:\\workspace\\project1');
+      fs._addDirectory('C:\\workspace\\project1\\src');
+      fs._addDirectory('C:\\workspace\\project2');
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.foldersWithChildren).toBeDefined();
+
+      const project1 = result.foldersWithChildren.find((f: FolderInfo) => f.name === 'project1');
+      const project2 = result.foldersWithChildren.find((f: FolderInfo) => f.name === 'project2');
+
+      expect(project1).toBeDefined();
+      expect(project1!.hasChildren).toBe(true);  // project1 has src
+
+      expect(project2).toBeDefined();
+      expect(project2!.hasChildren).toBe(false); // project2 is empty
+    });
+
+    it('should_return_hasChildren_false_when_folder_only_has_files', () => {
+      // Arrange
+      fs._addDirectory('C:\\workspace\\project');
+      fs._addFile('C:\\workspace\\project\\file.txt');
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      const project = result.foldersWithChildren.find((f: FolderInfo) => f.name === 'project');
+      expect(project).toBeDefined();
+      expect(project!.hasChildren).toBe(false); // only files, no subfolders
+    });
+
+    it('should_return_hasChildren_true_when_subfolder_has_hidden_folders', () => {
+      // Arrange
+      fs._addDirectory('C:\\workspace\\project');
+      fs._addDirectory('C:\\workspace\\project\\.git');
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      const project = result.foldersWithChildren.find((f: FolderInfo) => f.name === 'project');
+      expect(project).toBeDefined();
+      // 숨김 폴더는 hasChildren 계산에서 제외될 수 있음 (정책에 따라)
+      // 구현 시 정책 결정 필요 - 여기서는 제외한다고 가정
+      expect(project!.hasChildren).toBe(false);
+    });
+
+    it('should_maintain_backwards_compatibility_with_folders_array', () => {
+      // Arrange
+      fs._addDirectory('C:\\workspace\\project1');
+      fs._addDirectory('C:\\workspace\\project2');
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      // 기존 folders 배열도 유지되어야 함 (하위 호환)
+      expect(result.folders).toBeDefined();
+      expect(result.folders).toContain('project1');
+      expect(result.folders).toContain('project2');
+    });
+
+    it('should_handle_deeply_nested_folders_for_hasChildren', () => {
+      // Arrange
+      fs._addDirectory('C:\\workspace\\a');
+      fs._addDirectory('C:\\workspace\\a\\b');
+      fs._addDirectory('C:\\workspace\\a\\b\\c');
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      const folderA = result.foldersWithChildren.find((f: FolderInfo) => f.name === 'a');
+      expect(folderA).toBeDefined();
+      expect(folderA!.hasChildren).toBe(true);
+    });
+
+    it('should_return_empty_foldersWithChildren_when_directory_is_empty', () => {
+      // Arrange - C:\workspace is empty
+
+      // Act
+      const result = folderManager.listFolders('C:\\workspace') as ListFoldersResultWithChildren;
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.foldersWithChildren).toBeDefined();
+      expect(result.foldersWithChildren).toHaveLength(0);
     });
   });
 });

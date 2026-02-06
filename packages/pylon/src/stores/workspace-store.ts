@@ -422,6 +422,120 @@ export class WorkspaceStore {
   }
 
   /**
+   * 워크스페이스 업데이트
+   *
+   * @description
+   * 워크스페이스의 이름 또는 작업 디렉토리를 업데이트합니다.
+   * 업데이트된 항목이 있으면 lastUsed 타임스탬프도 갱신됩니다.
+   *
+   * @param workspaceId - 변경할 워크스페이스 ID
+   * @param updates - 업데이트할 필드들 { name?, workingDir? }
+   * @returns 업데이트 성공 여부 (변경 사항이 없거나 워크스페이스를 찾을 수 없으면 false)
+   */
+  updateWorkspace(
+    workspaceId: string,
+    updates: { name?: string; workingDir?: string }
+  ): boolean {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace) return false;
+
+    // 업데이트할 항목이 있는지 확인
+    const trimmedName = updates.name?.trim();
+    const hasName = trimmedName !== undefined && trimmedName !== '';
+    const hasWorkingDir = updates.workingDir !== undefined;
+
+    // 업데이트할 항목이 없으면 false 반환
+    if (!hasName && !hasWorkingDir) {
+      return false;
+    }
+
+    // 이름이 빈 문자열(trim 후)이면 실패
+    if (updates.name !== undefined && !hasName) {
+      return false;
+    }
+
+    // 이름 업데이트
+    if (hasName) {
+      workspace.name = trimmedName!;
+    }
+
+    // 작업 디렉토리 업데이트 (경로 정규화)
+    if (hasWorkingDir) {
+      // 슬래시를 백슬래시로 정규화
+      workspace.workingDir = updates.workingDir!.replace(/\//g, '\\');
+    }
+
+    // lastUsed 타임스탬프 갱신
+    workspace.lastUsed = Date.now();
+
+    return true;
+  }
+
+  /**
+   * 워크스페이스 순서 변경
+   *
+   * @description
+   * 워크스페이스 목록의 순서를 변경합니다.
+   *
+   * @param workspaceIds - 새 순서의 워크스페이스 ID 배열
+   * @returns 성공 여부
+   */
+  reorderWorkspaces(workspaceIds: string[]): boolean {
+    // 모든 ID가 유효한지 확인
+    const validIds = workspaceIds.every((id) =>
+      this._workspaces.some((w) => w.workspaceId === id)
+    );
+    if (!validIds) return false;
+
+    // 새 순서대로 정렬
+    const reordered = workspaceIds
+      .map((id) => this._workspaces.find((w) => w.workspaceId === id))
+      .filter((w): w is Workspace => w !== undefined);
+
+    // 순서에 포함되지 않은 워크스페이스는 뒤에 유지
+    const remaining = this._workspaces.filter(
+      (w) => !workspaceIds.includes(w.workspaceId)
+    );
+
+    this._workspaces = [...reordered, ...remaining];
+    return true;
+  }
+
+  /**
+   * 대화 순서 변경
+   *
+   * @description
+   * 워크스페이스 내 대화 목록의 순서를 변경합니다.
+   *
+   * @param workspaceId - 워크스페이스 ID
+   * @param conversationIds - 새 순서의 대화 ID 배열
+   * @returns 성공 여부
+   */
+  reorderConversations(workspaceId: string, conversationIds: string[]): boolean {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace) return false;
+
+    // 모든 ID가 유효한지 확인
+    const validIds = conversationIds.every((id) =>
+      workspace.conversations.some((c) => c.conversationId === id)
+    );
+    if (!validIds) return false;
+
+    // 새 순서대로 정렬
+    const reordered = conversationIds
+      .map((id) => workspace.conversations.find((c) => c.conversationId === id))
+      .filter((c): c is Conversation => c !== undefined);
+
+    // 순서에 포함되지 않은 대화는 뒤에 유지
+    const remaining = workspace.conversations.filter(
+      (c) => !conversationIds.includes(c.conversationId)
+    );
+
+    workspace.conversations = [...reordered, ...remaining];
+    return true;
+  }
+
+  /**
    * 활성 워크스페이스 설정
    *
    * @description

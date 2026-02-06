@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View } from 'react-native';
-import { Appbar, Text, useTheme } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useState } from 'react';
+import { Menu, CloudOff, MonitorOff } from 'lucide-react';
+import { Button } from '../components/ui/button';
 import { useRelayStore } from '../stores/relayStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useDeviceConfigStore } from '../stores/deviceConfigStore';
 import { SettingsDialog } from '../components/settings/SettingsDialog';
+import { getDeviceIcon } from '../utils/device-icons';
 
 const APP_VERSION = '2.0.0';
 
@@ -16,7 +16,6 @@ const APP_VERSION = '2.0.0';
  * 우측: Pylon 아이콘들 + 설정 버튼
  */
 export function AppHeader() {
-  const theme = useTheme();
   const [showSettings, setShowSettings] = useState(false);
   const { isConnected } = useRelayStore();
   const { connectedPylons } = useWorkspaceStore();
@@ -27,89 +26,60 @@ export function AppHeader() {
     // Relay 연결 안됨
     if (!isConnected) {
       return (
-        <Icon
-          name="cloud-off-outline"
-          size={20}
-          color={theme.colors.error}
-          style={{ marginRight: 4 }}
-        />
+        <CloudOff className="h-5 w-5 text-destructive mr-1" />
       );
     }
 
     // Relay 연결됨, Pylon 없음
     if (connectedPylons.length === 0) {
       return (
-        <Icon
-          name="monitor-off"
-          size={20}
-          color={theme.colors.onSurfaceVariant}
-          style={{ marginRight: 4 }}
-        />
+        <MonitorOff className="h-5 w-5 text-muted-foreground mr-1" />
       );
     }
 
     // Pylon 연결됨
-    return connectedPylons.map((pylon) => (
-      <Icon
-        key={pylon.deviceId}
-        name={getIcon(pylon.deviceId)}
-        size={20}
-        color={theme.colors.onPrimaryContainer}
-        style={{ marginLeft: 4 }}
-      />
-    ));
+    return connectedPylons.map((pylon) => {
+      const IconComponent = getDeviceIcon(getIcon(pylon.deviceId));
+      return (
+        <IconComponent
+          key={pylon.deviceId}
+          className="h-5 w-5 text-primary ml-1"
+        />
+      );
+    });
   };
-
 
   return (
     <>
-      <Appbar.Header
-        elevated={false}
-        style={{
-          backgroundColor: theme.colors.primaryContainer,
-          height: 44,
-        }}
-        mode="small"
-      >
+      <header className="flex h-11 items-center justify-between bg-primary/20 px-4">
         {/* 좌측: 타이틀 + 버전 */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'baseline',
-            marginLeft: 16,
-          }}
-        >
-          <Text
-            variant="titleMedium"
-            style={{ fontWeight: '600', color: theme.colors.onPrimaryContainer }}
-          >
+        <div className="flex items-baseline">
+          <h1 className="text-lg font-semibold text-foreground">
             Estelle
-          </Text>
-          <Text
-            variant="labelSmall"
-            style={{ marginLeft: 6, opacity: 0.6, color: theme.colors.onPrimaryContainer }}
-          >
+          </h1>
+          <span className="ml-2 text-xs text-muted-foreground">
             v{APP_VERSION}
-          </Text>
-        </View>
+          </span>
+        </div>
 
-        <View style={{ flex: 1 }} />
+        {/* 우측: Pylon 상태 아이콘 + 설정 버튼 */}
+        <div className="flex items-center">
+          <div className="flex items-center mr-2">
+            {renderPylonStatus()}
+          </div>
 
-        {/* 우측: Pylon 상태 아이콘 */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
-          {renderPylonStatus()}
-        </View>
-
-        {/* 설정 버튼 */}
-        <Appbar.Action
-          icon="menu"
-          onPress={() => setShowSettings(true)}
-          size={22}
-        />
-      </Appbar.Header>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowSettings(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </div>
+      </header>
 
       <SettingsDialog
-        visible={showSettings}
+        open={showSettings}
         onClose={() => setShowSettings(false)}
       />
     </>

@@ -1,10 +1,18 @@
-import React, { useState, useCallback } from 'react';
-import { View, Image, Platform } from 'react-native';
-import { IconButton, Button, Text, useTheme, Portal, Dialog, List } from 'react-native-paper';
-import * as ImagePicker from 'expo-image-picker';
+import { useState, useCallback, useRef, useEffect, ChangeEvent } from 'react';
+import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon } from 'lucide-react';
+import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { useWorkspaceStore, useClaudeStore } from '../../stores';
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
+
+// 대화별 입력 텍스트 저장소
+const draftTexts = new Map<string, string>();
 
 interface InputBarProps {
   disabled?: boolean;
@@ -16,13 +24,41 @@ interface InputBarProps {
  * 입력 바
  */
 export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
-  const theme = useTheme();
   const [text, setText] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const generalFileInputRef = useRef<HTMLInputElement>(null);
+  const prevConversationIdRef = useRef<string | null>(null);
 
   const { selectedConversation } = useWorkspaceStore();
   const { status } = useClaudeStore();
   const { attachedImage, setAttachedImage, hasActiveUpload } = useImageUploadStore();
+
+  const conversationId = selectedConversation?.conversationId || null;
+
+  // 대화 변경 시 텍스트 저장/복원
+  useEffect(() => {
+    const prevId = prevConversationIdRef.current;
+
+    // 이전 대화의 텍스트 저장
+    if (prevId && prevId !== conversationId) {
+      if (text.trim()) {
+        draftTexts.set(prevId, text);
+      } else {
+        draftTexts.delete(prevId);
+      }
+    }
+
+    // 새 대화의 텍스트 복원
+    if (conversationId) {
+      const savedText = draftTexts.get(conversationId) || '';
+      setText(savedText);
+    } else {
+      setText('');
+    }
+
+    prevConversationIdRef.current = conversationId;
+  }, [conversationId]); // text는 의존성에서 제외 (무한 루프 방지)
 
   const isWorking = status === 'working';
   const canSend = (text.trim() || attachedImage) && !disabled && !isWorking;
@@ -38,179 +74,192 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     onSend?.(text.trim(), attachments);
     setText('');
     setAttachedImage(null);
-  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage]);
+    // 전송 후 draft 삭제
+    if (conversationId) {
+      draftTexts.delete(conversationId);
+    }
+  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, conversationId]);
 
   const handleStop = () => {
     onStop?.();
   };
 
-  const handleKeyPress = (e: any) => {
-    if (Platform.OS !== 'web') return;
-
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 데스크탑: Enter = 전송, Shift+Enter 또는 Ctrl+Enter = 줄바꾸기
-    if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey && !e.nativeEvent.ctrlKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
-  const pickImage = async (source: 'gallery' | 'camera') => {
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const uri = URL.createObjectURL(file);
+      setAttachedImage({
+        id: `img_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        uri,
+        fileName: file.name,
+        file,
+        mimeType: file.type || 'application/octet-stream',
+      });
+    }
     setShowAttachMenu(false);
-
-    try {
-      const result =
-        source === 'gallery'
-          ? await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 1,
-            })
-          : await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 1,
-            });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setAttachedImage({
-          id: `img_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          uri: asset.uri,
-          fileName: asset.fileName || 'image.jpg',
-        });
-      }
-    } catch (error) {
-      console.error('Image picker error:', error);
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (generalFileInputRef.current) {
+      generalFileInputRef.current.value = '';
     }
   };
 
   const removeAttachment = () => {
+    if (attachedImage?.uri) {
+      URL.revokeObjectURL(attachedImage.uri);
+    }
     setAttachedImage(null);
   };
 
   return (
-    <View style={{ backgroundColor: theme.colors.secondaryContainer }}>
+    <div className="bg-secondary/30">
       {/* 첨부 이미지 미리보기 */}
       {attachedImage && (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 8,
-            paddingTop: 8,
-            backgroundColor: theme.colors.surfaceVariant,
-          }}
-        >
-          <View style={{ position: 'relative' }}>
-            <Image
-              source={{ uri: attachedImage.uri }}
-              style={{ width: 64, height: 64, borderRadius: 8 }}
-              resizeMode="cover"
+        <div className="flex items-center px-2 pt-2 bg-muted/50">
+          <div className="relative">
+            <img
+              src={attachedImage.uri}
+              alt={attachedImage.fileName}
+              className="w-16 h-16 rounded-lg object-cover"
             />
-            <IconButton
-              icon="close-circle"
-              size={16}
-              onPress={removeAttachment}
-              style={{
-                position: 'absolute',
-                top: -8,
-                right: -8,
-                margin: 0,
-                backgroundColor: theme.colors.error,
-              }}
-              iconColor="#fff"
-            />
-          </View>
-          <Text variant="labelSmall" style={{ marginLeft: 8, flex: 1, opacity: 0.7 }} numberOfLines={1}>
+            <button
+              onClick={removeAttachment}
+              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <span className="ml-2 flex-1 text-xs text-muted-foreground truncate">
             {attachedImage.fileName}
-          </Text>
-        </View>
+          </span>
+        </div>
       )}
 
       {/* 입력 영역 */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 }}>
+      <div className="flex items-end px-2 py-1.5 gap-1">
         {/* 첨부 버튼 */}
-        <IconButton
-          icon="plus"
-          size={18}
-          onPress={() => setShowAttachMenu(true)}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowAttachMenu(true)}
           disabled={isWorking}
-          iconColor={theme.colors.onSecondaryContainer}
-          style={{ margin: 0, width: 32, height: 32 }}
-        />
+          className="h-8 w-8 shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
 
         {/* 텍스트 입력 */}
         <AutoResizeTextInput
           placeholder={disabled ? '대기 중...' : '메시지를 입력하세요...'}
           value={text}
-          onChangeText={setText}
-          onKeyPress={handleKeyPress}
-          editable={!(disabled || isWorking)}
-          minLines={1}
-          maxLines={6}
-          style={{
-            flex: 1,
-            backgroundColor: theme.colors.surface,
-            borderRadius: 8,
-            marginHorizontal: 6,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            fontSize: 14,
-            color: theme.colors.onSurface,
-          }}
-          placeholderTextColor={theme.colors.onSurfaceVariant}
+          onChange={setText}
+          onKeyDown={handleKeyDown}
+          disabled={disabled || isWorking}
+          minRows={1}
+          maxRows={6}
+          className="flex-1 bg-background rounded-lg px-3 py-2 text-sm resize-none"
         />
 
         {/* 버튼 영역 */}
         {isWorking ? (
           <Button
-            mode="contained"
-            onPress={handleStop}
-            buttonColor={theme.colors.error}
-            compact
+            variant="destructive"
+            size="sm"
+            onClick={handleStop}
+            className="h-8"
           >
+            <Square className="h-3 w-3 mr-1" />
             Stop
           </Button>
         ) : hasActiveUpload ? (
-          <IconButton
-            icon="loading"
-            size={18}
+          <Button
+            variant="ghost"
+            size="icon"
             disabled
-            iconColor={theme.colors.onSecondaryContainer}
-            style={{ margin: 0, width: 32, height: 32 }}
-          />
+            className="h-8 w-8"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </Button>
         ) : (
-          <IconButton
-            icon="send"
-            mode="contained"
-            size={18}
-            onPress={handleSend}
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={handleSend}
             disabled={!canSend}
-            containerColor={theme.colors.secondary}
-            iconColor={theme.colors.onSecondary}
-            style={{ margin: 0, width: 32, height: 32 }}
-          />
+            className="h-8 w-8"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
         )}
-      </View>
+      </div>
 
-      {/* 모바일 첨부 메뉴 */}
-      <Portal>
-        <Dialog visible={showAttachMenu} onDismiss={() => setShowAttachMenu(false)}>
-          <Dialog.Content style={{ paddingHorizontal: 0 }}>
-            <List.Item
-              title="갤러리에서 선택"
-              left={(props) => <List.Icon {...props} icon="image" />}
-              onPress={() => pickImage('gallery')}
-            />
-            <List.Item
-              title="카메라 촬영"
-              left={(props) => <List.Icon {...props} icon="camera" />}
-              onPress={() => pickImage('camera')}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowAttachMenu(false)}>취소</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </View>
+      {/* 첨부 메뉴 다이얼로그 */}
+      <Dialog open={showAttachMenu} onOpenChange={setShowAttachMenu}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>파일 첨부</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+            >
+              <ImageIcon className="h-5 w-5" />
+              <span>갤러리에서 선택</span>
+            </button>
+            <button
+              onClick={() => {
+                // Web에서 카메라 접근은 제한적
+                fileInputRef.current?.click();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+            >
+              <Camera className="h-5 w-5" />
+              <span>카메라 촬영</span>
+            </button>
+            <button
+              onClick={() => generalFileInputRef.current?.click()}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+            >
+              <FileIcon className="h-5 w-5" />
+              <span>파일 선택</span>
+            </button>
+          </div>
+          <div className="flex justify-end mt-4">
+            <Button variant="ghost" onClick={() => setShowAttachMenu(false)}>
+              취소
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 숨겨진 파일 입력 (이미지) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
+      {/* 숨겨진 파일 입력 (모든 파일) */}
+      <input
+        ref={generalFileInputRef}
+        type="file"
+        accept="*/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+    </div>
   );
 }

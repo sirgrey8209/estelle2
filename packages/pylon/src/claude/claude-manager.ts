@@ -77,13 +77,15 @@ export type ClaudeManagerEventType =
   | 'text'
   | 'textComplete'
   | 'toolInfo'
+  | 'toolProgress'
   | 'toolComplete'
   | 'askQuestion'
   | 'permission_request'
   | 'result'
   | 'error'
   | 'state'
-  | 'claudeAborted';
+  | 'claudeAborted'
+  | 'usage_update';
 
 /**
  * Claude 상태 정보
@@ -315,6 +317,9 @@ export interface ClaudeMessage {
   /** 세션 ID (init 메시지) */
   session_id?: string;
 
+  /** 부모 도구 사용 ID (서브에이전트 내부 호출 시) */
+  parent_tool_use_id?: string | null;
+
   /** 모델 이름 (init 메시지) */
   model?: string;
 
@@ -383,6 +388,14 @@ export interface ClaudeMessage {
 /**
  * ClaudeManager 옵션
  */
+/**
+ * SDK raw 메시지 로거
+ */
+export type RawMessageLogger = (
+  sessionId: string,
+  message: ClaudeMessage
+) => void;
+
 export interface ClaudeManagerOptions {
   /** 이벤트 핸들러 */
   onEvent: ClaudeEventHandler;
@@ -395,6 +408,9 @@ export interface ClaudeManagerOptions {
 
   /** Claude 어댑터 (테스트용, 미지정 시 기본 SDK 사용) */
   adapter?: ClaudeAdapter;
+
+  /** SDK raw 메시지 로거 (선택) */
+  onRawMessage?: RawMessageLogger;
 }
 
 // ============================================================================
@@ -447,6 +463,9 @@ export class ClaudeManager {
   /** Claude 어댑터 */
   private readonly adapter?: ClaudeAdapter;
 
+  /** SDK raw 메시지 로거 */
+  private readonly onRawMessage?: RawMessageLogger;
+
   /** 활성 세션 (sessionId -> ClaudeSession) */
   private readonly sessions: Map<string, ClaudeSession> = new Map();
 
@@ -474,6 +493,7 @@ export class ClaudeManager {
     this.getPermissionMode = options.getPermissionMode;
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
+    this.onRawMessage = options.onRawMessage;
   }
 
   // ============================================================================
@@ -864,6 +884,11 @@ export class ClaudeManager {
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
+    // SDK raw 메시지 로깅
+    if (this.onRawMessage) {
+      this.onRawMessage(sessionId, msg);
+    }
+
     switch (msg.type) {
       case 'system':
         this.handleSystemMessage(sessionId, session, msg);
@@ -932,8 +957,17 @@ export class ClaudeManager {
       } else if (block.type === 'tool_use' && block.name && block.id) {
         session.pendingTools.set(block.id, block.name);
 
+        // 도구 정보 이벤트 (모든 도구)
+        this.emitEvent(sessionId, {
+          type: 'toolInfo',
+          toolUseId: block.id,
+          toolName: block.name,
+          input: block.input,
+          parentToolUseId: msg.parent_tool_use_id || null,
+        });
+
         if (block.name === 'AskUserQuestion') {
-          // 질문 이벤트
+          // 질문 이벤트 (추가로 발생)
           const askEvent: PendingEvent = {
             type: 'askQuestion',
             questions: (block.input as Record<string, unknown>)?.questions,
@@ -941,13 +975,6 @@ export class ClaudeManager {
           };
           this.pendingEvents.set(sessionId, askEvent);
           this.emitEvent(sessionId, askEvent);
-        } else {
-          // 도구 정보 이벤트
-          this.emitEvent(sessionId, {
-            type: 'toolInfo',
-            toolName: block.name,
-            input: block.input,
-          });
         }
       }
     }
@@ -984,6 +1011,7 @@ export class ClaudeManager {
 
         this.emitEvent(sessionId, {
           type: 'toolComplete',
+          toolUseId,
           toolName,
           success: !isError,
           result: resultContent.substring(0, 1000),
@@ -1011,6 +1039,11 @@ export class ClaudeManager {
         event.message.usage.cache_read_input_tokens || 0;
       session.usage.cacheCreationInputTokens +=
         event.message.usage.cache_creation_input_tokens || 0;
+      // 실시간 usage 업데이트 전송
+      this.emitEvent(sessionId, {
+        type: 'usage_update',
+        usage: { ...session.usage },
+      });
     }
 
     // 콘텐츠 블록 시작
@@ -1060,6 +1093,11 @@ export class ClaudeManager {
     // 메시지 델타 - 출력 토큰
     if (event.type === 'message_delta' && event.usage) {
       session.usage.outputTokens += event.usage.output_tokens || 0;
+      // 실시간 usage 업데이트 전송
+      this.emitEvent(sessionId, {
+        type: 'usage_update',
+        usage: { ...session.usage },
+      });
     }
   }
 
@@ -1073,10 +1111,12 @@ export class ClaudeManager {
   ): void {
     if (msg.tool_name) {
       session.state = { type: 'tool', toolName: msg.tool_name };
+
+      // toolProgress 이벤트 전송
       this.emitEvent(sessionId, {
-        type: 'stateUpdate',
-        state: session.state,
-        partialText: '',
+        type: 'toolProgress',
+        toolName: msg.tool_name,
+        elapsedSeconds: msg.elapsed_time_seconds,
       });
     }
   }

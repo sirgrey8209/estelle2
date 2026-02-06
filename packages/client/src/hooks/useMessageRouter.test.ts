@@ -11,7 +11,7 @@ import type { RelayMessage } from '../services/relayService';
 
 // Store mock - 모킹을 먼저 선언
 const mockWorkspaceStore = {
-  connectedPylons: [],
+  connectedPylons: [] as Array<{ deviceId: number; deviceName: string }>,
   setWorkspaces: vi.fn(),
   updateConversationStatus: vi.fn(),
   addConnectedPylon: vi.fn(),
@@ -89,8 +89,8 @@ describe('routeMessage', () => {
         deviceName: 'Test Device',
       });
 
-      // setWorkspaces 호출 확인
-      expect(mockWorkspaceStore.setWorkspaces).toHaveBeenCalledWith(1, message.payload.workspaces);
+      // setWorkspaces 호출 확인 (3번째 인자는 activeInfo, 없으면 undefined)
+      expect(mockWorkspaceStore.setWorkspaces).toHaveBeenCalledWith(1, message.payload.workspaces, undefined);
       expect(mockRelayStore.setDesksLoaded).toHaveBeenCalledWith(true);
     });
 

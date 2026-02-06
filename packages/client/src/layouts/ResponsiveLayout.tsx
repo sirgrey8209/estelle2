@@ -1,5 +1,3 @@
-import React from 'react';
-import { View } from 'react-native';
 import { useResponsive } from '../hooks/useResponsive';
 import { DesktopLayout } from './DesktopLayout';
 import { MobileLayout } from './MobileLayout';

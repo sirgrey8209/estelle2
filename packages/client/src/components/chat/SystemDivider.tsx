@@ -1,7 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
 import { getAbortDisplayText } from '../../stores';
+import { cn } from '../../lib/utils';
 
 interface SystemDividerProps {
   message: string;
@@ -12,18 +10,31 @@ interface SystemDividerProps {
  * 시스템 구분선
  */
 export function SystemDivider({ message, color = 'default' }: SystemDividerProps) {
-  const theme = useTheme();
-  const lineColor = color === 'error' ? theme.colors.error : theme.colors.outlineVariant;
-  const textColor = color === 'error' ? theme.colors.error : theme.colors.outline;
+  const isError = color === 'error';
 
   return (
-    <View style={{ marginVertical: 16, flexDirection: 'row', alignItems: 'center' }}>
-      <View style={{ flex: 1, height: 1, backgroundColor: lineColor, opacity: 0.5 }} />
-      <Text variant="labelSmall" style={{ color: textColor, marginHorizontal: 12 }}>
+    <div className="my-4 flex items-center">
+      <div
+        className={cn(
+          'flex-1 h-px opacity-50',
+          isError ? 'bg-destructive' : 'bg-border'
+        )}
+      />
+      <span
+        className={cn(
+          'mx-3 text-xs',
+          isError ? 'text-destructive' : 'text-muted-foreground'
+        )}
+      >
         {message}
-      </Text>
-      <View style={{ flex: 1, height: 1, backgroundColor: lineColor, opacity: 0.5 }} />
-    </View>
+      </span>
+      <div
+        className={cn(
+          'flex-1 h-px opacity-50',
+          isError ? 'bg-destructive' : 'bg-border'
+        )}
+      />
+    </div>
   );
 }
 

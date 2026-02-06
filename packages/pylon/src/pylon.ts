@@ -118,10 +118,20 @@ export interface WorkerManagerAdapter {
 }
 
 /**
+ * 드라이브 정보
+ */
+interface DriveInfo {
+  path: string;
+  label: string;
+  hasChildren: boolean;
+}
+
+/**
  * FolderManager 인터페이스 (의존성 주입용)
  */
 export interface FolderManagerAdapter {
   listFolders(path: string): { success: boolean; folders: unknown[] };
+  listDrives(): { success: boolean; drives: DriveInfo[]; error?: string };
   createFolder(parentPath: string, name: string): { success: boolean };
   renameFolder(folderPath: string, newName: string): { success: boolean };
 }
@@ -453,6 +463,16 @@ export class Pylon {
       return;
     }
 
+    if (type === 'workspace_update') {
+      this.handleWorkspaceUpdate(payload, from);
+      return;
+    }
+
+    if (type === 'workspace_reorder') {
+      this.handleWorkspaceReorder(payload);
+      return;
+    }
+
     if (type === 'workspace_rename') {
       this.handleWorkspaceRename(payload);
       return;
@@ -481,6 +501,11 @@ export class Pylon {
 
     if (type === 'conversation_select') {
       this.handleConversationSelect(payload, from);
+      return;
+    }
+
+    if (type === 'conversation_reorder') {
+      this.handleConversationReorder(payload);
       return;
     }
 
@@ -622,6 +647,10 @@ export class Pylon {
           sessionId,
           (event as Record<string, unknown>).session_id as string
         );
+        // claudeSessionId 저장
+        this.saveWorkspaceStore().catch((err) => {
+          this.log(`[Persistence] Failed to save claudeSessionId: ${err}`);
+        });
       }
     }
 
@@ -858,6 +887,67 @@ export class Pylon {
   }
 
   /**
+   * workspace_update 처리
+   */
+  private handleWorkspaceUpdate(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    const { workspaceId, name, workingDir } = payload || {};
+    if (!workspaceId) return;
+
+    const success = this.deps.workspaceStore.updateWorkspace(workspaceId as string, {
+      name: name as string | undefined,
+      workingDir: workingDir as string | undefined,
+    });
+
+    this.send({
+      type: 'workspace_update_result',
+      to: from?.deviceId,
+      payload: { deviceId: this.config.deviceId, success, workspaceId },
+    });
+
+    if (success) {
+      this.broadcastWorkspaceList();
+    }
+  }
+
+  /**
+   * workspace_reorder 처리
+   */
+  private handleWorkspaceReorder(payload: Record<string, unknown> | undefined): void {
+    const { workspaceIds } = payload || {};
+    if (!workspaceIds || !Array.isArray(workspaceIds)) return;
+
+    const success = this.deps.workspaceStore.reorderWorkspaces(workspaceIds as string[]);
+    if (success) {
+      this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after workspace reorder: ${err}`);
+      });
+    }
+  }
+
+  /**
+   * conversation_reorder 처리
+   */
+  private handleConversationReorder(payload: Record<string, unknown> | undefined): void {
+    const { workspaceId, conversationIds } = payload || {};
+    if (!workspaceId || !conversationIds || !Array.isArray(conversationIds)) return;
+
+    const success = this.deps.workspaceStore.reorderConversations(
+      workspaceId as string,
+      conversationIds as string[]
+    );
+    if (success) {
+      this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after conversation reorder: ${err}`);
+      });
+    }
+  }
+
+  /**
    * workspace_rename 처리
    */
   private handleWorkspaceRename(payload: Record<string, unknown> | undefined): void {
@@ -967,8 +1057,20 @@ export class Pylon {
     const { workspaceId, conversationId } = payload || {};
     if (!conversationId) return;
 
+    const wsId = workspaceId as string | undefined;
     const cid = conversationId as string;
-    this.deps.workspaceStore.setActiveConversation(cid);
+
+    // 워크스페이스와 대화 모두 active 상태로 설정
+    if (wsId) {
+      this.deps.workspaceStore.setActiveWorkspace(wsId, cid);
+    } else {
+      this.deps.workspaceStore.setActiveConversation(cid);
+    }
+
+    // 저장
+    this.saveWorkspaceStore().catch((err) => {
+      this.deps.logger.error(`[Pylon] Failed to save after conversation select: ${err}`);
+    });
 
     // 메시지 세션 로드 (lazy loading)
     this.loadMessageSession(cid);
@@ -1166,10 +1268,17 @@ export class Pylon {
     if (!conversationId || !mode) return;
 
     // setConversationPermissionMode는 workspaceId 없이 conversationId로 찾음
-    this.deps.workspaceStore.setConversationPermissionMode(
+    const success = this.deps.workspaceStore.setConversationPermissionMode(
       conversationId as string,
       mode as PermissionModeValue
     );
+
+    // 변경 성공 시 저장
+    if (success) {
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Persistence] Failed to save permission mode: ${err}`);
+      });
+    }
   }
 
   // ==========================================================================
@@ -1227,12 +1336,44 @@ export class Pylon {
 
   /**
    * folder_list 처리
+   *
+   * path가 비어있거나 '__DRIVES__'이면 드라이브 목록 반환
    */
   private handleFolderList(
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { path: targetPath } = payload || {};
+    const { path: targetPath, deviceId: targetDeviceId } = payload || {};
+
+    // 대상 Pylon이 아니면 무시
+    if (targetDeviceId !== undefined && targetDeviceId !== this.config.deviceId) {
+      return;
+    }
+
+    // 드라이브 목록 요청 (빈 문자열, undefined, null, '__DRIVES__')
+    const isEmptyPath = targetPath === '' || targetPath === undefined || targetPath === null;
+    if (isEmptyPath || targetPath === '__DRIVES__') {
+      const driveResult = this.deps.folderManager.listDrives();
+      this.send({
+        type: 'folder_list_result',
+        to: from?.deviceId,
+        payload: {
+          deviceId: this.config.deviceId,
+          path: '',
+          folders: driveResult.drives.map((d) => d.label),
+          foldersWithChildren: driveResult.drives.map((d) => ({
+            name: d.label,
+            path: d.path,
+            hasChildren: d.hasChildren,
+            isDrive: true,
+          })),
+          success: driveResult.success,
+          error: driveResult.error,
+        },
+      });
+      return;
+    }
+
     const result = this.deps.folderManager.listFolders(targetPath as string);
     this.send({
       type: 'folder_list_result',
@@ -1728,7 +1869,9 @@ Message: ${message}
         this.deps.messageStore.addToolStart(
           sessionId,
           e.toolName as string,
-          e.input as Record<string, unknown>
+          e.input as Record<string, unknown>,
+          e.parentToolUseId as string | null | undefined,
+          e.toolUseId as string | undefined
         );
         shouldSave = true;
         break;

@@ -70,6 +70,16 @@ export interface FolderFileSystem {
 }
 
 /**
+ * hasChildren이 포함된 폴더 정보
+ */
+export interface FolderInfo {
+  /** 폴더 이름 */
+  name: string;
+  /** 하위 폴더 유무 */
+  hasChildren: boolean;
+}
+
+/**
  * 폴더 목록 조회 결과
  */
 export interface ListFoldersResult {
@@ -79,9 +89,36 @@ export interface ListFoldersResult {
   /** 정규화된 경로 */
   path: string;
 
-  /** 폴더 이름 목록 */
+  /** 폴더 이름 목록 (하위 호환용) */
   folders: string[];
 
+  /** 폴더 정보 목록 (hasChildren 포함) */
+  foldersWithChildren: FolderInfo[];
+
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+}
+
+/**
+ * 드라이브 정보
+ */
+export interface DriveInfo {
+  /** 드라이브 경로 (예: 'C:\\') */
+  path: string;
+  /** 드라이브 레이블 (예: 'C:') */
+  label: string;
+  /** 하위 폴더 유무 */
+  hasChildren: boolean;
+}
+
+/**
+ * 드라이브 목록 조회 결과
+ */
+export interface ListDrivesResult {
+  /** 성공 여부 */
+  success: boolean;
+  /** 드라이브 목록 */
+  drives: DriveInfo[];
   /** 에러 메시지 (실패 시) */
   error?: string;
 }
@@ -176,8 +213,11 @@ export class FolderManager {
    */
   listFolders(targetPath: string = DEFAULT_BASE_PATH): ListFoldersResult {
     try {
+      // 빈 경로면 기본 경로 사용 (path.normalize('')는 '.'을 반환하므로)
+      const effectivePath = targetPath || DEFAULT_BASE_PATH;
+
       // 경로 정규화 (Windows 스타일)
-      const normalizedPath = path.normalize(targetPath);
+      const normalizedPath = path.normalize(effectivePath);
 
       // 경로 존재 확인
       if (!this.fs.existsSync(normalizedPath)) {
@@ -185,6 +225,7 @@ export class FolderManager {
           success: false,
           path: normalizedPath,
           folders: [],
+          foldersWithChildren: [],
           error: '경로가 존재하지 않습니다.',
         };
       }
@@ -196,23 +237,32 @@ export class FolderManager {
           success: false,
           path: normalizedPath,
           folders: [],
+          foldersWithChildren: [],
           error: '디렉토리가 아닙니다.',
         };
       }
 
       // 폴더 목록 조회
       const entries = this.fs.readdirSync(normalizedPath, { withFileTypes: true });
-      const folders = entries
+      const folderNames = entries
         .filter((entry) => entry.isDirectory())
         .filter((entry) => !entry.name.startsWith('.'))  // 숨김 폴더 제외
         .filter((entry) => !entry.name.startsWith('$'))  // 시스템 폴더 제외
         .map((entry) => entry.name)
         .sort((a, b) => a.localeCompare(b, 'ko'));       // 한글 정렬
 
+      // 각 폴더의 하위 폴더 유무 확인
+      const foldersWithChildren: FolderInfo[] = folderNames.map((name) => {
+        const folderPath = path.join(normalizedPath, name);
+        const hasChildren = this.checkHasChildren(folderPath);
+        return { name, hasChildren };
+      });
+
       return {
         success: true,
         path: normalizedPath,
-        folders,
+        folders: folderNames,
+        foldersWithChildren,
       };
     } catch (err) {
       const error = err as Error;
@@ -221,8 +271,111 @@ export class FolderManager {
         success: false,
         path: targetPath,
         folders: [],
+        foldersWithChildren: [],
         error: error.message,
       };
+    }
+  }
+
+  /**
+   * 폴더에 하위 디렉토리가 있는지 확인
+   *
+   * @description
+   * 숨김 폴더(.으로 시작)와 시스템 폴더($로 시작)는 제외합니다.
+   *
+   * @param folderPath - 확인할 폴더 경로
+   * @returns 하위 폴더 유무
+   */
+  private checkHasChildren(folderPath: string): boolean {
+    try {
+      const entries = this.fs.readdirSync(folderPath, { withFileTypes: true });
+      return entries.some(
+        (entry) =>
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          !entry.name.startsWith('$')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 드라이브 목록 조회
+   *
+   * @description
+   * 시스템의 드라이브 목록을 반환합니다.
+   * 각 드라이브의 하위 폴더 유무도 함께 반환합니다.
+   *
+   * @returns 드라이브 목록 조회 결과
+   */
+  listDrives(): ListDrivesResult {
+    try {
+      const drives: DriveInfo[] = [];
+
+      // 일반적인 드라이브 문자만 확인
+      const driveLetters = ['C', 'D'];
+
+      for (const driveLetter of driveLetters) {
+        const drivePath = `${driveLetter}:\\`;
+
+        try {
+          if (this.fs.existsSync(drivePath)) {
+            const stat = this.fs.statSync(drivePath);
+            if (stat.isDirectory()) {
+              drives.push({
+                path: drivePath,
+                label: `${driveLetter}:`,
+                hasChildren: true,  // 드라이브는 항상 하위 폴더 있다고 가정
+              });
+            }
+          }
+        } catch {
+          // 접근 불가한 드라이브 무시
+        }
+      }
+
+      return {
+        success: true,
+        drives,
+      };
+    } catch (err) {
+      const error = err as Error;
+      console.error('[FolderManager] listDrives error:', error.message);
+      return {
+        success: false,
+        drives: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * 드라이브에 하위 디렉토리가 있는지 확인
+   *
+   * @description
+   * 드라이브 경로의 경우 특수 처리가 필요합니다.
+   * 경로 끝에 추가 슬래시를 붙여서 정규화 후에도 슬래시가 유지되도록 합니다.
+   *
+   * @param drivePath - 확인할 드라이브 경로 (예: 'C:\\')
+   * @returns 하위 폴더 유무
+   */
+  private checkHasChildrenForDrive(drivePath: string): boolean {
+    try {
+      // 드라이브 경로에 추가 슬래시 붙여서 정규화 후에도 슬래시 유지
+      const pathWithExtraSlash = drivePath.endsWith('\\')
+        ? drivePath + '\\'
+        : drivePath + '\\\\';
+      const entries = this.fs.readdirSync(pathWithExtraSlash, { withFileTypes: true });
+      return entries.some(
+        (entry) =>
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          !entry.name.startsWith('$')
+      );
+    } catch {
+      // 추가 슬래시가 실패하면 일반 경로로 재시도
+      return this.checkHasChildren(drivePath);
     }
   }
 

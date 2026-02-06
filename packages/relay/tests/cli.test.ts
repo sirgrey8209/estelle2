@@ -14,9 +14,11 @@ describe('CLI 진입점', () => {
   describe('runCli', () => {
     let serverResult: CliResult | undefined;
     let originalPort: string | undefined;
+    let originalDefaultPort: string | undefined;
 
     beforeEach(() => {
       originalPort = process.env['PORT'];
+      originalDefaultPort = process.env['DEFAULT_PORT'];
       process.env['PORT'] = TEST_PORT;
     });
 
@@ -29,6 +31,11 @@ describe('CLI 진입점', () => {
         process.env['PORT'] = originalPort;
       } else {
         delete process.env['PORT'];
+      }
+      if (originalDefaultPort !== undefined) {
+        process.env['DEFAULT_PORT'] = originalDefaultPort;
+      } else {
+        delete process.env['DEFAULT_PORT'];
       }
     });
 
@@ -75,18 +82,20 @@ describe('CLI 진입점', () => {
 
     it('should_use_default_port_when_PORT_is_empty', async () => {
       process.env['PORT'] = '';
+      process.env['DEFAULT_PORT'] = '19003'; // 테스트용 기본 포트
 
       serverResult = await runCli();
 
-      expect(serverResult.port).toBe(8080); // DEFAULT_PORT
+      expect(serverResult.port).toBe(19003);
     });
 
     it('should_use_default_port_when_PORT_is_non_numeric', async () => {
       process.env['PORT'] = 'invalid';
+      process.env['DEFAULT_PORT'] = '19004'; // 테스트용 기본 포트
 
       serverResult = await runCli();
 
-      expect(serverResult.port).toBe(8080);
+      expect(serverResult.port).toBe(19004);
     });
 
     // =========================================================================

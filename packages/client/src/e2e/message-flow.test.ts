@@ -205,7 +205,8 @@ describe('메시지 플로우 E2E 테스트', () => {
 
       expect(mockWorkspaceStore.setWorkspaces).toHaveBeenCalledWith(
         1,
-        message.payload.workspaces
+        message.payload.workspaces,
+        undefined
       );
     });
 

@@ -4,11 +4,16 @@
  */
 
 /**
+ * 개발 모드 감지 (Vite 환경)
+ */
+const isDev = import.meta.env?.DEV ?? false;
+
+/**
  * Relay 서버 설정
  */
 export const RelayConfig = {
   /** Relay 서버 URL */
-  url: process.env.EXPO_PUBLIC_RELAY_URL ?? 'wss://estelle-relay-v2.fly.dev',
+  url: import.meta.env?.VITE_RELAY_URL ?? 'wss://estelle-relay-v2.fly.dev',
 
   /** 로컬 개발 URL */
   localUrl: 'ws://localhost:3000',
@@ -42,10 +47,10 @@ export const ImageCacheConfig = {
  */
 export const AppConfig = {
   /** 디버그 모드 */
-  debug: __DEV__,
+  debug: isDev,
 
   /** 앱 타이틀 (웹) */
-  title: __DEV__ ? 'Estelle (dev)' : 'Estelle',
+  title: isDev ? 'Estelle (dev)' : 'Estelle',
 
   /** 최대 메시지 수 (per desk) */
   maxMessages: 1000,

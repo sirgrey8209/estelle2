@@ -120,10 +120,24 @@ function base64ToUint8Array(base64: string): Uint8Array {
 async function calculateChecksum(bytes: Uint8Array): Promise<string> {
   // Web Crypto API 사용
   if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes.buffer as ArrayBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-    return `sha256:${hashHex}`;
+    try {
+      // 새로운 ArrayBuffer를 생성하여 데이터 복사
+      // 이렇게 하면 SubtleCrypto에서 올바르게 인식됨
+      const buffer = new ArrayBuffer(bytes.length);
+      const view = new Uint8Array(buffer);
+      view.set(bytes);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      return `sha256:${hashHex}`;
+    } catch {
+      // 폴백: 간단한 해시
+      let hash = 0;
+      for (let i = 0; i < bytes.length; i++) {
+        hash = ((hash << 5) - hash + bytes[i]) | 0;
+      }
+      return `simple:${hash.toString(16)}`;
+    }
   }
   // 폴백: 간단한 해시
   let hash = 0;

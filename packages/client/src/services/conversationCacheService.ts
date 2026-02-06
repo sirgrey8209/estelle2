@@ -1,61 +1,19 @@
 /**
- * 대화 캐시 서비스 (v1 Flutter 대응)
+ * 대화 캐시 서비스
  *
- * AsyncStorage를 사용하여 대화 내용을 캐싱합니다.
+ * 플랫폼 독립적 스토리지를 사용하여 대화 내용을 캐싱합니다.
  * - 대화별 메시지 캐시
  * - 마지막 읽은 위치 저장
  * - 캐시 만료 관리
  */
 
-// AsyncStorage 타입만 import (런타임에는 조건부 import)
 import type { ClaudeMessage } from '../stores/claudeStore';
-
-// AsyncStorage 인터페이스 (react-native-async-storage 미설치 시 대응)
-interface AsyncStorageStatic {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-  removeItem(key: string): Promise<void>;
-  getAllKeys(): Promise<readonly string[]>;
-  multiRemove(keys: readonly string[]): Promise<void>;
-}
-
-// 동적 import (패키지 미설치 시 메모리 폴백)
-let AsyncStorage: AsyncStorageStatic;
-
-// 메모리 폴백 스토리지
-const memoryStorage: Record<string, string> = {};
-const fallbackStorage: AsyncStorageStatic = {
-  async getItem(key: string) {
-    return memoryStorage[key] ?? null;
-  },
-  async setItem(key: string, value: string) {
-    memoryStorage[key] = value;
-  },
-  async removeItem(key: string) {
-    delete memoryStorage[key];
-  },
-  async getAllKeys() {
-    return Object.keys(memoryStorage);
-  },
-  async multiRemove(keys: readonly string[]) {
-    keys.forEach((key) => delete memoryStorage[key]);
-  },
-};
-
-// AsyncStorage 초기화
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  console.warn('[ConversationCache] AsyncStorage not available, using memory fallback');
-  AsyncStorage = fallbackStorage;
-}
+import { storage } from '../platform/storage';
 
 /**
  * 캐시 키 접두사
  */
 const CACHE_PREFIX = '@estelle:conversation:';
-const METADATA_PREFIX = '@estelle:conv_meta:';
 
 /**
  * 캐시 메타데이터
@@ -112,13 +70,6 @@ class ConversationCacheService {
   }
 
   /**
-   * 메타데이터 키 생성
-   */
-  private getMetadataKey(conversationId: string): string {
-    return `${METADATA_PREFIX}${conversationId}`;
-  }
-
-  /**
    * 메시지 저장
    */
   async saveMessages(conversationId: string, messages: ClaudeMessage[]): Promise<void> {
@@ -137,11 +88,8 @@ class ConversationCacheService {
       // 메모리 캐시 업데이트
       this.memoryCache.set(conversationId, cacheData);
 
-      // AsyncStorage 저장
-      await AsyncStorage.setItem(
-        this.getCacheKey(conversationId),
-        JSON.stringify(cacheData)
-      );
+      // 스토리지 저장
+      await storage.setItem(this.getCacheKey(conversationId), JSON.stringify(cacheData));
     } catch (error) {
       console.error('[ConversationCache] Failed to save messages:', error);
     }
@@ -158,8 +106,8 @@ class ConversationCacheService {
         return memoryData.messages;
       }
 
-      // AsyncStorage에서 로드
-      const raw = await AsyncStorage.getItem(this.getCacheKey(conversationId));
+      // 스토리지에서 로드
+      const raw = await storage.getItem(this.getCacheKey(conversationId));
       if (!raw) {
         return [];
       }
@@ -199,10 +147,7 @@ class ConversationCacheService {
       const cacheData = this.memoryCache.get(conversationId);
       if (cacheData) {
         cacheData.metadata.lastReadMessageId = messageId;
-        await AsyncStorage.setItem(
-          this.getCacheKey(conversationId),
-          JSON.stringify(cacheData)
-        );
+        await storage.setItem(this.getCacheKey(conversationId), JSON.stringify(cacheData));
       }
     } catch (error) {
       console.error('[ConversationCache] Failed to set last read:', error);
@@ -223,7 +168,7 @@ class ConversationCacheService {
   async clearCache(conversationId: string): Promise<void> {
     try {
       this.memoryCache.delete(conversationId);
-      await AsyncStorage.removeItem(this.getCacheKey(conversationId));
+      await storage.removeItem(this.getCacheKey(conversationId));
     } catch (error) {
       console.error('[ConversationCache] Failed to clear cache:', error);
     }
@@ -236,9 +181,9 @@ class ConversationCacheService {
     try {
       this.memoryCache.clear();
 
-      const allKeys = await AsyncStorage.getAllKeys();
-      const cacheKeys = allKeys.filter((key: string) => key.startsWith(CACHE_PREFIX));
-      await AsyncStorage.multiRemove(cacheKeys);
+      const allKeys = await storage.getAllKeys();
+      const cacheKeys = allKeys.filter((key) => key.startsWith(CACHE_PREFIX));
+      await storage.multiRemove(cacheKeys);
     } catch (error) {
       console.error('[ConversationCache] Failed to clear all caches:', error);
     }
@@ -249,18 +194,17 @@ class ConversationCacheService {
    */
   async cleanupExpiredCaches(): Promise<number> {
     try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const cacheKeys = allKeys.filter((key: string) => key.startsWith(CACHE_PREFIX));
+      const allKeys = await storage.getAllKeys();
+      const cacheKeys = allKeys.filter((key) => key.startsWith(CACHE_PREFIX));
 
       let cleanedCount = 0;
 
-      for (let i = 0; i < cacheKeys.length; i++) {
-        const key = cacheKeys[i];
-        const raw = await AsyncStorage.getItem(key);
+      for (const key of cacheKeys) {
+        const raw = await storage.getItem(key);
         if (raw) {
           const cacheData: CacheData = JSON.parse(raw);
           if (this.isExpired(cacheData.metadata.lastUpdated)) {
-            await AsyncStorage.removeItem(key);
+            await storage.removeItem(key);
             cleanedCount++;
           }
         }
@@ -278,14 +222,13 @@ class ConversationCacheService {
    */
   async getStats(): Promise<{ conversationCount: number; totalMessages: number }> {
     try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const cacheKeys = allKeys.filter((key: string) => key.startsWith(CACHE_PREFIX));
+      const allKeys = await storage.getAllKeys();
+      const cacheKeys = allKeys.filter((key) => key.startsWith(CACHE_PREFIX));
 
       let totalMessages = 0;
 
-      for (let i = 0; i < cacheKeys.length; i++) {
-        const key = cacheKeys[i];
-        const raw = await AsyncStorage.getItem(key);
+      for (const key of cacheKeys) {
+        const raw = await storage.getItem(key);
         if (raw) {
           const cacheData: CacheData = JSON.parse(raw);
           totalMessages += cacheData.metadata.messageCount;

@@ -1,7 +1,3 @@
-import React from 'react';
-import { View, ScrollView } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
-
 interface TextViewerProps {
   /** 텍스트 내용 */
   content: string;
@@ -13,19 +9,13 @@ interface TextViewerProps {
  * 텍스트 파일 뷰어
  */
 export function TextViewer({ content, filename }: TextViewerProps) {
-  const theme = useTheme();
-
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        <Text
-          variant="bodySmall"
-          style={{ fontFamily: 'monospace', lineHeight: 24, opacity: 0.8 }}
-          selectable
-        >
+    <div className="flex-1 bg-card overflow-auto">
+      <div className="p-4">
+        <pre className="font-mono text-sm leading-6 opacity-80 whitespace-pre-wrap select-text">
           {content}
-        </Text>
-      </ScrollView>
-    </View>
+        </pre>
+      </div>
+    </div>
   );
 }

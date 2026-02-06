@@ -13,7 +13,7 @@
     "dev:restart": "node scripts/dev-server.js restart",
     "dev:relay": "pnpm --filter @estelle/relay dev",
     "dev:pylon": "pnpm --filter @estelle/pylon dev",
-    "dev:client": "pnpm --filter client start"
+    "dev:client": "pnpm --filter @estelle/client dev"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

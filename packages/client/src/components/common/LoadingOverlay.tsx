@@ -1,6 +1,4 @@
-import React from 'react';
-import { View } from 'react-native';
-import { ActivityIndicator, Text, useTheme } from 'react-native-paper';
+import { Loader2 } from 'lucide-react';
 
 interface LoadingOverlayProps {
   message?: string;
@@ -10,24 +8,12 @@ interface LoadingOverlayProps {
  * 로딩 오버레이
  */
 export function LoadingOverlay({ message = '로딩 중...' }: LoadingOverlayProps) {
-  const theme = useTheme();
-
   return (
-    <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50,
-      }}
-    >
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-      <Text style={{ marginTop: 16 }}>{message}</Text>
-    </View>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="rounded-xl bg-background px-8 py-6 shadow-lg text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">{message}</p>
+      </div>
+    </div>
   );
 }

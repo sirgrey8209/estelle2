@@ -22,9 +22,9 @@ import {
 } from '../../src/constants/index.js';
 
 describe('MessageType', () => {
-  it('should have all message types (62 total)', () => {
+  it('should have all message types (64 total)', () => {
     const messageTypes = Object.keys(MessageType);
-    expect(messageTypes).toHaveLength(62);
+    expect(messageTypes).toHaveLength(64);
   });
 
   it('should have correct auth message types', () => {

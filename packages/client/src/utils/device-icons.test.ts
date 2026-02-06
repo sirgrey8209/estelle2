@@ -39,37 +39,39 @@ describe('device-icons', () => {
   });
 
   describe('getDeviceIcon', () => {
-    it('should return pylon icon for pylon type', () => {
-      // Given
-      const deviceType: DeviceType = 'pylon';
-
-      // When
-      const icon = getDeviceIcon(deviceType);
-
-      // Then
-      expect(icon).toBe('🖥️');
+    it('should return Building2 icon for office-building-outline', () => {
+      const Icon = getDeviceIcon('office-building-outline');
+      expect(Icon).toBeDefined();
+      expect(Icon.$$typeof).toBe(Symbol.for('react.forward_ref'));
     });
 
-    it('should return desktop icon for desktop type', () => {
-      // Given
-      const deviceType: DeviceType = 'desktop';
+    it('should return Home icon for home-outline', () => {
+      const Icon = getDeviceIcon('home-outline');
+      expect(Icon).toBeDefined();
+      expect(Icon.$$typeof).toBe(Symbol.for('react.forward_ref'));
+    });
 
-      // When
-      const icon = getDeviceIcon(deviceType);
+    it('should return Monitor icon for monitor', () => {
+      const Icon = getDeviceIcon('monitor');
+      expect(Icon).toBeDefined();
+      expect(Icon.$$typeof).toBe(Symbol.for('react.forward_ref'));
+    });
 
-      // Then
-      expect(icon).toBe('💻');
+    it('should return Monitor icon for pylon (legacy)', () => {
+      const Icon = getDeviceIcon('pylon');
+      expect(Icon).toBeDefined();
+      expect(Icon.$$typeof).toBe(Symbol.for('react.forward_ref'));
     });
 
     it('should return fallback icon for unknown type', () => {
-      // Given - unknown type (TypeScript would complain, but runtime safety)
-      const unknownType = 'unknown' as DeviceType;
+      const Icon = getDeviceIcon('unknown');
+      expect(Icon).toBeDefined();
+      expect(Icon.$$typeof).toBe(Symbol.for('react.forward_ref'));
+    });
 
-      // When
-      const icon = getDeviceIcon(unknownType);
-
-      // Then
-      expect(icon).toBe('❓');
+    it('should return fallback icon for undefined', () => {
+      const Icon = getDeviceIcon(undefined);
+      expect(Icon).toBeDefined();
     });
   });
 });

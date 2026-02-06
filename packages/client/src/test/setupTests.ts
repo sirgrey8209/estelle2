@@ -1,110 +1,152 @@
 /**
  * @file setupTests.ts
- * @description Vitest + React Native Testing Library 설정
+ * @description Vitest + React Testing Library 설정 (웹 환경)
  */
 
 import { vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
 
-// React Native 모킹
-vi.mock('react-native', async () => {
-  const RN = await vi.importActual<typeof import('react-native')>('react-native');
-
-  return {
-    ...RN,
-    Platform: {
-      OS: 'web',
-      select: (obj: Record<string, unknown>) => obj.web ?? obj.default,
-    },
-    Dimensions: {
-      get: () => ({ width: 1024, height: 768 }),
-      addEventListener: vi.fn(() => ({ remove: vi.fn() })),
-    },
-    StyleSheet: {
-      ...RN.StyleSheet,
-      create: (styles: Record<string, unknown>) => styles,
-    },
-  };
-});
-
-// Expo ImagePicker 모킹
-vi.mock('expo-image-picker', () => ({
-  launchImageLibraryAsync: vi.fn().mockResolvedValue({
-    canceled: false,
-    assets: [{ uri: 'file:///test/image.jpg', fileName: 'image.jpg' }],
-  }),
-  launchCameraAsync: vi.fn().mockResolvedValue({
-    canceled: false,
-    assets: [{ uri: 'file:///test/camera.jpg', fileName: 'camera.jpg' }],
-  }),
-  MediaTypeOptions: {
-    Images: 'Images',
-    Videos: 'Videos',
-    All: 'All',
-  },
-}));
-
-// NativeWind 클래스명 무시 (스타일링 테스트 제외)
-vi.mock('nativewind', () => ({
-  styled: (component: unknown) => component,
-}));
-
-// AsyncStorage mock (Zustand persist용)
-const asyncStorageData: Record<string, string> = {};
-vi.mock('@react-native-async-storage/async-storage', () => ({
-  default: {
-    getItem: vi.fn((key: string) => Promise.resolve(asyncStorageData[key] ?? null)),
-    setItem: vi.fn((key: string, value: string) => {
-      asyncStorageData[key] = value;
-      return Promise.resolve();
-    }),
-    removeItem: vi.fn((key: string) => {
-      delete asyncStorageData[key];
-      return Promise.resolve();
-    }),
-    getAllKeys: vi.fn(() => Promise.resolve(Object.keys(asyncStorageData))),
-    multiRemove: vi.fn((keys: string[]) => {
-      keys.forEach((key) => delete asyncStorageData[key]);
-      return Promise.resolve();
-    }),
-    clear: vi.fn(() => {
-      Object.keys(asyncStorageData).forEach((key) => delete asyncStorageData[key]);
-      return Promise.resolve();
-    }),
-  },
-}));
-
-// Zustand 테스트 유틸리티
-export function resetAllStores() {
-  // 각 스토어의 reset 함수 호출
+// jsdom 환경 확인
+if (typeof document === 'undefined') {
+  throw new Error('setupTests.ts는 jsdom 환경에서 실행되어야 합니다.');
 }
+
+// localStorage mock
+const localStorageData: Record<string, string> = {};
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageData[key] ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageData[key] = value;
+  }),
+  removeItem: vi.fn((key: string) => {
+    delete localStorageData[key];
+  }),
+  clear: vi.fn(() => {
+    Object.keys(localStorageData).forEach((key) => delete localStorageData[key]);
+  }),
+  key: vi.fn((index: number) => Object.keys(localStorageData)[index] ?? null),
+  get length() {
+    return Object.keys(localStorageData).length;
+  },
+};
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
 
 // WebSocket mock
 class MockWebSocket {
+  static CONNECTING = 0;
   static OPEN = 1;
+  static CLOSING = 2;
   static CLOSED = 3;
 
   readyState = MockWebSocket.OPEN;
+  url: string;
+
   send = vi.fn();
   close = vi.fn();
 
-  onopen: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((error: Error) => void) | null = null;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    // 비동기로 onopen 호출 시뮬레이션
+    setTimeout(() => {
+      if (this.onopen) {
+        this.onopen(new Event('open'));
+      }
+    }, 0);
+  }
+
+  // 테스트에서 메시지 수신 시뮬레이션용
+  simulateMessage(data: string) {
+    if (this.onmessage) {
+      this.onmessage(new MessageEvent('message', { data }));
+    }
+  }
+
+  simulateClose(code = 1000, reason = '') {
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.onclose) {
+      this.onclose(new CloseEvent('close', { code, reason }));
+    }
+  }
 }
 
 // @ts-expect-error - global WebSocket mock
 globalThis.WebSocket = MockWebSocket;
 
+// window.matchMedia mock (반응형 테스트용)
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+// ResizeObserver mock
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+
+globalThis.ResizeObserver = MockResizeObserver;
+
+// IntersectionObserver mock
+class MockIntersectionObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+
+// @ts-expect-error - global IntersectionObserver mock
+globalThis.IntersectionObserver = MockIntersectionObserver;
+
+// URL.createObjectURL mock (이미지 업로드 테스트용)
+URL.createObjectURL = vi.fn(() => 'blob:http://localhost/mock-object-url');
+URL.revokeObjectURL = vi.fn();
+
+// 테스트 유틸리티: localStorage 초기화
+export function clearLocalStorage() {
+  Object.keys(localStorageData).forEach((key) => delete localStorageData[key]);
+}
+
+// 테스트 유틸리티: Zustand 스토어 리셋
+export function resetAllStores() {
+  clearLocalStorage();
+}
+
 // Console 에러 억제 (테스트 노이즈 감소)
 const originalConsoleError = console.error;
 console.error = (...args: unknown[]) => {
-  // React Native 관련 경고 무시
+  // React 경고 무시
   if (
     typeof args[0] === 'string' &&
-    (args[0].includes('Warning:') || args[0].includes('NativeWind'))
+    (args[0].includes('Warning:') ||
+      args[0].includes('React does not recognize') ||
+      args[0].includes('Invalid DOM property'))
   ) {
     return;
   }
   originalConsoleError(...args);
 };
+
+// 각 테스트 후 cleanup
+import { afterEach } from 'vitest';
+
+afterEach(() => {
+  vi.clearAllMocks();
+});

@@ -738,6 +738,81 @@ describe('Pylon', () => {
       );
       expect(updated?.permissionMode).toBe('acceptEdits');
     });
+
+    it('should save workspace store after permission mode change', async () => {
+      const mockPersistence = {
+        loadWorkspaceStore: vi.fn(),
+        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
+        loadMessageSession: vi.fn(),
+        saveMessageSession: vi.fn().mockResolvedValue(undefined),
+        deleteMessageSession: vi.fn(),
+        listMessageSessions: vi.fn().mockReturnValue([]),
+      };
+
+      deps.persistence = mockPersistence;
+      pylon = new Pylon(config, deps);
+
+      const { conversation } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      mockPersistence.saveWorkspaceStore.mockClear();
+
+      pylon.handleMessage({
+        type: 'claude_set_permission_mode',
+        payload: {
+          conversationId: conversation.conversationId,
+          mode: 'bypassPermissions',
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mockPersistence.saveWorkspaceStore).toHaveBeenCalled();
+    });
+
+    it('should include permissionMode in workspace_list_result', () => {
+      const { conversation } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      deps.workspaceStore.setConversationPermissionMode(conversation.conversationId, 'acceptEdits');
+
+      pylon.handleMessage({
+        type: 'workspace_list',
+        from: { deviceId: 1 },
+        payload: {},
+      });
+
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'workspace_list_result',
+          payload: expect.objectContaining({
+            workspaces: expect.arrayContaining([
+              expect.objectContaining({
+                conversations: expect.arrayContaining([
+                  expect.objectContaining({
+                    permissionMode: 'acceptEdits',
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+        })
+      );
+    });
+
+    it('should restore permissionMode on pylon restart', () => {
+      // 1. 워크스페이스 생성 및 퍼미션 변경
+      const { workspace, conversation } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      deps.workspaceStore.setConversationPermissionMode(conversation.conversationId, 'bypassPermissions');
+
+      // 2. 현재 상태 저장
+      const savedData = deps.workspaceStore.toJSON();
+
+      // 3. 새 워크스페이스 스토어 생성 (재시작 시뮬레이션)
+      const newWorkspaceStore = WorkspaceStore.fromJSON(savedData);
+
+      // 4. 퍼미션 모드 복구 확인
+      const restored = newWorkspaceStore.getConversation(
+        workspace.workspaceId,
+        conversation.conversationId
+      );
+      expect(restored?.permissionMode).toBe('bypassPermissions');
+    });
   });
 
   // ==========================================================================

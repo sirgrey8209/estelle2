@@ -1,10 +1,14 @@
-import React from 'react';
-import { View, Pressable } from 'react-native';
-import { Portal, Dialog, Text, IconButton, useTheme } from 'react-native-paper';
+import { X } from 'lucide-react';
+import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { ImageViewer } from './ImageViewer';
 import { TextViewer } from './TextViewer';
 import { MarkdownViewer } from './MarkdownViewer';
-import { semanticColors } from '../../theme';
 
 interface FileInfo {
   filename: string;
@@ -13,7 +17,7 @@ interface FileInfo {
 }
 
 interface FileViewerProps {
-  visible: boolean;
+  open: boolean;
   onClose: () => void;
   file: FileInfo;
   /** 텍스트 내용 또는 base64 이미지 데이터 */
@@ -23,9 +27,7 @@ interface FileViewerProps {
 /**
  * 파일 뷰어 다이얼로그
  */
-export function FileViewer({ visible, onClose, file, content }: FileViewerProps) {
-  const theme = useTheme();
-
+export function FileViewer({ open, onClose, file, content }: FileViewerProps) {
   const isImage = file.mimeType?.startsWith('image/') ||
     /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(file.filename);
 
@@ -44,12 +46,6 @@ export function FileViewer({ visible, onClose, file, content }: FileViewerProps)
     return '📄';
   };
 
-  const getFileIconColor = (): string => {
-    if (isImage) return theme.colors.tertiary;
-    if (isMarkdown) return semanticColors.info;
-    return theme.colors.outline;
-  };
-
   const renderContent = () => {
     if (isImage) {
       return <ImageViewer data={content} filename={file.filename} />;
@@ -61,45 +57,30 @@ export function FileViewer({ visible, onClose, file, content }: FileViewerProps)
   };
 
   return (
-    <Portal>
-      <Dialog
-        visible={visible}
-        onDismiss={onClose}
-        style={{
-          maxWidth: '90%',
-          maxHeight: '85%',
-          width: '100%',
-          alignSelf: 'center',
-        }}
-      >
-        <Dialog.Title style={{ paddingRight: 48 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ fontSize: 18, color: getFileIconColor() }}>{getFileIcon()}</Text>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text variant="titleSmall" numberOfLines={1}>
-                {file.filename}
-              </Text>
-              <Text variant="labelSmall" style={{ opacity: 0.6 }}>
-                {formatSize(file.size)}
-              </Text>
-            </View>
-          </View>
-        </Dialog.Title>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-[90vw] max-h-[85vh] w-full flex flex-col">
+        <DialogHeader className="flex flex-row items-center justify-between pr-8">
+          <DialogTitle className="flex items-center gap-3">
+            <span className="text-lg">{getFileIcon()}</span>
+            <div>
+              <p className="text-sm font-medium truncate">{file.filename}</p>
+              <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+            </div>
+          </DialogTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="absolute right-4 top-4"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </DialogHeader>
 
-        <IconButton
-          icon="close"
-          size={20}
-          onPress={onClose}
-          style={{ position: 'absolute', right: 8, top: 8 }}
-        />
-
-        <Dialog.Content style={{ padding: 0, flex: 1 }}>
-          <View style={{ height: 1, backgroundColor: theme.colors.outlineVariant }} />
-          <View style={{ flex: 1, minHeight: 300 }}>
-            {renderContent()}
-          </View>
-        </Dialog.Content>
-      </Dialog>
-    </Portal>
+        <div className="flex-1 min-h-[300px] border-t border-border overflow-hidden">
+          {renderContent()}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

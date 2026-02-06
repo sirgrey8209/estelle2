@@ -228,7 +228,8 @@ describe('ChatArea 동작', () => {
       mockClaudeStore.status = 'idle';
       mockClaudeStore.hasPendingRequests = true;
 
-      const isWorking = mockClaudeStore.status === 'working';
+      const status = mockClaudeStore.status as 'idle' | 'working' | 'permission';
+      const isWorking = status === 'working';
       const showRequestBar = mockClaudeStore.hasPendingRequests;
       const disabled = isWorking || showRequestBar;
 
@@ -239,7 +240,8 @@ describe('ChatArea 동작', () => {
       mockClaudeStore.status = 'idle';
       mockClaudeStore.hasPendingRequests = false;
 
-      const isWorking = mockClaudeStore.status === 'working';
+      const status = mockClaudeStore.status as 'idle' | 'working' | 'permission';
+      const isWorking = status === 'working';
       const showRequestBar = mockClaudeStore.hasPendingRequests;
       const disabled = isWorking || showRequestBar;
 

@@ -1,6 +1,3 @@
-import React from 'react';
-import { View, Image, Pressable } from 'react-native';
-import { Surface, Text, useTheme } from 'react-native-paper';
 import type { StoreMessage, Attachment } from '../../stores/claudeStore';
 import type {
   UserTextMessage,
@@ -10,20 +7,20 @@ import type {
   ErrorMessage,
   UserResponseMessage,
 } from '@estelle/core';
-import { ToolCard } from './ToolCard';
-import { semanticColors } from '../../theme';
+import { ToolCard, type ChildToolInfo } from './ToolCard';
+import { cn } from '../../lib/utils';
 
 interface MessageBubbleProps {
   message: StoreMessage;
   onImagePress?: (uri: string) => void;
+  /** Task 툴의 하위 툴들 */
+  childTools?: ChildToolInfo[];
 }
 
 /**
  * 메시지 버블 (컴팩트)
  */
-export function MessageBubble({ message, onImagePress }: MessageBubbleProps) {
-  const theme = useTheme();
-
+export function MessageBubble({ message, onImagePress, childTools }: MessageBubbleProps) {
   const isUser = message.role === 'user' && message.type === 'text';
   const isToolStart = message.type === 'tool_start';
   const isToolComplete = message.type === 'tool_complete';
@@ -38,37 +35,36 @@ export function MessageBubble({ message, onImagePress }: MessageBubbleProps) {
     const success = message.type === 'tool_complete'
       ? (message as ToolCompleteMessage).success
       : undefined;
+    const elapsedSeconds = message.type === 'tool_start'
+      ? (message as ToolStartMessage).elapsedSeconds
+      : undefined;
+    const parentToolUseId = toolMsg.parentToolUseId;
 
     return (
-      <ToolCard
-        toolName={toolMsg.toolName}
-        toolInput={toolMsg.toolInput}
-        toolOutput={toolOutput}
-        isComplete={isToolComplete}
-        success={success}
-      />
+      <div className={cn(parentToolUseId && 'ml-4')}>
+        <ToolCard
+          toolName={toolMsg.toolName}
+          toolInput={toolMsg.toolInput}
+          toolOutput={toolOutput}
+          isComplete={isToolComplete}
+          success={success}
+          elapsedSeconds={elapsedSeconds}
+          childTools={toolMsg.toolName === 'Task' ? childTools : undefined}
+        />
+      </div>
     );
   }
 
   if (isError) {
     const errorMsg = message as ErrorMessage;
     return (
-      <Surface
-        style={{
-          marginVertical: 2,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 4,
-          borderLeftWidth: 2,
-          borderLeftColor: theme.colors.error,
-          maxWidth: '90%',
-        }}
-        elevation={0}
+      <div
+        className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-destructive bg-card max-w-[90%]"
       >
-        <Text variant="bodySmall" style={{ color: theme.colors.error }} selectable>
+        <p className="text-destructive select-text">
           {errorMsg.content}
-        </Text>
-      </Surface>
+        </p>
+      </div>
     );
   }
 
@@ -79,66 +75,45 @@ export function MessageBubble({ message, onImagePress }: MessageBubbleProps) {
     const label = isPermission ? '권한 응답' : '질문 응답';
 
     return (
-      <Surface
-        style={{
-          marginVertical: 2,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 4,
-          borderLeftWidth: 2,
-          borderLeftColor: semanticColors.success,
-          maxWidth: '90%',
-        }}
-        elevation={0}
+      <div
+        className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-green-500 bg-card max-w-[90%]"
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-          <Text variant="labelSmall" style={{ color: semanticColors.success, marginRight: 4 }}>
-            {icon}
-          </Text>
-          <Text variant="labelSmall" style={{ opacity: 0.6 }}>
-            {label}
-          </Text>
-        </View>
-        <Text variant="bodySmall" selectable>
+        <div className="flex items-center mb-0.5">
+          <span className="text-xs text-green-500 mr-1">{icon}</span>
+          <span className="text-xs text-muted-foreground">{label}</span>
+        </div>
+        <p className="select-text">
           {responseMsg.response}
-        </Text>
-      </Surface>
+        </p>
+      </div>
     );
   }
 
   if (isUser) {
     const userMsg = message as UserTextMessage;
     return (
-      <Surface
-        style={{
-          marginVertical: 2,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 4,
-          borderLeftWidth: 2,
-          borderLeftColor: theme.colors.primary,
-          backgroundColor: theme.colors.surfaceVariant,
-          maxWidth: '90%',
-        }}
-        elevation={0}
+      <div
+        className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-primary bg-muted max-w-[90%] self-start"
       >
         <UserContent
           content={userMsg.content}
           attachments={userMsg.attachments}
           onImagePress={onImagePress}
         />
-      </Surface>
+      </div>
     );
   }
 
   if (message.role === 'assistant' && message.type === 'text') {
     const assistantMsg = message as AssistantTextMessage;
     return (
-      <View style={{ marginVertical: 2, maxWidth: '90%' }}>
-        <Text variant="bodySmall" style={{ opacity: 0.85, lineHeight: 20 }} selectable>
+      <div
+        className="my-0.5 ml-2 pl-1.5 pr-2 border-l-2 border-transparent max-w-[90%]"
+      >
+        <p className="opacity-85 leading-relaxed select-text whitespace-pre-wrap">
           {assistantMsg.content}
-        </Text>
-      </View>
+        </p>
+      </div>
     );
   }
 
@@ -152,14 +127,13 @@ interface UserContentProps {
 }
 
 function UserContent({ content, attachments, onImagePress }: UserContentProps) {
-  const theme = useTheme();
   const hasAttachments = attachments && attachments.length > 0;
   const hasText = content.trim().length > 0;
 
   return (
-    <View>
+    <div>
       {hasAttachments && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+        <div className="flex flex-wrap gap-1">
           {attachments.map((attachment, index) => {
             const uri = attachment.path || '';
             return (
@@ -171,17 +145,17 @@ function UserContent({ content, attachments, onImagePress }: UserContentProps) {
               />
             );
           })}
-        </View>
+        </div>
       )}
 
-      {hasAttachments && hasText && <View style={{ height: 4 }} />}
+      {hasAttachments && hasText && <div className="h-1" />}
 
       {hasText && (
-        <Text variant="bodySmall" selectable>
+        <p className="select-text whitespace-pre-wrap">
           {content}
-        </Text>
+        </p>
       )}
-    </View>
+    </div>
   );
 }
 
@@ -192,40 +166,30 @@ interface AttachmentImageProps {
 }
 
 function AttachmentImage({ uri, filename, onPress }: AttachmentImageProps) {
-  const theme = useTheme();
   const hasUri = uri && uri.length > 0;
 
   if (!hasUri) {
     return (
-      <View
-        style={{
-          width: 64,
-          height: 64,
-          borderRadius: 8,
-          backgroundColor: theme.colors.surfaceVariant,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: theme.colors.outline,
-        }}
+      <div
+        className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border"
       >
-        <Text>📷</Text>
+        <span>📷</span>
         {filename && (
-          <Text variant="labelSmall" style={{ marginTop: 2, opacity: 0.6 }} numberOfLines={1}>
+          <span className="mt-0.5 text-xs text-muted-foreground truncate max-w-full px-1">
             {filename.slice(0, 8)}
-          </Text>
+          </span>
         )}
-      </View>
+      </div>
     );
   }
 
   return (
-    <Pressable onPress={onPress}>
-      <Image
-        source={{ uri }}
-        style={{ width: 64, height: 64, borderRadius: 8 }}
-        resizeMode="cover"
+    <button onClick={onPress} className="focus:outline-none">
+      <img
+        src={uri}
+        alt={filename || 'attachment'}
+        className="w-16 h-16 rounded-lg object-cover"
       />
-    </Pressable>
+    </button>
   );
 }

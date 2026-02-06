@@ -76,5 +76,6 @@ export const DYNAMIC_DEVICE_ID_START = 100;
  *
  * @description
  * 환경 변수 PORT가 설정되지 않았을 때 사용하는 기본 포트입니다.
+ * 테스트에서는 DEFAULT_PORT 환경변수로 오버라이드 가능합니다.
  */
-export const DEFAULT_PORT = 8080;
+export const DEFAULT_PORT = parseInt(process.env['DEFAULT_PORT'] || '8080', 10);

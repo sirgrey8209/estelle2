@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
-import { Alert } from 'react-native';
-import { Portal, Dialog, TextInput, Button, Text, useTheme } from 'react-native-paper';
+import { useState } from 'react';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { LoadingSpinner } from '../ui/loading-spinner';
 
 interface BugReportDialogProps {
-  visible: boolean;
+  open: boolean;
   onClose: () => void;
   onSubmit?: (message: string) => Promise<void>;
 }
@@ -11,25 +20,27 @@ interface BugReportDialogProps {
 /**
  * 버그 리포트 다이얼로그
  */
-export function BugReportDialog({ visible, onClose, onSubmit }: BugReportDialogProps) {
-  const theme = useTheme();
+export function BugReportDialog({ open, onClose, onSubmit }: BugReportDialogProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
 
     setSending(true);
+    setError(null);
     try {
       if (onSubmit) {
         await onSubmit(trimmedMessage);
       }
       setMessage('');
       onClose();
-      Alert.alert('완료', '버그 리포트가 전송되었습니다.');
-    } catch (error) {
-      Alert.alert('오류', `전송 실패: ${error}`);
+      // TODO: toast notification
+      alert('버그 리포트가 전송되었습니다.');
+    } catch (err) {
+      setError(`전송 실패: ${err}`);
     } finally {
       setSending(false);
     }
@@ -38,49 +49,60 @@ export function BugReportDialog({ visible, onClose, onSubmit }: BugReportDialogP
   const handleClose = () => {
     if (!sending) {
       setMessage('');
+      setError(null);
       onClose();
     }
   };
 
   return (
-    <Portal>
-      <Dialog visible={visible} onDismiss={handleClose} style={{ maxWidth: 400, alignSelf: 'center' }}>
-        <Dialog.Title>버그 리포트</Dialog.Title>
-        <Dialog.Content>
-          <Text variant="bodySmall" style={{ marginBottom: 8, opacity: 0.7 }}>
-            문제를 설명해주세요:
-          </Text>
-          <TextInput
-            mode="outlined"
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>버그 리포트</DialogTitle>
+          <DialogDescription>
+            문제를 설명해주세요
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <Textarea
             placeholder="어떤 문제가 발생했나요?"
             value={message}
-            onChangeText={setMessage}
-            multiline
-            numberOfLines={4}
-            autoFocus
+            onChange={(e) => setMessage(e.target.value)}
+            rows={4}
             disabled={sending}
-            dense
-            style={{ height: 100 }}
+            autoFocus
           />
-          <Text variant="labelSmall" style={{ marginTop: 8, opacity: 0.5 }}>
+
+          <p className="text-xs text-muted-foreground">
             현재 대화/워크스페이스 정보가 함께 전송됩니다.
-          </Text>
-        </Dialog.Content>
-        <Dialog.Actions>
-          <Button onPress={handleClose} disabled={sending}>
+          </p>
+
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={sending}>
             취소
           </Button>
           <Button
-            mode="contained"
-            onPress={handleSubmit}
+            variant="destructive"
+            onClick={handleSubmit}
             disabled={sending || !message.trim()}
-            loading={sending}
-            buttonColor={theme.colors.error}
           >
-            전송
+            {sending ? (
+              <>
+                <LoadingSpinner size="sm" className="mr-2" />
+                전송 중...
+              </>
+            ) : (
+              '전송'
+            )}
           </Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

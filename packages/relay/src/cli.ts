@@ -8,27 +8,11 @@
  * - 시작 로그 출력
  */
 
-import type { RelayServer } from './server.js';
-import { createRelayServer } from './server.js';
 import { DEFAULT_PORT } from './constants.js';
 
 // ============================================================================
 // 타입 정의
 // ============================================================================
-
-/**
- * CLI 실행 결과
- */
-export interface CliResult {
-  /** 서버 시작 성공 여부 */
-  started: boolean;
-
-  /** 사용된 포트 */
-  port: number;
-
-  /** 서버 인스턴스 */
-  server: RelayServer;
-}
 
 /**
  * CLI 인자 파싱 결과
@@ -55,6 +39,25 @@ function validatePort(port: number): void {
 }
 
 /**
+ * 현재 기본 포트를 가져옵니다.
+ *
+ * @description
+ * 환경변수 DEFAULT_PORT가 설정되어 있으면 해당 값을 사용하고,
+ * 그렇지 않으면 constants.ts의 DEFAULT_PORT를 사용합니다.
+ * 테스트에서 포트 충돌을 방지하기 위해 런타임에 환경변수를 읽습니다.
+ */
+function getDefaultPort(): number {
+  const envDefaultPort = process.env['DEFAULT_PORT'];
+  if (envDefaultPort) {
+    const parsed = parseInt(envDefaultPort, 10);
+    if (!isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return DEFAULT_PORT;
+}
+
+/**
  * 환경변수에서 포트를 파싱합니다.
  *
  * @returns 파싱된 포트 또는 기본 포트
@@ -62,17 +65,18 @@ function validatePort(port: number): void {
  */
 function parsePortFromEnv(): number {
   const envPort = process.env['PORT'];
+  const defaultPort = getDefaultPort();
 
   // 환경변수가 없거나 빈 문자열이면 기본 포트 사용
   if (envPort === undefined || envPort === '') {
-    return DEFAULT_PORT;
+    return defaultPort;
   }
 
   const parsed = parseInt(envPort, 10);
 
   // 숫자가 아니면 기본 포트 사용
   if (isNaN(parsed)) {
-    return DEFAULT_PORT;
+    return defaultPort;
   }
 
   // 유효 범위 검사
@@ -151,48 +155,19 @@ export function parseCliArgs(args: string[]): CliArgs {
 /**
  * CLI를 실행하여 서버를 시작합니다.
  *
- * @returns CLI 실행 결과
+ * @returns CLI 실행 결과 (main() 사용 시 void)
  * @throws 포트가 유효하지 않으면 에러
  *
  * @example
  * ```typescript
- * const result = await runCli();
- * console.log(`Server started on port ${result.port}`);
+ * await runCli();
  * ```
  */
-export async function runCli(): Promise<CliResult> {
+export async function runCli(): Promise<void> {
   // 환경변수에서 포트 파싱
   const port = parsePortFromEnv();
 
-  // WebSocketServer 동적 import
-  const { WebSocketServer } = await import('ws');
-
-  // WebSocket 서버 생성
-  const wss = new WebSocketServer({ port });
-
-  // Relay 서버 생성
-  const server = createRelayServer(wss, { port });
-
-  // 서버 시작
-  server.start();
-
-  // 시작 로그 출력
-  console.log(`[Estelle Relay v2] Started on port ${port}`);
-
-  // 시그널 핸들러 등록 (중복 호출 방지)
-  let isShuttingDown = false;
-  const handleShutdown = (): void => {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
-    server.stop();
-  };
-
-  process.on('SIGINT', handleShutdown);
-  process.on('SIGTERM', handleShutdown);
-
-  return {
-    started: true,
-    port,
-    server,
-  };
+  // main() 함수 사용 (STATIC_DIR 지원)
+  const { main } = await import('./server.js');
+  await main({ port });
 }

@@ -1,8 +1,6 @@
-import React from 'react';
-import { View, Pressable } from 'react-native';
-import { Surface, Text, ActivityIndicator, useTheme } from 'react-native-paper';
+import { Loader2 } from 'lucide-react';
 import { type FileInfo, formatFileSize, useDownloadStore } from '../../stores';
-import { semanticColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 interface FileAttachmentCardProps {
   file: FileInfo;
@@ -14,7 +12,6 @@ interface FileAttachmentCardProps {
  * 파일 첨부 카드
  */
 export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentCardProps) {
-  const theme = useTheme();
   const downloadStatus = useDownloadStore((s) => s.getStatus(file.filename));
   const isDownloading = downloadStatus === 'downloading';
   const isDownloaded = downloadStatus === 'downloaded';
@@ -33,17 +30,17 @@ export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentC
     }
   };
 
-  const getStatusIcon = (): React.ReactNode => {
+  const getStatusIcon = () => {
     if (isDownloading) {
-      return <ActivityIndicator size="small" color={theme.colors.primary} />;
+      return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
     }
     if (isDownloaded) {
-      return <Text style={{ color: semanticColors.success, fontSize: 14 }}>✓</Text>;
+      return <span className="text-green-500 text-sm">✓</span>;
     }
     if (isFailed) {
-      return <Text style={{ color: theme.colors.error, fontSize: 14 }}>!</Text>;
+      return <span className="text-destructive text-sm">!</span>;
     }
-    return <Text style={{ color: theme.colors.primary, fontSize: 14 }}>⬇</Text>;
+    return <span className="text-primary text-sm">⬇</span>;
   };
 
   const handlePress = () => {
@@ -55,58 +52,52 @@ export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentC
   };
 
   return (
-    <Pressable onPress={handlePress}>
-      <Surface
-        style={{
-          marginVertical: 2,
-          maxWidth: '90%',
-          borderLeftWidth: 2,
-          borderLeftColor: theme.colors.primary,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 4,
-        }}
-        elevation={0}
+    <button
+      onClick={handlePress}
+      className="w-full text-left"
+    >
+      <div
+        className="my-0.5 max-w-[90%] border-l-2 border-primary px-3 py-2 rounded bg-card"
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 20, marginRight: 12 }}>{getFileIcon()}</Text>
+        <div className="flex items-center">
+          <span className="text-xl mr-3">{getFileIcon()}</span>
 
-          <View style={{ flex: 1 }}>
-            <Text variant="bodyMedium" numberOfLines={1}>
+          <div className="flex-1 min-w-0">
+            <p className="truncate">
               {file.filename}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Text variant="labelSmall" style={{ opacity: 0.6 }}>
+            </p>
+            <div className="flex items-center mt-0.5">
+              <span className="text-xs text-muted-foreground">
                 {formatFileSize(file.size)}
-              </Text>
+              </span>
               {file.description && (
                 <>
-                  <Text variant="labelSmall" style={{ opacity: 0.4, marginHorizontal: 4 }}>|</Text>
-                  <Text variant="labelSmall" style={{ opacity: 0.6, flex: 1 }} numberOfLines={1}>
+                  <span className="text-xs text-muted-foreground/40 mx-1">|</span>
+                  <span className="text-xs text-muted-foreground truncate flex-1">
                     {file.description}
-                  </Text>
+                  </span>
                 </>
               )}
-            </View>
-          </View>
+            </div>
+          </div>
 
-          <View style={{ marginLeft: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+          <div className="ml-3 w-6 h-6 flex items-center justify-center">
             {getStatusIcon()}
-          </View>
-        </View>
+          </div>
+        </div>
 
         {isFailed && (
-          <Text variant="labelSmall" style={{ color: theme.colors.error, marginTop: 8 }}>
+          <p className="text-xs text-destructive mt-2">
             다운로드 실패. 탭하여 재시도
-          </Text>
+          </p>
         )}
 
         {!isDownloaded && !isDownloading && !isFailed && (
-          <Text variant="labelSmall" style={{ opacity: 0.5, marginTop: 4 }}>
+          <p className="text-xs text-muted-foreground mt-1">
             탭하여 다운로드
-          </Text>
+          </p>
         )}
-      </Surface>
-    </Pressable>
+      </div>
+    </button>
   );
 }

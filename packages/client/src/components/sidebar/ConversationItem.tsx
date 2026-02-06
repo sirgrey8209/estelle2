@@ -1,7 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
-import { List, Text, useTheme } from 'react-native-paper';
 import type { Conversation } from '@estelle/core';
+import { cn } from '../../lib/utils';
 import { StatusDot } from '../common/StatusDot';
 
 interface ConversationItemProps {
@@ -18,40 +16,25 @@ interface ConversationItemProps {
  */
 export function ConversationItem({
   workspaceName,
-  workingDir,
   conversation,
   isSelected,
   showWorkspaceName = true,
   onPress,
 }: ConversationItemProps) {
-  const theme = useTheme();
-
   return (
-    <List.Item
-      title={showWorkspaceName ? workspaceName : conversation.name}
-      onPress={onPress}
-      right={() => (
-        <View style={{ justifyContent: 'center', paddingRight: 8 }}>
-          <StatusDot status={conversation.status} />
-        </View>
+    <button
+      onClick={onPress}
+      className={cn(
+        'flex items-center justify-between w-full px-3 py-1.5 mx-1 rounded-lg text-left transition-colors',
+        isSelected
+          ? 'bg-primary/20 text-gray-900'
+          : 'hover:bg-accent/50'
       )}
-      style={{
-        backgroundColor: isSelected
-          ? theme.colors.primaryContainer
-          : 'transparent',
-        paddingVertical: 0,
-        minHeight: 32,
-        marginHorizontal: 4,
-        marginVertical: 1,
-        borderRadius: 8,
-        paddingLeft: 12,
-      }}
-      titleStyle={{
-        fontSize: 13,
-        color: isSelected
-          ? theme.colors.onPrimaryContainer
-          : theme.colors.onSurface,
-      }}
-    />
+    >
+      <span className={cn('text-sm truncate', isSelected && 'font-medium')}>
+        {showWorkspaceName ? workspaceName : conversation.name}
+      </span>
+      <StatusDot status={conversation.status} size="sm" />
+    </button>
   );
 }

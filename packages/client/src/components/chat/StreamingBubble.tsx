@@ -1,7 +1,3 @@
-import React from 'react';
-import { View } from 'react-native';
-import { Surface, Text, useTheme } from 'react-native-paper';
-
 interface StreamingBubbleProps {
   text: string;
 }
@@ -12,24 +8,14 @@ interface StreamingBubbleProps {
  * Claude의 응답이 스트리밍될 때 표시됩니다.
  */
 export function StreamingBubble({ text }: StreamingBubbleProps) {
-  const theme = useTheme();
-
   return (
-    <View style={{ marginVertical: 8, alignSelf: 'flex-start', maxWidth: '85%' }}>
-      <Surface
-        style={{
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderRadius: 16,
-          borderBottomLeftRadius: 4,
-        }}
-        elevation={1}
-      >
-        <Text variant="bodyMedium" selectable>
-          {text}
-          <Text style={{ color: theme.colors.primary }}>▋</Text>
-        </Text>
-      </Surface>
-    </View>
+    <div
+      className="my-0.5 ml-2 pl-1.5 pr-2 border-l-2 border-transparent max-w-[90%]"
+    >
+      <p className="opacity-85 leading-relaxed select-text whitespace-pre-wrap">
+        {text}
+        <span className="text-primary animate-pulse">▋</span>
+      </p>
+    </div>
   );
 }

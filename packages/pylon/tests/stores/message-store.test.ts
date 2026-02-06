@@ -532,7 +532,7 @@ describe('MessageStore 유틸리티 함수', () => {
       expect(result.extraData).toBeUndefined();
     });
 
-    it('should return only file_path for Edit tool', () => {
+    it('should return file_path, old_string, new_string for Edit tool', () => {
       const input = {
         file_path: 'C:\\test\\file.ts',
         old_string: 'old content',
@@ -542,7 +542,51 @@ describe('MessageStore 유틸리티 함수', () => {
       const result = summarizeToolInput('Edit', input);
 
       expect(result.file_path).toBe('C:\\test\\file.ts');
-      expect(result.old_string).toBeUndefined();
+      expect(result.old_string).toBe('old content');
+      expect(result.new_string).toBe('new content');
+    });
+
+    it('should truncate long old_string/new_string for Edit tool', () => {
+      const longString = 'x'.repeat(600);
+      const input = {
+        file_path: 'C:\\test\\file.ts',
+        old_string: longString,
+        new_string: longString,
+      };
+
+      const result = summarizeToolInput('Edit', input);
+
+      expect(result.file_path).toBe('C:\\test\\file.ts');
+      expect((result.old_string as string).length).toBeLessThan(longString.length);
+      expect((result.old_string as string)).toContain('...');
+      expect((result.new_string as string).length).toBeLessThan(longString.length);
+      expect((result.new_string as string)).toContain('...');
+    });
+
+    it('should return file_path and content for Write tool', () => {
+      const input = {
+        file_path: 'C:\\test\\file.ts',
+        content: 'file content here',
+      };
+
+      const result = summarizeToolInput('Write', input);
+
+      expect(result.file_path).toBe('C:\\test\\file.ts');
+      expect(result.content).toBe('file content here');
+    });
+
+    it('should truncate long content for Write tool', () => {
+      const longContent = 'x'.repeat(600);
+      const input = {
+        file_path: 'C:\\test\\file.ts',
+        content: longContent,
+      };
+
+      const result = summarizeToolInput('Write', input);
+
+      expect(result.file_path).toBe('C:\\test\\file.ts');
+      expect((result.content as string).length).toBeLessThan(longContent.length);
+      expect((result.content as string)).toContain('...');
     });
 
     it('should return notebook_path for NotebookEdit tool', () => {

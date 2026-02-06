@@ -1,6 +1,6 @@
 {
-  "activeWorkspaceId": "f0a1eca0-9253-47ec-a1b6-3c29d8427801",
-  "activeConversationId": "5c70640a-90c5-4b40-baf5-6592b67461e5",
+  "activeWorkspaceId": "7bdb5138-14f4-4ad3-a37a-632218ddd742",
+  "activeConversationId": "76893b2a-08a3-4b79-ae14-49a5d8e8a7f5",
   "workspaces": [
     {
       "workspaceId": "7bdb5138-14f4-4ad3-a37a-632218ddd742",
@@ -19,42 +19,33 @@
         {
           "conversationId": "76893b2a-08a3-4b79-ae14-49a5d8e8a7f5",
           "name": "테스트2",
-          "claudeSessionId": null,
-          "status": "idle",
+          "claudeSessionId": "3c98d1d4-e264-447d-9c1e-24c806d2dc28",
+          "status": "working",
           "unread": false,
-          "permissionMode": "default",
+          "permissionMode": "bypassPermissions",
           "createdAt": 1770085923438
         }
       ],
       "createdAt": 1770010138377,
-      "lastUsed": 1770085923438
+      "lastUsed": 1770341871888
     },
     {
-      "workspaceId": "f0a1eca0-9253-47ec-a1b6-3c29d8427801",
+      "workspaceId": "bf78aef7-3e8b-4278-b03a-7b0d3e9bb088",
       "name": "eb",
-      "workingDir": "C:\\workspace\\eb",
+      "workingDir": "C:\\WorkSpace\\eb",
       "conversations": [
         {
-          "conversationId": "64060c24-25cf-4a40-91e9-4608fa2967b5",
+          "conversationId": "8018fa89-41c3-47d8-9dc0-82814cbe5451",
           "name": "새 대화",
           "claudeSessionId": null,
           "status": "idle",
           "unread": false,
           "permissionMode": "default",
-          "createdAt": 1770086186893
-        },
-        {
-          "conversationId": "5c70640a-90c5-4b40-baf5-6592b67461e5",
-          "name": "테스트 대화2",
-          "claudeSessionId": null,
-          "status": "idle",
-          "unread": false,
-          "permissionMode": "default",
-          "createdAt": 1770093808110
+          "createdAt": 1770285246817
         }
       ],
-      "createdAt": 1770086186893,
-      "lastUsed": 1770093808110
+      "createdAt": 1770285246817,
+      "lastUsed": 1770290703013
     }
   ]
 }

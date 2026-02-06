@@ -143,22 +143,22 @@ async function start() {
     process.stderr.write(`[pylon] ${data}`);
   });
 
-  // Expo 앱 (새 터미널)
+  // Vite 앱 (새 터미널)
   if (platform() === 'win32') {
     const appDir = join(rootDir, 'packages', 'client').replace(/\//g, '\\');
     // PowerShell로 새 터미널 열고 PID 얻기
-    const expoCmd = `cd /d "${appDir}" && pnpm start`;
-    const psScript = `$p = Start-Process cmd -ArgumentList '/k','${expoCmd.replace(/'/g, "''")}' -PassThru; $p.Id`;
+    const viteCmd = `cd /d "${appDir}" && pnpm dev`;
+    const psScript = `$p = Start-Process cmd -ArgumentList '/k','${viteCmd.replace(/'/g, "''")}' -PassThru; $p.Id`;
     exec(`powershell -Command "${psScript}"`, { cwd: rootDir }, (err, stdout) => {
       if (!err && stdout.trim()) {
-        pids.expo = parseInt(stdout.trim());
+        pids.vite = parseInt(stdout.trim());
         savePids(pids);  // PID 다시 저장
-        console.log(`[dev] Expo PID: ${pids.expo}`);
+        console.log(`[dev] Vite PID: ${pids.vite}`);
       }
     });
-    console.log('[dev] Expo app launching in new terminal...');
+    console.log('[dev] Vite client launching in new terminal...');
   } else {
-    console.log('[dev] Run Expo manually: cd packages/client && pnpm start');
+    console.log('[dev] Run Vite manually: cd packages/client && pnpm dev');
   }
 
   // PID 저장
@@ -167,7 +167,7 @@ async function start() {
   console.log('');
   console.log(`  Relay:  ws://localhost:${devConfig.relay.port}`);
   console.log(`  Pylon:  ${devConfig.pylon.relayUrl} (relay connection)`);
-  console.log(`  Expo:   http://localhost:${devConfig.expo.port} (new terminal)`);
+  console.log(`  Client: http://localhost:${devConfig.client.port} (new terminal)`);
   console.log('');
   console.log('  Stop:   pnpm dev:stop');
   console.log('');

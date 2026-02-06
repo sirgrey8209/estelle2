@@ -25,10 +25,12 @@ export function routeMessage(message: RelayMessage): void {
   switch (type) {
     // === Workspace 목록 ===
     case MessageType.WORKSPACE_LIST_RESULT: {
-      const { deviceId, deviceName, workspaces } = payload as {
+      const { deviceId, deviceName, workspaces, activeWorkspaceId, activeConversationId } = payload as {
         deviceId: string | number;
         deviceName?: string;
         workspaces?: WorkspaceWithActive[];
+        activeWorkspaceId?: string;
+        activeConversationId?: string;
       };
 
       const pylonId = typeof deviceId === 'number' ? deviceId : parseInt(deviceId, 10);
@@ -42,17 +44,18 @@ export function routeMessage(message: RelayMessage): void {
         });
       }
 
-      // 워크스페이스 목록 업데이트
-      const isFirstLoad = !useRelayStore.getState().desksLoaded;
-      useWorkspaceStore.getState().setWorkspaces(pylonId, workspaces || []);
+      // 워크스페이스 목록 업데이트 (서버의 active 정보 전달)
+      const activeInfo = activeWorkspaceId && activeConversationId
+        ? { workspaceId: activeWorkspaceId, conversationId: activeConversationId }
+        : undefined;
+      useWorkspaceStore.getState().setWorkspaces(pylonId, workspaces || [], activeInfo);
       useRelayStore.getState().setDesksLoaded(true);
 
-      // 첫 로드 시에만 선택된 대화에 대해 서버에 알림 (히스토리 로드 + 뷰어 등록)
-      if (isFirstLoad) {
-        const { selectedConversation } = useWorkspaceStore.getState();
-        if (selectedConversation) {
-          selectConversation(selectedConversation.workspaceId, selectedConversation.conversationId);
-        }
+      // 선택된 대화에 대해 서버에 알림 (히스토리 로드 + 뷰어 등록)
+      // Pylon이 재시작되면 클라이언트 상태는 유지되지만 히스토리를 다시 로드해야 함
+      const { selectedConversation } = useWorkspaceStore.getState();
+      if (selectedConversation) {
+        selectConversation(selectedConversation.workspaceId, selectedConversation.conversationId);
       }
       break;
     }
@@ -96,7 +99,7 @@ export function routeMessage(message: RelayMessage): void {
 
     // === 폴더 목록 ===
     case MessageType.FOLDER_LIST_RESULT: {
-      // CustomEvent로 컴포넌트에 전달 (NewWorkspaceDialog에서 수신)
+      // CustomEvent로 컴포넌트에 전달 (WorkspaceDialog에서 수신)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('folder_list_result', { detail: payload })

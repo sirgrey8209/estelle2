@@ -5,4 +5,5 @@
 
 export { WorkspaceSidebar } from './WorkspaceSidebar';
 export { ConversationItem } from './ConversationItem';
-export { NewWorkspaceDialog } from './NewWorkspaceDialog';
+export { WorkspaceDialog } from './WorkspaceDialog';
+export { NewConversationDialog } from './NewConversationDialog';

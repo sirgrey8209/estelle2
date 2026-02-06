@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, ScrollView } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { useMemo, ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 
 interface MarkdownViewerProps {
   /** 마크다운 내용 */
@@ -10,7 +9,7 @@ interface MarkdownViewerProps {
 }
 
 /**
- * 마크다운 뷰어 (v1 Flutter MarkdownViewer 대응)
+ * 마크다운 뷰어
  *
  * 기본적인 마크다운 렌더링 지원:
  * - 제목 (# ~ ####)
@@ -20,22 +19,18 @@ interface MarkdownViewerProps {
  * - 목록 (-, *, 1.)
  * - 인용 (>)
  * - 구분선 (---, ***)
- *
- * TODO: react-native-markdown-display 패키지로 전체 마크다운 지원
  */
 export function MarkdownViewer({ content, filename }: MarkdownViewerProps) {
-  const theme = useTheme();
-  // 마크다운 파싱
   const elements = useMemo(() => parseMarkdown(content), [content]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+    <div className="flex-1 bg-card overflow-auto">
+      <div className="p-4">
         {elements.map((element, index) => (
           <MarkdownElement key={index} element={element} />
         ))}
-      </ScrollView>
-    </View>
+      </div>
+    </div>
   );
 }
 
@@ -55,7 +50,7 @@ type MarkdownElementType =
 interface ParsedElement {
   type: MarkdownElementType;
   content: string;
-  language?: string; // 코드 블록용
+  language?: string;
 }
 
 /**
@@ -160,110 +155,78 @@ function parseMarkdown(content: string): ParsedElement[] {
  * 마크다운 요소 렌더링
  */
 function MarkdownElement({ element }: { element: ParsedElement }) {
-  const theme = useTheme();
-
   switch (element.type) {
     case 'h1':
       return (
-        <Text variant="headlineSmall" style={{ marginTop: 16, marginBottom: 8 }}>
-          {renderInlineStyles(element.content, theme)}
-        </Text>
+        <h1 className="text-2xl font-bold mt-4 mb-2">
+          {renderInlineStyles(element.content)}
+        </h1>
       );
     case 'h2':
       return (
-        <Text variant="titleLarge" style={{ marginTop: 12, marginBottom: 8 }}>
-          {renderInlineStyles(element.content, theme)}
-        </Text>
+        <h2 className="text-xl font-semibold mt-3 mb-2">
+          {renderInlineStyles(element.content)}
+        </h2>
       );
     case 'h3':
       return (
-        <Text variant="titleMedium" style={{ marginTop: 12, marginBottom: 4 }}>
-          {renderInlineStyles(element.content, theme)}
-        </Text>
+        <h3 className="text-lg font-semibold mt-3 mb-1">
+          {renderInlineStyles(element.content)}
+        </h3>
       );
     case 'h4':
       return (
-        <Text variant="titleSmall" style={{ marginTop: 8, marginBottom: 4, opacity: 0.8 }}>
-          {renderInlineStyles(element.content, theme)}
-        </Text>
+        <h4 className="text-base font-medium mt-2 mb-1">
+          {renderInlineStyles(element.content)}
+        </h4>
       );
     case 'paragraph':
       return (
-        <Text variant="bodyMedium" style={{ lineHeight: 24, marginBottom: 8, opacity: 0.8 }} selectable>
-          {renderInlineStyles(element.content, theme)}
-        </Text>
+        <p className="leading-6 mb-2 opacity-80 select-text">
+          {renderInlineStyles(element.content)}
+        </p>
       );
     case 'code_block':
       return (
-        <View
-          style={{
-            backgroundColor: theme.colors.surfaceVariant,
-            padding: 12,
-            borderRadius: 8,
-            marginVertical: 8,
-            borderWidth: 1,
-            borderColor: theme.colors.outlineVariant,
-          }}
-        >
+        <div className="bg-muted p-3 rounded-lg my-2 border border-border">
           {element.language && (
-            <Text variant="labelSmall" style={{ opacity: 0.6, marginBottom: 8 }}>
-              {element.language}
-            </Text>
+            <p className="text-xs text-muted-foreground mb-2">{element.language}</p>
           )}
-          <Text
-            variant="bodySmall"
-            style={{ fontFamily: 'monospace' }}
-            selectable
-          >
+          <pre className="font-mono text-sm select-text whitespace-pre-wrap">
             {element.content}
-          </Text>
-        </View>
+          </pre>
+        </div>
       );
     case 'blockquote':
       return (
-        <View
-          style={{
-            borderLeftWidth: 2,
-            borderLeftColor: theme.colors.primary,
-            paddingLeft: 12,
-            marginVertical: 8,
-          }}
-        >
-          <Text variant="bodyMedium" style={{ fontStyle: 'italic', opacity: 0.8 }} selectable>
-            {renderInlineStyles(element.content, theme)}
-          </Text>
-        </View>
+        <div className="border-l-2 border-primary pl-3 my-2">
+          <p className="italic opacity-80 select-text">
+            {renderInlineStyles(element.content)}
+          </p>
+        </div>
       );
     case 'list_item':
       return (
-        <View style={{ flexDirection: 'row', marginLeft: 8, marginBottom: 4 }}>
-          <Text style={{ color: theme.colors.primary, marginRight: 8 }}>•</Text>
-          <Text variant="bodyMedium" style={{ flex: 1, opacity: 0.8 }} selectable>
-            {renderInlineStyles(element.content, theme)}
-          </Text>
-        </View>
+        <div className="flex ml-2 mb-1">
+          <span className="text-primary mr-2">•</span>
+          <p className="flex-1 opacity-80 select-text">
+            {renderInlineStyles(element.content)}
+          </p>
+        </div>
       );
     case 'ordered_list_item':
       return (
-        <View style={{ flexDirection: 'row', marginLeft: 8, marginBottom: 4 }}>
-          <Text style={{ color: theme.colors.primary, marginRight: 8 }}>-</Text>
-          <Text variant="bodyMedium" style={{ flex: 1, opacity: 0.8 }} selectable>
-            {renderInlineStyles(element.content, theme)}
-          </Text>
-        </View>
+        <div className="flex ml-2 mb-1">
+          <span className="text-primary mr-2">-</span>
+          <p className="flex-1 opacity-80 select-text">
+            {renderInlineStyles(element.content)}
+          </p>
+        </div>
       );
     case 'hr':
-      return (
-        <View
-          style={{
-            height: 1,
-            backgroundColor: theme.colors.outlineVariant,
-            marginVertical: 16,
-          }}
-        />
-      );
+      return <hr className="my-4 border-border" />;
     case 'empty':
-      return <View style={{ height: 8 }} />;
+      return <div className="h-2" />;
     default:
       return null;
   }
@@ -272,9 +235,8 @@ function MarkdownElement({ element }: { element: ParsedElement }) {
 /**
  * 인라인 스타일 렌더링 (bold, italic, code)
  */
-function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): React.ReactNode {
-  // 간단한 구현 - 완전한 파싱은 markdown 라이브러리 사용 권장
-  const parts: React.ReactNode[] = [];
+function renderInlineStyles(text: string): ReactNode {
+  const parts: ReactNode[] = [];
   let remaining = text;
   let key = 0;
 
@@ -290,9 +252,9 @@ function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): R
     }
 
     parts.push(
-      <Text key={key++} style={{ fontWeight: 'bold' }}>
+      <strong key={key++}>
         {remaining.slice(start + 2, end)}
-      </Text>
+      </strong>
     );
 
     remaining = remaining.slice(end + 2);
@@ -300,7 +262,7 @@ function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): R
 
   // *italic* 처리 (bold 처리 후 남은 부분)
   let italicRemaining = remaining;
-  const italicParts: React.ReactNode[] = [];
+  const italicParts: ReactNode[] = [];
 
   while (italicRemaining.includes('*')) {
     const start = italicRemaining.indexOf('*');
@@ -313,9 +275,9 @@ function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): R
     }
 
     italicParts.push(
-      <Text key={key++} style={{ fontStyle: 'italic' }}>
+      <em key={key++}>
         {italicRemaining.slice(start + 1, end)}
-      </Text>
+      </em>
     );
 
     italicRemaining = italicRemaining.slice(end + 1);
@@ -329,7 +291,7 @@ function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): R
   }
 
   // `code` 처리
-  const finalParts: React.ReactNode[] = [];
+  const finalParts: ReactNode[] = [];
   for (const part of parts) {
     if (typeof part === 'string' && part.includes('`')) {
       let codePart = part;
@@ -348,18 +310,12 @@ function renderInlineStyles(text: string, theme: ReturnType<typeof useTheme>): R
         }
 
         finalParts.push(
-          <Text
+          <code
             key={key++}
-            style={{
-              backgroundColor: theme.colors.surfaceVariant,
-              paddingHorizontal: 4,
-              borderRadius: 4,
-              color: theme.colors.primary,
-              fontFamily: 'monospace',
-            }}
+            className="bg-muted px-1 rounded text-primary font-mono"
           >
             {codePart.slice(start + 1, end)}
-          </Text>
+          </code>
         );
 
         codePart = codePart.slice(end + 1);

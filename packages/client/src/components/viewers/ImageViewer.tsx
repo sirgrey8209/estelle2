@@ -1,6 +1,4 @@
-import React from 'react';
-import { View, Image, ScrollView } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { useState } from 'react';
 
 interface ImageViewerProps {
   /** Base64 인코딩된 이미지 데이터 또는 URI */
@@ -13,45 +11,31 @@ interface ImageViewerProps {
  * 이미지 뷰어 (확대/축소 지원)
  */
 export function ImageViewer({ data, filename }: ImageViewerProps) {
-  const theme = useTheme();
-  // data가 base64인지 uri인지 판단
-  const imageSource = data.startsWith('data:') || data.startsWith('file:') || data.startsWith('http')
-    ? { uri: data }
-    : { uri: `data:image/png;base64,${data}` };
+  const [error, setError] = useState(false);
 
-  const [error, setError] = React.useState(false);
+  // data가 base64인지 uri인지 판단
+  const imageSrc = data.startsWith('data:') || data.startsWith('file:') || data.startsWith('http')
+    ? data
+    : `data:image/png;base64,${data}`;
 
   if (error) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: theme.colors.surface,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Text style={{ color: theme.colors.error, fontSize: 40, marginBottom: 12 }}>🖼️</Text>
-        <Text variant="bodyMedium" style={{ opacity: 0.6 }}>이미지를 표시할 수 없습니다</Text>
-        <Text variant="labelSmall" style={{ marginTop: 4, opacity: 0.4 }}>{filename}</Text>
-      </View>
+      <div className="flex-1 bg-card flex flex-col items-center justify-center">
+        <span className="text-4xl mb-3">🖼️</span>
+        <p className="text-muted-foreground">이미지를 표시할 수 없습니다</p>
+        <p className="text-xs text-muted-foreground mt-1">{filename}</p>
+      </div>
     );
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.colors.surface }}
-      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
-      maximumZoomScale={4}
-      minimumZoomScale={0.5}
-      bouncesZoom
-    >
-      <Image
-        source={imageSource}
-        style={{ width: '100%', height: '100%' }}
-        resizeMode="contain"
+    <div className="flex-1 bg-card overflow-auto flex items-center justify-center p-4">
+      <img
+        src={imageSrc}
+        alt={filename}
+        className="max-w-full max-h-full object-contain"
         onError={() => setError(true)}
       />
-    </ScrollView>
+    </div>
   );
 }

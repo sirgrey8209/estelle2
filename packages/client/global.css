@@ -5,7 +5,7 @@
 /* Global Scrollbar Styling - 기본 폴백 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 92, 246, 0.5) transparent;
+  scrollbar-color: rgba(56, 189, 248, 0.4) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -18,12 +18,12 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.5);
+  background: rgba(56, 189, 248, 0.4);
   border-radius: 3px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.7);
+  background: rgba(56, 189, 248, 0.6);
 }
 
 *::-webkit-scrollbar-corner {

@@ -77,10 +77,15 @@
   - [x] Expo web export
   - [x] PM2 + serve 설정 (포트 3000)
 
-- [x] **App 모바일 빌드** ✅
-  - [x] Android SDK, 에뮬레이터 설치
-  - [x] AVD 생성 (Pixel6)
-  - [x] APK 빌드 (react-native bundle + afterEvaluate 해결)
+- [x] **App 모바일 빌드** (삭제됨 - 웹 전용 전환)
+  - 삭제: APK 빌드 제거 (Expo → Vite 전환)
+
+- [x] **Expo → React (Vite) 전환** ✅
+  - [x] Vite 빌드 시스템 구축
+  - [x] shadcn/ui 컴포넌트 라이브러리 적용
+  - [x] Platform Abstraction Layer (storage, useImagePicker)
+  - [x] Relay 정적 파일 서빙 통합
+  - [x] 테스트 환경 통합 (Jest → Vitest)
 
 - [ ] **v1 제거**
   - [ ] v1 Relay 중단
@@ -95,7 +100,7 @@
 |----------|------|----------|---------|
 | Relay v2 | ✅ 동작 | 3000 | Fly.io (wss://estelle-relay-v2.fly.dev) |
 | Pylon v2 | ✅ 동작 | - | PM2 (release/pylon) |
-| Client (Expo) | ✅ 동작 | 10000 | PM2 웹 (8080) + APK |
+| Client (Vite) | ✅ 동작 | 5173 | Relay 내장 (8080) |
 
 환경 설정: `config/environments.json`
 
@@ -111,12 +116,12 @@
 ### 테스트 현황
 
 ```
-✓ Core:    445 tests
-✓ Relay:   100+ tests
-✓ Pylon:   497 tests
-✓ Client:  179 tests (vitest 118 + jest 61)
+✓ Core:    201 tests
+✓ Relay:   162 tests
+✓ Pylon:   508 tests
+✓ Client:  172 tests (vitest, jsdom)
 ─────────────────────
-  Total: 1,200+ tests passing
+  Total: 1043 tests passing
 ```
 
 ---
@@ -132,6 +137,13 @@
 
 ## 작업 로그
 
+- [260205 16:45] 워크스페이스 CRUD Phase 2 완료 (useLongPress 훅, WorkspaceDialog New/Edit 통합, WorkspaceSidebar 롱홀드 편집)
+- [260205 16:15] 워크스페이스 CRUD Phase 1 완료 (updateWorkspace API, foldersWithChildren, listDrives)
+- [260205 15:30] UI 버그 수정 일괄 (색상 테마 Claude.ai 스타일, 퍼미션 버튼 연결, AskUserQuestion 표시, 모바일 레이아웃, 디바이스 아이콘)
+- [260205 13:48] Vite 마이그레이션 버그 수정 (HomePage 컴포넌트 연결, ChatArea 스크롤/레이아웃, AutoResizeTextarea onChange)
+- [260205 10:25] Expo → Vite 전환 완료 (Phase 0-5, shadcn/ui, Relay 정적 파일 서빙 통합, APK 제거)
+- [260204 23:20] ToolCard UX 완료 (8개 툴 커스텀 렌더링, textUtils 추출, 테스트 포트 분리)
+- [260204 14:30] 폰트 체계 통일 (labelSmall→bodySmall 24개 파일, 앱타이틀 headlineSmall 24sp, Markdown 헤딩 조정)
 - [260204 11:15] 환경 설정 중앙화 (config/environments.json), 웹 타이틀 (dev) 표시, 커스텀 스크롤바 컴포넌트
 - [260203 23:55] APK 빌드 성공 + GitHub Release v2.0.0 배포
 - [260203 22:xx] 릴리즈 배포 시스템 구축 (Relay→Fly.io, Pylon/Client→PM2)
@@ -148,4 +160,4 @@
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-04*
+*갱신일: 2026-02-05*

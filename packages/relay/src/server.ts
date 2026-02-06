@@ -363,6 +363,9 @@ export interface RelayServerOptions {
 
   /** 커스텀 디바이스 설정 (기본값: DEVICES) */
   devices?: Record<number, DeviceConfig>;
+
+  /** 정적 파일 디렉토리 (설정 시 HTTP 서버에서 정적 파일 서빙) */
+  staticDir?: string;
 }
 
 /**
@@ -470,32 +473,59 @@ export function createRelayServer(
  * 이 함수는 패키지를 CLI로 실행할 때 사용됩니다.
  * 일반적으로는 createRelayServer를 직접 사용하는 것을 권장합니다.
  *
+ * @param options - 서버 옵션 (선택)
+ *
  * @example
  * ```bash
  * # 환경변수로 포트 설정
  * PORT=8080 node dist/server.js
+ *
+ * # 정적 파일 디렉토리 설정 (환경변수)
+ * STATIC_DIR=./public PORT=8080 node dist/server.js
  * ```
  */
-export async function main(): Promise<void> {
-  // 동적 import로 ws 모듈 로드 (테스트 시 모킹 용이)
+export async function main(options: RelayServerOptions = {}): Promise<void> {
+  // 동적 import로 모듈 로드
   const { WebSocketServer } = await import('ws');
+  const http = await import('http');
 
-  const port = parseInt(process.env['PORT'] || String(DEFAULT_PORT), 10);
-  const wss = new WebSocketServer({ port });
+  const port = options.port ?? parseInt(process.env['PORT'] || String(DEFAULT_PORT), 10);
+  const staticDir = options.staticDir ?? process.env['STATIC_DIR'];
 
-  const relay = createRelayServer(wss, { port });
+  // HTTP 서버 생성 (정적 파일 서빙 포함)
+  let httpServer: ReturnType<typeof http.createServer> | null = null;
+  let wss: InstanceType<typeof WebSocketServer>;
+
+  if (staticDir) {
+    // 동적 import로 정적 파일 핸들러 로드
+    const { createStaticHandler } = await import('./static.js');
+
+    httpServer = http.createServer(createStaticHandler({ staticDir }));
+    wss = new WebSocketServer({ server: httpServer });
+
+    httpServer.listen(port, () => {
+      log(`[Estelle Relay v2] Started on port ${port}`);
+      log(`Static files: ${staticDir}`);
+    });
+  } else {
+    // WebSocket 전용 서버
+    wss = new WebSocketServer({ port });
+  }
+
+  const relay = createRelayServer(wss, { port, devices: options.devices });
   relay.start();
 
   // Graceful shutdown
-  process.on('SIGINT', async () => {
+  const shutdown = async () => {
     await relay.stop();
+    if (httpServer) {
+      httpServer.close();
+    }
     process.exit(0);
-  });
+  };
 
-  process.on('SIGTERM', async () => {
-    await relay.stop();
-    process.exit(0);
-  });
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 // CLI로 직접 실행된 경우

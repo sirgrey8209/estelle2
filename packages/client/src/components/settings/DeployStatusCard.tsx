@@ -1,14 +1,12 @@
-import React from 'react';
-import { View } from 'react-native';
-import { Card, Text, ActivityIndicator, useTheme } from 'react-native-paper';
+import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useSettingsStore, DeployPhase, BuildTaskStatus } from '../../stores';
-import { semanticColors } from '../../theme';
+import { cn } from '../../lib/utils';
 
 /**
  * 배포 상태 카드
  */
 export function DeployStatusCard() {
-  const theme = useTheme();
   const { deployPhase, deployErrorMessage, buildTasks, versionInfo } =
     useSettingsStore();
 
@@ -27,90 +25,73 @@ export function DeployStatusCard() {
 
   const getPhaseColor = (phase: DeployPhase): string => {
     const colors: Record<DeployPhase, string> = {
-      initial: theme.colors.outline,
-      building: semanticColors.warning,
-      buildReady: semanticColors.info,
-      preparing: semanticColors.warning,
-      ready: semanticColors.success,
-      deploying: theme.colors.primary,
-      error: theme.colors.error,
+      initial: 'text-muted-foreground',
+      building: 'text-yellow-500',
+      buildReady: 'text-blue-500',
+      preparing: 'text-yellow-500',
+      ready: 'text-green-500',
+      deploying: 'text-primary',
+      error: 'text-destructive',
     };
     return colors[phase];
   };
 
   const getTaskColor = (status: BuildTaskStatus): string => {
     const colors: Record<BuildTaskStatus, string> = {
-      pending: theme.colors.outline,
-      building: semanticColors.warning,
-      ready: semanticColors.success,
-      error: theme.colors.error,
+      pending: 'bg-muted',
+      building: 'bg-yellow-500',
+      ready: 'bg-green-500',
+      error: 'bg-destructive',
     };
     return colors[status];
   };
 
   return (
-    <Card mode="outlined" style={{ marginBottom: 8 }}>
-      <Card.Title
-        title="Deploy"
-        titleVariant="titleSmall"
-        left={() => <Text style={{ fontSize: 16 }}>🚀</Text>}
-      />
-      <Card.Content>
-        <Text variant="bodySmall" style={{ color: getPhaseColor(deployPhase) }}>
+    <Card className="mb-2">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <span>🚀</span>
+          Deploy
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className={cn('text-sm', getPhaseColor(deployPhase))}>
           Status: {getPhaseLabel(deployPhase)}
-        </Text>
+        </p>
 
         {Object.keys(buildTasks).length > 0 && (
-          <View style={{
-            marginTop: 8,
-            padding: 8,
-            backgroundColor: theme.colors.surfaceVariant,
-            borderRadius: 4,
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}>
+          <div className="mt-2 p-2 bg-muted rounded flex flex-wrap gap-2">
             {Object.entries(buildTasks).map(([task, status]) => (
-              <View
+              <div
                 key={task}
-                style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  backgroundColor: getTaskColor(status),
-                }}
+                className={cn('w-4 h-4 rounded-full', getTaskColor(status))}
               />
             ))}
-          </View>
+          </div>
         )}
 
         {versionInfo && (
-          <Text variant="labelSmall" style={{ marginTop: 8, opacity: 0.6 }}>
+          <p className="text-xs text-muted-foreground mt-2">
             v{versionInfo.version} ({versionInfo.commit})
-          </Text>
+          </p>
         )}
 
         {deployErrorMessage && (
-          <View style={{
-            marginTop: 8,
-            padding: 8,
-            backgroundColor: theme.colors.errorContainer,
-            borderRadius: 4,
-          }}>
-            <Text variant="labelSmall" style={{ color: theme.colors.error }}>
+          <div className="mt-2 p-2 bg-destructive/10 rounded">
+            <p className="text-xs text-destructive">
               {deployErrorMessage}
-            </Text>
-          </View>
+            </p>
+          </div>
         )}
 
         {(deployPhase === 'building' ||
           deployPhase === 'preparing' ||
           deployPhase === 'deploying') && (
-          <View style={{ marginTop: 12, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-          </View>
+          <div className="mt-3 flex justify-center">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          </div>
         )}
-      </Card.Content>
+      </CardContent>
     </Card>
   );
 }
