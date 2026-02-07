@@ -13,22 +13,28 @@ export {
   type SelectedConversation,
 } from './workspaceStore';
 
+// 타입과 유틸리티는 @estelle/core에서 re-export
+export type {
+  ClaudeStatus,
+  StoreMessage,
+  Attachment,
+  FileInfo,
+  ResultInfo,
+  PendingRequest,
+  PermissionRequest,
+  QuestionRequest,
+} from '@estelle/core';
+
 export {
-  useClaudeStore,
-  type ClaudeState,
-  type ClaudeStatus,
-  type ClaudeMessage,
-  type StoreMessage,
-  type Attachment,
-  type FileInfo,
-  type ResultInfo,
-  type PendingRequest,
-  type PermissionRequest,
-  type QuestionRequest,
   parseAttachments,
   getAbortDisplayText,
   formatFileSize,
-} from './claudeStore';
+} from '@estelle/core';
+
+/**
+ * @deprecated StoreMessage를 사용하세요
+ */
+export type { StoreMessage as ClaudeMessage } from '@estelle/core';
 export {
   useSettingsStore,
   type SettingsState,
@@ -59,3 +65,10 @@ export {
   type DeviceConfigState,
   type DeviceConfig,
 } from './deviceConfigStore';
+
+// 대화별 Claude 상태 스토어
+export {
+  useConversationStore,
+  type ConversationStoreState,
+  getInitialClaudeState,
+} from './conversationStore';

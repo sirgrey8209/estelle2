@@ -28,47 +28,57 @@ const mockWebSocket = {
   }),
 } as unknown as WebSocket;
 
-// Store mocks
-const mockClaudeStore = {
+// Store mocks - conversationStore 사용
+const mockConversationState = {
   status: 'idle' as 'idle' | 'working' | 'permission',
   messages: [] as unknown[],
   textBuffer: '',
   pendingRequests: [] as unknown[],
-  hasPendingRequests: false,
-  setStatus: vi.fn(),
-  addMessage: vi.fn((msg: unknown) => {
-    mockClaudeStore.messages.push(msg);
+  workStartTime: null as number | null,
+  realtimeUsage: null,
+};
+
+const mockConversationStore = {
+  states: new Map<string, typeof mockConversationState>(),
+  currentConversationId: 'conv-1' as string | null,
+  getState: vi.fn((convId: string) => mockConversationState),
+  getCurrentState: vi.fn(() => mockConversationState),
+  hasPendingRequests: vi.fn((_convId?: string) => mockConversationState.pendingRequests.length > 0),
+  setStatus: vi.fn((convId: string, status: string) => {
+    mockConversationState.status = status as any;
   }),
-  setMessages: vi.fn((msgs: unknown[]) => {
-    mockClaudeStore.messages = [...msgs];
+  addMessage: vi.fn((convId: string, msg: unknown) => {
+    mockConversationState.messages.push(msg);
   }),
-  clearMessages: vi.fn(() => {
-    mockClaudeStore.messages = [];
+  setMessages: vi.fn((convId: string, msgs: unknown[]) => {
+    mockConversationState.messages = [...msgs];
   }),
-  appendTextBuffer: vi.fn((text: string) => {
-    mockClaudeStore.textBuffer += text;
+  clearMessages: vi.fn((convId: string) => {
+    mockConversationState.messages = [];
+    mockConversationState.pendingRequests = [];
   }),
-  flushTextBuffer: vi.fn(() => {
-    if (mockClaudeStore.textBuffer) {
-      mockClaudeStore.messages.push({
+  appendTextBuffer: vi.fn((convId: string, text: string) => {
+    mockConversationState.textBuffer += text;
+  }),
+  flushTextBuffer: vi.fn((convId: string) => {
+    if (mockConversationState.textBuffer) {
+      mockConversationState.messages.push({
         role: 'assistant',
         type: 'text',
-        content: mockClaudeStore.textBuffer,
+        content: mockConversationState.textBuffer,
       });
-      mockClaudeStore.textBuffer = '';
+      mockConversationState.textBuffer = '';
     }
   }),
-  addPendingRequest: vi.fn((req: unknown) => {
-    mockClaudeStore.pendingRequests.push(req);
-    mockClaudeStore.hasPendingRequests = true;
+  addPendingRequest: vi.fn((convId: string, req: unknown) => {
+    mockConversationState.pendingRequests.push(req);
   }),
-  removePendingRequest: vi.fn((id: string) => {
-    mockClaudeStore.pendingRequests = mockClaudeStore.pendingRequests.filter(
+  removePendingRequest: vi.fn((convId: string, id: string) => {
+    mockConversationState.pendingRequests = mockConversationState.pendingRequests.filter(
       (r: any) => r.toolUseId !== id
     );
-    mockClaudeStore.hasPendingRequests = mockClaudeStore.pendingRequests.length > 0;
   }),
-  handleClaudeEvent: vi.fn(),
+  deleteConversation: vi.fn(),
   reset: vi.fn(),
 };
 
@@ -116,11 +126,10 @@ describe('InputBar 동작', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sentMessages = [];
-    mockClaudeStore.messages = [];
-    mockClaudeStore.status = 'idle';
-    mockClaudeStore.textBuffer = '';
-    mockClaudeStore.pendingRequests = [];
-    mockClaudeStore.hasPendingRequests = false;
+    mockConversationState.messages = [];
+    mockConversationState.status = 'idle';
+    mockConversationState.textBuffer = '';
+    mockConversationState.pendingRequests = [];
     setWebSocket(mockWebSocket);
   });
 
@@ -182,8 +191,9 @@ describe('ChatArea 동작', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sentMessages = [];
-    mockClaudeStore.messages = [];
-    mockClaudeStore.status = 'idle';
+    mockConversationState.messages = [];
+    mockConversationState.status = 'idle';
+    mockConversationState.pendingRequests = [];
     setWebSocket(mockWebSocket);
   });
 
@@ -197,12 +207,12 @@ describe('ChatArea 동작', () => {
         content: 'Hello, Claude!',
         timestamp: Date.now(),
       };
-      mockClaudeStore.addMessage(userMessage);
+      mockConversationStore.addMessage('conv-1', userMessage);
       sendClaudeMessage('ws-1', 'conv-1', 'Hello, Claude!');
 
       // Store에 메시지가 추가됨
-      expect(mockClaudeStore.messages).toHaveLength(1);
-      expect(mockClaudeStore.messages[0]).toMatchObject({
+      expect(mockConversationState.messages).toHaveLength(1);
+      expect(mockConversationState.messages[0]).toMatchObject({
         role: 'user',
         content: 'Hello, Claude!',
       });
@@ -214,36 +224,37 @@ describe('ChatArea 동작', () => {
 
   describe('상태에 따른 UI 비활성화', () => {
     it('working 상태에서는 disabled=true', () => {
-      mockClaudeStore.status = 'working';
+      mockConversationState.status = 'working';
 
       // ChatArea에서 계산되는 로직:
-      const isWorking = mockClaudeStore.status === 'working';
-      const showRequestBar = mockClaudeStore.hasPendingRequests;
-      const disabled = isWorking || showRequestBar;
+      const currentState = mockConversationStore.getCurrentState();
+      const isWorking = currentState?.status === 'working';
+      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(true);
     });
 
     it('permission 요청이 있으면 disabled=true', () => {
-      mockClaudeStore.status = 'idle';
-      mockClaudeStore.hasPendingRequests = true;
+      mockConversationState.status = 'idle';
+      mockConversationState.pendingRequests = [{ type: 'permission', toolUseId: 'test' }];
 
-      const status = mockClaudeStore.status as 'idle' | 'working' | 'permission';
-      const isWorking = status === 'working';
-      const showRequestBar = mockClaudeStore.hasPendingRequests;
-      const disabled = isWorking || showRequestBar;
+      const currentState = mockConversationStore.getCurrentState();
+      const isWorking = currentState?.status === 'working';
+      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(true);
     });
 
     it('idle 상태이고 요청이 없으면 disabled=false', () => {
-      mockClaudeStore.status = 'idle';
-      mockClaudeStore.hasPendingRequests = false;
+      mockConversationState.status = 'idle';
+      mockConversationState.pendingRequests = [];
 
-      const status = mockClaudeStore.status as 'idle' | 'working' | 'permission';
-      const isWorking = status === 'working';
-      const showRequestBar = mockClaudeStore.hasPendingRequests;
-      const disabled = isWorking || showRequestBar;
+      const currentState = mockConversationStore.getCurrentState();
+      const isWorking = currentState?.status === 'working';
+      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(false);
     });
@@ -257,7 +268,7 @@ describe('WorkspaceSidebar 동작', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sentMessages = [];
-    mockClaudeStore.messages = [];
+    mockConversationState.messages = [];
     setWebSocket(mockWebSocket);
   });
 
@@ -275,14 +286,16 @@ describe('WorkspaceSidebar 동작', () => {
       });
     });
 
-    it('대화 선택 시 기존 메시지가 초기화되어야 한다', () => {
-      mockClaudeStore.messages = [{ role: 'user', content: 'old message' }];
-
+    it('대화 선택 시 setCurrentConversation이 호출됨', () => {
       // WorkspaceSidebar.onPress 시뮬레이션
-      mockClaudeStore.clearMessages();
+      // 이전: claudeStore.clearMessages()
+      // 현재: conversationStore.setCurrentConversation()
+
+      // 이 테스트는 실제 컴포넌트 로직 확인용
+      // 대화 전환 시 상태 변경은 conversationStore가 처리
       selectConversation('ws-1', 'conv-1');
 
-      expect(mockClaudeStore.messages).toHaveLength(0);
+      expect(sentMessages).toHaveLength(1);
     });
   });
 });
@@ -294,8 +307,7 @@ describe('RequestBar 동작', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sentMessages = [];
-    mockClaudeStore.pendingRequests = [];
-    mockClaudeStore.hasPendingRequests = false;
+    mockConversationState.pendingRequests = [];
     setWebSocket(mockWebSocket);
   });
 
@@ -346,30 +358,30 @@ describe('RequestBar 동작', () => {
 describe('스트리밍 동작', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClaudeStore.messages = [];
-    mockClaudeStore.textBuffer = '';
+    mockConversationState.messages = [];
+    mockConversationState.textBuffer = '';
   });
 
   it('text 이벤트가 연속으로 오면 textBuffer에 누적되어야 한다', () => {
     // 스트리밍 시뮬레이션
-    mockClaudeStore.appendTextBuffer('Hello');
-    mockClaudeStore.appendTextBuffer(' World');
-    mockClaudeStore.appendTextBuffer('!');
+    mockConversationStore.appendTextBuffer('conv-1', 'Hello');
+    mockConversationStore.appendTextBuffer('conv-1', ' World');
+    mockConversationStore.appendTextBuffer('conv-1', '!');
 
-    expect(mockClaudeStore.textBuffer).toBe('Hello World!');
+    expect(mockConversationState.textBuffer).toBe('Hello World!');
   });
 
   it('textComplete 이벤트 시 메시지로 변환되어야 한다', () => {
-    mockClaudeStore.textBuffer = 'Complete message';
-    mockClaudeStore.flushTextBuffer();
+    mockConversationState.textBuffer = 'Complete message';
+    mockConversationStore.flushTextBuffer('conv-1');
 
-    expect(mockClaudeStore.messages).toHaveLength(1);
-    expect(mockClaudeStore.messages[0]).toMatchObject({
+    expect(mockConversationState.messages).toHaveLength(1);
+    expect(mockConversationState.messages[0]).toMatchObject({
       role: 'assistant',
       type: 'text',
       content: 'Complete message',
     });
-    expect(mockClaudeStore.textBuffer).toBe('');
+    expect(mockConversationState.textBuffer).toBe('');
   });
 });
 
@@ -379,27 +391,26 @@ describe('스트리밍 동작', () => {
 describe('상태 전환', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClaudeStore.status = 'idle';
+    mockConversationState.status = 'idle';
   });
 
   it('working 상태로 전환 시 status가 변경되어야 한다', () => {
-    // claudeStore.setStatus 시뮬레이션
-    mockClaudeStore.status = 'working';
+    mockConversationStore.setStatus('conv-1', 'working');
 
-    expect(mockClaudeStore.status).toBe('working');
+    expect(mockConversationState.status).toBe('working');
   });
 
   it('permission 상태로 전환 시 status가 변경되어야 한다', () => {
-    mockClaudeStore.status = 'permission';
+    mockConversationStore.setStatus('conv-1', 'permission');
 
-    expect(mockClaudeStore.status).toBe('permission');
+    expect(mockConversationState.status).toBe('permission');
   });
 
   it('result 이후 idle로 돌아가야 한다', () => {
-    mockClaudeStore.status = 'working';
+    mockConversationState.status = 'working';
     // result 이벤트 처리 후
-    mockClaudeStore.status = 'idle';
+    mockConversationStore.setStatus('conv-1', 'idle');
 
-    expect(mockClaudeStore.status).toBe('idle');
+    expect(mockConversationState.status).toBe('idle');
   });
 });

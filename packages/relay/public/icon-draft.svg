@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 배경 그라데이션 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9"/>
+      <stop offset="100%" style="stop-color:#06b6d4"/>
+    </linearGradient>
+
+    <!-- 별 그라데이션 (살짝 밝은 포인트) -->
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#e0f2fe"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 배경 원 -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGrad)"/>
+
+  <!-- 궤도 링 (네트워크 느낌) -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+  <circle cx="256" cy="256" r="140" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+
+  <!-- 궤도 위의 노드들 (위성/연결점) -->
+  <circle cx="436" cy="256" r="12" fill="white" opacity="0.9"/>
+  <circle cx="76" cy="256" r="10" fill="white" opacity="0.7"/>
+  <circle cx="256" cy="76" r="10" fill="white" opacity="0.7"/>
+  <circle cx="340" cy="130" r="8" fill="white" opacity="0.6"/>
+  <circle cx="172" cy="382" r="8" fill="white" opacity="0.6"/>
+
+  <!-- 중앙 별 (6각 별) -->
+  <polygon
+    points="256,140 278,210 352,210 292,254 314,324 256,280 198,324 220,254 160,210 234,210"
+    fill="url(#starGrad)"
+  />
+
+  <!-- 별 중앙에 작은 원 (AI 코어 느낌) -->
+  <circle cx="256" cy="232" r="24" fill="rgba(14,165,233,0.8)"/>
+  <circle cx="256" cy="232" r="12" fill="white"/>
+</svg>

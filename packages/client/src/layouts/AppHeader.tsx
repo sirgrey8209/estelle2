@@ -6,8 +6,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useDeviceConfigStore } from '../stores/deviceConfigStore';
 import { SettingsDialog } from '../components/settings/SettingsDialog';
 import { getDeviceIcon } from '../utils/device-icons';
-
-const APP_VERSION = '2.0.0';
+import { BuildInfo } from '../utils/buildInfo';
 
 /**
  * 통합 앱 헤더 (데스크탑/모바일 공용)
@@ -58,7 +57,7 @@ export function AppHeader() {
             Estelle
           </h1>
           <span className="ml-2 text-xs text-muted-foreground">
-            v{APP_VERSION}
+            {BuildInfo.display}
           </span>
         </div>
 

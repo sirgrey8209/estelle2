@@ -15,3 +15,12 @@ export type { PacketLoggerOptions, PacketData } from './packet-logger.js';
 // PidManager - 프로세스 ID 관리
 export { PidManager, createPidManager } from './pid-manager.js';
 export type { PidManagerOptions, InitializeOptions } from './pid-manager.js';
+
+// ccusage - Claude Code 사용량 조회
+export {
+  fetchCcusage,
+  calculateUsageSummary,
+  getCacheEfficiency,
+  getUsageSummary,
+} from './ccusage.js';
+export type { FetchCcusageOptions } from './ccusage.js';

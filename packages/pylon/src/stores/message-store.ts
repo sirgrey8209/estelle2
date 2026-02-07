@@ -137,7 +137,7 @@ export function generateMessageId(): string {
  */
 export interface SessionData {
   /** 세션 ID */
-  sessionId: string;
+  sessionId: number;
   /** 메시지 목록 */
   messages: StoreMessage[];
   /** 마지막 업데이트 시각 */
@@ -162,6 +162,8 @@ export interface GetMessagesOptions {
   limit?: number;
   /** 건너뛸 메시지 수 (끝에서부터) */
   offset?: number;
+  /** 반환할 최대 바이트 수 (개수보다 우선) */
+  maxBytes?: number;
 }
 
 // ============================================================================
@@ -368,12 +370,12 @@ export class MessageStore {
   /**
    * 메모리 캐시: sessionId -> messages[]
    */
-  private _cache: Map<string, StoreMessage[]>;
+  private _cache: Map<number, StoreMessage[]>;
 
   /**
    * 저장 필요 세션 Set
    */
-  private _dirty: Set<string>;
+  private _dirty: Set<number>;
 
   // ============================================================================
   // 생성자
@@ -390,8 +392,8 @@ export class MessageStore {
 
     // 초기 데이터 로드
     if (data?.sessions) {
-      for (const [sessionId, sessionData] of Object.entries(data.sessions)) {
-        this._cache.set(sessionId, sessionData.messages || []);
+      for (const [key, sessionData] of Object.entries(data.sessions)) {
+        this._cache.set(Number(key), sessionData.messages || []);
       }
     }
   }
@@ -422,7 +424,7 @@ export class MessageStore {
    * @param externalId - 외부에서 지정한 ID (선택적, 주로 toolUseId)
    */
   private _addMessageInternal<T extends StoreMessage>(
-    sessionId: string,
+    sessionId: number,
     message: Omit<T, 'id' | 'timestamp'>,
     externalId?: string
   ): StoreMessage[] {
@@ -443,7 +445,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns 메시지 배열 참조
    */
-  private _ensureCache(sessionId: string): StoreMessage[] {
+  private _ensureCache(sessionId: number): StoreMessage[] {
     if (!this._cache.has(sessionId)) {
       this._cache.set(sessionId, []);
     }
@@ -459,7 +461,7 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addUserMessage(
-    sessionId: string,
+    sessionId: number,
     content: string,
     attachments?: Attachment[]
   ): StoreMessage[] {
@@ -479,7 +481,7 @@ export class MessageStore {
    * @param content - 텍스트 내용
    * @returns 업데이트된 메시지 배열
    */
-  addAssistantText(sessionId: string, content: string): StoreMessage[] {
+  addAssistantText(sessionId: number, content: string): StoreMessage[] {
     const message: Omit<AssistantTextMessage, 'id' | 'timestamp'> = {
       role: 'assistant',
       type: 'text',
@@ -503,7 +505,7 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addToolStart(
-    sessionId: string,
+    sessionId: number,
     toolName: string,
     toolInput: Record<string, unknown>,
     parentToolUseId?: string | null,
@@ -534,7 +536,7 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   updateToolComplete(
-    sessionId: string,
+    sessionId: number,
     toolName: string,
     success: boolean,
     result?: string,
@@ -575,7 +577,7 @@ export class MessageStore {
    * @param errorMessage - 에러 메시지
    * @returns 업데이트된 메시지 배열
    */
-  addError(sessionId: string, errorMessage: string): StoreMessage[] {
+  addError(sessionId: number, errorMessage: string): StoreMessage[] {
     const message: Omit<ErrorMessage, 'id' | 'timestamp'> = {
       role: 'system',
       type: 'error',
@@ -592,7 +594,7 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addResult(
-    sessionId: string,
+    sessionId: number,
     resultInfo: ResultInfo
   ): StoreMessage[] {
     const message: Omit<ResultMessage, 'id' | 'timestamp'> = {
@@ -610,7 +612,7 @@ export class MessageStore {
    * @param reason - 중단 사유 (user, session_ended)
    * @returns 업데이트된 메시지 배열
    */
-  addAborted(sessionId: string, reason: 'user' | 'session_ended'): StoreMessage[] {
+  addAborted(sessionId: number, reason: 'user' | 'session_ended'): StoreMessage[] {
     const message: Omit<AbortedMessage, 'id' | 'timestamp'> = {
       role: 'system',
       type: 'aborted',
@@ -626,7 +628,7 @@ export class MessageStore {
    * @param fileInfo - 파일 정보
    * @returns 업데이트된 메시지 배열
    */
-  addFileAttachment(sessionId: string, fileInfo: FileInfo): StoreMessage[] {
+  addFileAttachment(sessionId: number, fileInfo: FileInfo): StoreMessage[] {
     const message: Omit<FileAttachmentMessage, 'id' | 'timestamp'> = {
       role: 'assistant',
       type: 'file_attachment',
@@ -643,11 +645,12 @@ export class MessageStore {
    * 세션의 메시지 조회 (페이징 지원)
    *
    * @description
-   * limit과 offset을 사용하여 페이징할 수 있습니다.
+   * limit(개수) 또는 maxBytes(용량) 기준으로 페이징할 수 있습니다.
+   * maxBytes가 지정되면 개수 limit보다 우선합니다.
    * 최신 메시지가 배열 끝에 위치합니다.
    *
    * @param sessionId - 세션 ID
-   * @param options - 조회 옵션 (limit, offset)
+   * @param options - 조회 옵션 (limit, offset, maxBytes)
    * @returns 메시지 배열
    *
    * @example
@@ -655,12 +658,15 @@ export class MessageStore {
    * // 최근 10개 메시지
    * const recent = store.getMessages('session-1', { limit: 10 });
    *
+   * // 최근 100KB 이내 메시지
+   * const bySize = store.getMessages('session-1', { maxBytes: 100 * 1024 });
+   *
    * // 11~20번째 최신 메시지 (페이징)
    * const page2 = store.getMessages('session-1', { limit: 10, offset: 10 });
    * ```
    */
-  getMessages(sessionId: string, options: GetMessagesOptions = {}): StoreMessage[] {
-    const { limit = MAX_MESSAGES_PER_SESSION, offset = 0 } = options;
+  getMessages(sessionId: number, options: GetMessagesOptions = {}): StoreMessage[] {
+    const { limit = MAX_MESSAGES_PER_SESSION, offset = 0, maxBytes } = options;
 
     if (!this._cache.has(sessionId)) {
       return [];
@@ -668,14 +674,75 @@ export class MessageStore {
 
     const messages = this._cache.get(sessionId)!;
 
+    // offset 적용
+    const endIdx = messages.length - offset;
+    if (endIdx <= 0) {
+      return [];
+    }
+
+    // maxBytes 기준 (용량 기반 페이징)
+    if (maxBytes !== undefined) {
+      const result: StoreMessage[] = [];
+      let totalBytes = 0;
+
+      // 최신 메시지부터 역순으로 누적
+      for (let i = endIdx - 1; i >= 0; i--) {
+        const msg = messages[i];
+        const msgBytes = this._estimateMessageBytes(msg);
+
+        if (totalBytes + msgBytes > maxBytes && result.length > 0) {
+          break;
+        }
+
+        totalBytes += msgBytes;
+        result.unshift(msg);
+      }
+
+      return result;
+    }
+
+    // 개수 기준 (기존 로직)
     if (offset === 0 && limit >= messages.length) {
       return [...messages];
     }
 
-    // 끝에서부터 계산
-    const start = Math.max(0, messages.length - limit - offset);
-    const end = messages.length - offset;
-    return messages.slice(start, end);
+    const start = Math.max(0, endIdx - limit);
+    return messages.slice(start, endIdx);
+  }
+
+  /**
+   * 메시지 크기 추정 (바이트)
+   *
+   * @description
+   * JSON.stringify 비용을 줄이기 위해 주요 필드만 계산합니다.
+   *
+   * @param message - 메시지
+   * @returns 추정 바이트 수
+   */
+  private _estimateMessageBytes(message: StoreMessage): number {
+    let bytes = 100; // 기본 오버헤드 (id, timestamp, role, type 등)
+
+    if ('content' in message && typeof message.content === 'string') {
+      bytes += message.content.length * 2; // UTF-16 가정
+    }
+
+    if ('toolInput' in message && message.toolInput) {
+      bytes += JSON.stringify(message.toolInput).length;
+    }
+
+    if ('output' in message && typeof message.output === 'string') {
+      bytes += message.output.length * 2;
+    }
+
+    if ('error' in message && typeof message.error === 'string') {
+      bytes += message.error.length * 2;
+    }
+
+    if ('attachments' in message && message.attachments) {
+      bytes += JSON.stringify(message.attachments).length;
+    }
+
+    return bytes;
   }
 
   /**
@@ -685,7 +752,7 @@ export class MessageStore {
    * @param count - 조회할 메시지 수
    * @returns 최근 메시지 배열
    */
-  getLatestMessages(sessionId: string, count: number): StoreMessage[] {
+  getLatestMessages(sessionId: number, count: number): StoreMessage[] {
     return this.getMessages(sessionId, { limit: count });
   }
 
@@ -695,7 +762,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns 메시지 개수
    */
-  getCount(sessionId: string): number {
+  getCount(sessionId: number): number {
     if (this._cache.has(sessionId)) {
       return this._cache.get(sessionId)!.length;
     }
@@ -711,7 +778,7 @@ export class MessageStore {
    *
    * @param sessionId - 세션 ID
    */
-  clear(sessionId: string): void {
+  clear(sessionId: number): void {
     this._cache.delete(sessionId);
     this._dirty.delete(sessionId);
   }
@@ -724,7 +791,7 @@ export class MessageStore {
    *
    * @param sessionId - 세션 ID
    */
-  delete(sessionId: string): void {
+  delete(sessionId: number): void {
     this.clear(sessionId);
   }
 
@@ -737,7 +804,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns trim 발생 여부
    */
-  trimMessages(sessionId: string): boolean {
+  trimMessages(sessionId: number): boolean {
     if (!this._cache.has(sessionId)) {
       return false;
     }
@@ -772,7 +839,7 @@ export class MessageStore {
    *
    * @returns dirty 세션 ID 배열
    */
-  getDirtySessions(): string[] {
+  getDirtySessions(): number[] {
     return Array.from(this._dirty);
   }
 
@@ -784,7 +851,7 @@ export class MessageStore {
    *
    * @param sessionId - 세션 ID
    */
-  markClean(sessionId: string): void {
+  markClean(sessionId: number): void {
     this._dirty.delete(sessionId);
   }
 
@@ -831,7 +898,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns 세션 데이터 또는 null
    */
-  getSessionData(sessionId: string): SessionData | null {
+  getSessionData(sessionId: number): SessionData | null {
     if (!this._cache.has(sessionId)) {
       return null;
     }
@@ -856,7 +923,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @param data - 세션 데이터
    */
-  loadSessionData(sessionId: string, data: SessionData): void {
+  loadSessionData(sessionId: number, data: SessionData): void {
     this._cache.set(sessionId, data.messages || []);
     // 로드된 데이터는 dirty가 아님
   }
@@ -872,7 +939,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns 언로드 전 dirty 여부
    */
-  unloadCache(sessionId: string): boolean {
+  unloadCache(sessionId: number): boolean {
     const wasDirty = this._dirty.has(sessionId);
     this._cache.delete(sessionId);
     this._dirty.delete(sessionId);
@@ -885,7 +952,7 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    * @returns 캐시 존재 여부
    */
-  hasCache(sessionId: string): boolean {
+  hasCache(sessionId: number): boolean {
     return this._cache.has(sessionId);
   }
 }

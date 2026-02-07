@@ -36,15 +36,15 @@ describe('MessageStore', () => {
   // ============================================================================
   describe('초기화', () => {
     it('should have empty initial state', () => {
-      expect(store.getCount('session-1')).toBe(0);
-      expect(store.getMessages('session-1')).toEqual([]);
+      expect(store.getCount(1)).toBe(0);
+      expect(store.getMessages(1)).toEqual([]);
     });
 
     it('should initialize from existing data', () => {
       const existingData: MessageStoreData = {
         sessions: {
-          'session-1': {
-            sessionId: 'session-1',
+          1: {
+            sessionId: 1,
             messages: [
               {
                 id: 'msg_existing_1',
@@ -61,8 +61,8 @@ describe('MessageStore', () => {
 
       const loadedStore = new MessageStore(existingData);
 
-      expect(loadedStore.getCount('session-1')).toBe(1);
-      expect((loadedStore.getMessages('session-1')[0] as UserTextMessage).content).toBe('Hello');
+      expect(loadedStore.getCount(1)).toBe(1);
+      expect((loadedStore.getMessages(1)[0] as UserTextMessage).content).toBe('Hello');
     });
   });
 
@@ -72,9 +72,9 @@ describe('MessageStore', () => {
   describe('메시지 추가', () => {
     describe('addUserMessage', () => {
       it('should add user message', () => {
-        store.addUserMessage('session-1', 'Hello, Claude!');
+        store.addUserMessage(1, 'Hello, Claude!');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('user');
         expect(messages[0].type).toBe('text');
@@ -86,9 +86,9 @@ describe('MessageStore', () => {
           { filename: 'test.png', path: 'C:\\images\\test.png' },
         ];
 
-        store.addUserMessage('session-1', 'Check this image', attachments);
+        store.addUserMessage(1, 'Check this image', attachments);
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         const msg = messages[0] as UserTextMessage;
         expect(msg.attachments).toHaveLength(1);
@@ -97,10 +97,10 @@ describe('MessageStore', () => {
 
       it('should add timestamp automatically', () => {
         const before = Date.now();
-        store.addUserMessage('session-1', 'Test');
+        store.addUserMessage(1, 'Test');
         const after = Date.now();
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages[0].timestamp).toBeGreaterThanOrEqual(before);
         expect(messages[0].timestamp).toBeLessThanOrEqual(after);
       });
@@ -108,9 +108,9 @@ describe('MessageStore', () => {
 
     describe('addAssistantText', () => {
       it('should add assistant text message', () => {
-        store.addAssistantText('session-1', 'Hello! How can I help?');
+        store.addAssistantText(1, 'Hello! How can I help?');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('assistant');
         expect(messages[0].type).toBe('text');
@@ -122,11 +122,11 @@ describe('MessageStore', () => {
 
     describe('addToolStart', () => {
       it('should add tool start message', () => {
-        store.addToolStart('session-1', 'Read', {
+        store.addToolStart(1, 'Read', {
           file_path: 'C:\\test\\file.ts',
         });
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('assistant');
         expect(messages[0].type).toBe('tool_start');
@@ -138,12 +138,12 @@ describe('MessageStore', () => {
 
       it('should summarize tool input for file operations', () => {
         const longContent = 'x'.repeat(1000);
-        store.addToolStart('session-1', 'Read', {
+        store.addToolStart(1, 'Read', {
           file_path: 'C:\\test\\file.ts',
           extraData: longContent,
         });
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         const msg = messages[0] as ToolStartMessage;
         // Read 도구는 file_path만 저장
         expect(msg.toolInput.file_path).toBe('C:\\test\\file.ts');
@@ -153,13 +153,13 @@ describe('MessageStore', () => {
 
     describe('updateToolComplete', () => {
       it('should update tool start to tool complete', () => {
-        store.addToolStart('session-1', 'Read', {
+        store.addToolStart(1, 'Read', {
           file_path: 'C:\\test\\file.ts',
         });
 
-        store.updateToolComplete('session-1', 'Read', true, 'file content');
+        store.updateToolComplete(1, 'Read', true, 'file content');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].type).toBe('tool_complete');
 
@@ -169,31 +169,31 @@ describe('MessageStore', () => {
       });
 
       it('should update with error information', () => {
-        store.addToolStart('session-1', 'Read', {
+        store.addToolStart(1, 'Read', {
           file_path: 'C:\\test\\missing.ts',
         });
 
         store.updateToolComplete(
-          'session-1',
+          1,
           'Read',
           false,
           undefined,
           'File not found'
         );
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         const msg = messages[0] as ToolCompleteMessage;
         expect(msg.success).toBe(false);
         expect(msg.error).toBe('File not found');
       });
 
       it('should summarize long output', () => {
-        store.addToolStart('session-1', 'Bash', { command: 'ls' });
+        store.addToolStart(1, 'Bash', { command: 'ls' });
 
         const longOutput = 'x'.repeat(1000);
-        store.updateToolComplete('session-1', 'Bash', true, longOutput);
+        store.updateToolComplete(1, 'Bash', true, longOutput);
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         const msg = messages[0] as ToolCompleteMessage;
         // 출력이 요약됨 (MAX_OUTPUT_LENGTH = 500)
         expect(msg.output!.length).toBeLessThan(longOutput.length);
@@ -202,12 +202,12 @@ describe('MessageStore', () => {
 
       it('should find and update the most recent matching tool', () => {
         // 같은 도구 두 번 사용
-        store.addToolStart('session-1', 'Read', { file_path: 'file1.ts' });
-        store.addToolStart('session-1', 'Read', { file_path: 'file2.ts' });
+        store.addToolStart(1, 'Read', { file_path: 'file1.ts' });
+        store.addToolStart(1, 'Read', { file_path: 'file2.ts' });
 
-        store.updateToolComplete('session-1', 'Read', true, 'content2');
+        store.updateToolComplete(1, 'Read', true, 'content2');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         // 마지막 Read 도구만 업데이트됨
         expect((messages[0] as ToolStartMessage).type).toBe('tool_start');
         expect((messages[1] as ToolCompleteMessage).type).toBe('tool_complete');
@@ -217,9 +217,9 @@ describe('MessageStore', () => {
 
     describe('addError', () => {
       it('should add error message', () => {
-        store.addError('session-1', 'Something went wrong');
+        store.addError(1, 'Something went wrong');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('system');
         expect(messages[0].type).toBe('error');
@@ -231,14 +231,14 @@ describe('MessageStore', () => {
 
     describe('addResult', () => {
       it('should add result message', () => {
-        store.addResult('session-1', {
+        store.addResult(1, {
           durationMs: 1500,
           inputTokens: 100,
           outputTokens: 50,
           cacheReadTokens: 10,
         });
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('system');
         expect(messages[0].type).toBe('result');
@@ -253,9 +253,9 @@ describe('MessageStore', () => {
 
     describe('addAborted', () => {
       it('should add aborted message', () => {
-        store.addAborted('session-1', 'user');
+        store.addAborted(1, 'user');
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('system');
         expect(messages[0].type).toBe('aborted');
@@ -265,7 +265,7 @@ describe('MessageStore', () => {
 
     describe('addFileAttachment', () => {
       it('should add file attachment message', () => {
-        store.addFileAttachment('session-1', {
+        store.addFileAttachment(1, {
           path: 'C:\\files\\document.pdf',
           filename: 'document.pdf',
           mimeType: 'application/pdf',
@@ -274,7 +274,7 @@ describe('MessageStore', () => {
           description: 'A PDF document',
         });
 
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(1);
         expect(messages[0].role).toBe('assistant');
         expect(messages[0].type).toBe('file_attachment');
@@ -293,18 +293,18 @@ describe('MessageStore', () => {
     beforeEach(() => {
       // 10개의 메시지 추가
       for (let i = 1; i <= 10; i++) {
-        store.addUserMessage('session-1', `Message ${i}`);
+        store.addUserMessage(1, `Message ${i}`);
       }
     });
 
     describe('getMessages', () => {
       it('should return all messages by default', () => {
-        const messages = store.getMessages('session-1');
+        const messages = store.getMessages(1);
         expect(messages).toHaveLength(10);
       });
 
       it('should support limit option', () => {
-        const messages = store.getMessages('session-1', { limit: 5 });
+        const messages = store.getMessages(1, { limit: 5 });
         expect(messages).toHaveLength(5);
         // 최근 5개 메시지 반환 (6~10)
         expect((messages[0] as UserTextMessage).content).toBe('Message 6');
@@ -312,7 +312,7 @@ describe('MessageStore', () => {
       });
 
       it('should support offset option', () => {
-        const messages = store.getMessages('session-1', { limit: 3, offset: 2 });
+        const messages = store.getMessages(1, { limit: 3, offset: 2 });
         expect(messages).toHaveLength(3);
         // offset=2 이므로 끝에서 3~5번째, limit=3이므로 3개
         // 즉, Message 6, 7, 8 (끝에서 5,4,3번째)
@@ -328,21 +328,21 @@ describe('MessageStore', () => {
 
     describe('getLatestMessages', () => {
       it('should return latest N messages', () => {
-        const messages = store.getLatestMessages('session-1', 3);
+        const messages = store.getLatestMessages(1, 3);
         expect(messages).toHaveLength(3);
         expect((messages[0] as UserTextMessage).content).toBe('Message 8');
         expect((messages[2] as UserTextMessage).content).toBe('Message 10');
       });
 
       it('should return all if count exceeds total', () => {
-        const messages = store.getLatestMessages('session-1', 100);
+        const messages = store.getLatestMessages(1, 100);
         expect(messages).toHaveLength(10);
       });
     });
 
     describe('getCount', () => {
       it('should return message count', () => {
-        expect(store.getCount('session-1')).toBe(10);
+        expect(store.getCount(1)).toBe(10);
       });
 
       it('should return 0 for non-existent session', () => {
@@ -357,33 +357,33 @@ describe('MessageStore', () => {
   describe('세션 관리', () => {
     describe('clear', () => {
       it('should clear session messages', () => {
-        store.addUserMessage('session-1', 'Message 1');
-        store.addUserMessage('session-1', 'Message 2');
+        store.addUserMessage(1, 'Message 1');
+        store.addUserMessage(1, 'Message 2');
 
-        store.clear('session-1');
+        store.clear(1);
 
-        expect(store.getCount('session-1')).toBe(0);
-        expect(store.getMessages('session-1')).toEqual([]);
+        expect(store.getCount(1)).toBe(0);
+        expect(store.getMessages(1)).toEqual([]);
       });
 
       it('should not affect other sessions', () => {
-        store.addUserMessage('session-1', 'Message 1');
-        store.addUserMessage('session-2', 'Message 2');
+        store.addUserMessage(1, 'Message 1');
+        store.addUserMessage(2, 'Message 2');
 
-        store.clear('session-1');
+        store.clear(1);
 
-        expect(store.getCount('session-1')).toBe(0);
-        expect(store.getCount('session-2')).toBe(1);
+        expect(store.getCount(1)).toBe(0);
+        expect(store.getCount(2)).toBe(1);
       });
     });
 
     describe('delete', () => {
       it('should delete session completely', () => {
-        store.addUserMessage('session-1', 'Message 1');
+        store.addUserMessage(1, 'Message 1');
 
-        store.delete('session-1');
+        store.delete(1);
 
-        expect(store.getCount('session-1')).toBe(0);
+        expect(store.getCount(1)).toBe(0);
       });
     });
 
@@ -391,20 +391,20 @@ describe('MessageStore', () => {
       it('should track dirty sessions', () => {
         expect(store.hasDirtyData()).toBe(false);
 
-        store.addUserMessage('session-1', 'Message 1');
+        store.addUserMessage(1, 'Message 1');
 
         expect(store.hasDirtyData()).toBe(true);
-        expect(store.getDirtySessions()).toContain('session-1');
+        expect(store.getDirtySessions()).toContain(1);
       });
 
       it('should clear dirty flag after markClean', () => {
-        store.addUserMessage('session-1', 'Message 1');
+        store.addUserMessage(1, 'Message 1');
         expect(store.hasDirtyData()).toBe(true);
 
-        store.markClean('session-1');
+        store.markClean(1);
 
         expect(store.hasDirtyData()).toBe(false);
-        expect(store.getDirtySessions()).not.toContain('session-1');
+        expect(store.getDirtySessions()).not.toContain(1);
       });
     });
   });
@@ -416,22 +416,22 @@ describe('MessageStore', () => {
     it('should trim messages when exceeding max', () => {
       // MAX_MESSAGES_PER_SESSION = 200
       for (let i = 1; i <= 210; i++) {
-        store.addUserMessage('session-1', `Message ${i}`);
+        store.addUserMessage(1, `Message ${i}`);
       }
 
       // trimMessages 호출 후 확인
-      const trimmed = store.trimMessages('session-1');
+      const trimmed = store.trimMessages(1);
       expect(trimmed).toBe(true);
-      expect(store.getCount('session-1')).toBeLessThanOrEqual(200);
+      expect(store.getCount(1)).toBeLessThanOrEqual(200);
     });
 
     it('should keep recent messages when trimming', () => {
       for (let i = 1; i <= 210; i++) {
-        store.addUserMessage('session-1', `Message ${i}`);
+        store.addUserMessage(1, `Message ${i}`);
       }
 
-      store.trimMessages('session-1');
-      const messages = store.getMessages('session-1');
+      store.trimMessages(1);
+      const messages = store.getMessages(1);
 
       // 최신 메시지가 남아있어야 함
       const lastMsg = messages[messages.length - 1] as UserTextMessage;
@@ -445,25 +445,25 @@ describe('MessageStore', () => {
   describe('데이터 직렬화', () => {
     describe('toJSON', () => {
       it('should export all session data', () => {
-        store.addUserMessage('session-1', 'Hello');
-        store.addUserMessage('session-2', 'World');
+        store.addUserMessage(1, 'Hello');
+        store.addUserMessage(2, 'World');
 
         const data = store.toJSON();
 
-        expect(data.sessions['session-1']).toBeDefined();
-        expect(data.sessions['session-2']).toBeDefined();
-        expect(data.sessions['session-1'].messages).toHaveLength(1);
+        expect(data.sessions[1]).toBeDefined();
+        expect(data.sessions[2]).toBeDefined();
+        expect(data.sessions[1].messages).toHaveLength(1);
       });
     });
 
     describe('getSessionData', () => {
       it('should return single session data for file save', () => {
-        store.addUserMessage('session-1', 'Hello');
+        store.addUserMessage(1, 'Hello');
 
-        const data = store.getSessionData('session-1');
+        const data = store.getSessionData(1);
 
         expect(data).not.toBeNull();
-        expect(data!.sessionId).toBe('session-1');
+        expect(data!.sessionId).toBe(1);
         expect(data!.messages).toHaveLength(1);
         expect(data!.updatedAt).toBeDefined();
       });
@@ -477,7 +477,7 @@ describe('MessageStore', () => {
     describe('loadSessionData', () => {
       it('should load session data from external source', () => {
         const sessionData = {
-          sessionId: 'session-1',
+          sessionId: 1,
           messages: [
             {
               id: 'msg_loaded_1',
@@ -490,10 +490,10 @@ describe('MessageStore', () => {
           updatedAt: Date.now(),
         };
 
-        store.loadSessionData('session-1', sessionData);
+        store.loadSessionData(1, sessionData);
 
-        expect(store.getCount('session-1')).toBe(1);
-        expect((store.getMessages('session-1')[0] as UserTextMessage).content).toBe(
+        expect(store.getCount(1)).toBe(1);
+        expect((store.getMessages(1)[0] as UserTextMessage).content).toBe(
           'Loaded message'
         );
       });
@@ -501,14 +501,14 @@ describe('MessageStore', () => {
 
     describe('fromJSON', () => {
       it('should restore from exported data', () => {
-        store.addUserMessage('session-1', 'Test');
+        store.addUserMessage(1, 'Test');
         const exported = store.toJSON();
 
         const restored = MessageStore.fromJSON(exported);
 
-        expect(restored.getCount('session-1')).toBe(1);
+        expect(restored.getCount(1)).toBe(1);
         expect(
-          (restored.getMessages('session-1')[0] as UserTextMessage).content
+          (restored.getMessages(1)[0] as UserTextMessage).content
         ).toBe('Test');
       });
     });

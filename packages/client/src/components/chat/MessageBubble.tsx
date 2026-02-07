@@ -1,4 +1,4 @@
-import type { StoreMessage, Attachment } from '../../stores/claudeStore';
+import type { StoreMessage, Attachment } from '@estelle/core';
 import type {
   UserTextMessage,
   AssistantTextMessage,
@@ -93,7 +93,7 @@ export function MessageBubble({ message, onImagePress, childTools }: MessageBubb
     const userMsg = message as UserTextMessage;
     return (
       <div
-        className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-primary bg-muted max-w-[90%] self-start"
+        className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-primary bg-muted max-w-[90%] w-fit"
       >
         <UserContent
           content={userMsg.content}
@@ -141,6 +141,7 @@ function UserContent({ content, attachments, onImagePress }: UserContentProps) {
                 key={index}
                 uri={uri}
                 filename={attachment.filename}
+                thumbnail={attachment.thumbnail}
                 onPress={() => onImagePress?.(uri)}
               />
             );
@@ -162,21 +163,25 @@ function UserContent({ content, attachments, onImagePress }: UserContentProps) {
 interface AttachmentImageProps {
   uri: string;
   filename?: string;
+  thumbnail?: string;
   onPress?: () => void;
 }
 
-function AttachmentImage({ uri, filename, onPress }: AttachmentImageProps) {
-  const hasUri = uri && uri.length > 0;
+function AttachmentImage({ uri, filename, thumbnail, onPress }: AttachmentImageProps) {
+  // 썸네일이 있으면 사용, 없으면 파일 아이콘 표시
+  const hasThumbnail = thumbnail && thumbnail.length > 0;
 
-  if (!hasUri) {
+  if (!hasThumbnail) {
+    // 비이미지 파일 또는 썸네일 없음 - 파일 아이콘 + 파일명
     return (
       <div
-        className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border"
+        className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border cursor-pointer"
+        onClick={onPress}
       >
-        <span>📷</span>
+        <span className="text-2xl">📄</span>
         {filename && (
           <span className="mt-0.5 text-xs text-muted-foreground truncate max-w-full px-1">
-            {filename.slice(0, 8)}
+            {filename.length > 10 ? filename.slice(0, 8) + '...' : filename}
           </span>
         )}
       </div>
@@ -186,7 +191,7 @@ function AttachmentImage({ uri, filename, onPress }: AttachmentImageProps) {
   return (
     <button onClick={onPress} className="focus:outline-none">
       <img
-        src={uri}
+        src={thumbnail}
         alt={filename || 'attachment'}
         className="w-16 h-16 rounded-lg object-cover"
       />

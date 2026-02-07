@@ -36,10 +36,12 @@
  */
 
 import type { PermissionModeValue, ConversationStatusValue } from '@estelle/core';
+import { decodeEntityId, type EntityId } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ClaudeManagerEvent } from './claude/claude-manager.js';
 import type { PersistenceAdapter } from './persistence/types.js';
+import { generateThumbnail } from './utils/thumbnail.js';
 
 // ============================================================================
 // 타입 정의
@@ -78,15 +80,15 @@ export interface RelayClientAdapter {
  * ClaudeManager 인터페이스 (의존성 주입용)
  */
 export interface ClaudeManagerAdapter {
-  sendMessage(sessionId: string, message: string, options: { workingDir: string; claudeSessionId?: string }): Promise<void>;
-  stop(sessionId: string): void;
-  newSession(sessionId: string): void;
+  sendMessage(entityId: number, message: string, options: { workingDir: string; claudeSessionId?: string }): Promise<void>;
+  stop(entityId: number): void;
+  newSession(entityId: number): void;
   cleanup(): void;
-  respondPermission(sessionId: string, toolUseId: string, decision: 'allow' | 'deny' | 'allowAll'): void;
-  respondQuestion(sessionId: string, toolUseId: string, answer: string): void;
-  hasActiveSession(sessionId: string): boolean;
-  getSessionStartTime(sessionId: string): number | null;
-  getPendingEvent(sessionId: string): unknown;
+  respondPermission(entityId: number, toolUseId: string, decision: 'allow' | 'deny' | 'allowAll'): void;
+  respondQuestion(entityId: number, toolUseId: string, answer: string): void;
+  hasActiveSession(entityId: number): boolean;
+  getSessionStartTime(entityId: number): number | null;
+  getPendingEvent(entityId: number): unknown;
 }
 
 /**
@@ -112,9 +114,9 @@ export interface TaskManagerAdapter {
  * WorkerManager 인터페이스 (의존성 주입용)
  */
 export interface WorkerManagerAdapter {
-  getWorkerStatus(workspaceId: string, workingDir: string): { running: boolean };
-  startWorker(workspaceId: string, workingDir: string, callback: unknown): Promise<{ success: boolean }>;
-  stopWorker(workspaceId: string, workingDir: string): { success: boolean };
+  getWorkerStatus(workspaceId: number, workingDir: string): { running: boolean };
+  startWorker(workspaceId: number, workingDir: string, callback: unknown): Promise<{ success: boolean }>;
+  stopWorker(workspaceId: number, workingDir: string): { success: boolean };
 }
 
 /**
@@ -235,14 +237,14 @@ export class Pylon {
   /** 디바이스 정보 */
   private deviceInfo: DeviceInfo | null = null;
 
-  /** 세션별 시청자: Map<sessionId, Set<clientDeviceId>> */
-  private readonly sessionViewers: Map<string, Set<string>> = new Map();
+  /** 세션별 시청자: Map<entityId, Set<clientDeviceId>> */
+  private readonly sessionViewers: Map<number, Set<string>> = new Map();
 
-  /** 앱별 unread 알림 전송 기록: Map<appId, Set<conversationId>> */
-  private readonly appUnreadSent: Map<string, Set<string>> = new Map();
+  /** 앱별 unread 알림 전송 기록: Map<appId, Set<entityId>> */
+  private readonly appUnreadSent: Map<string, Set<number>> = new Map();
 
-  /** 대화별 pending 파일: Map<conversationId, Map<fileId, FileInfo>> */
-  private readonly pendingFiles: Map<string, Map<string, unknown>> = new Map();
+  /** 대화별 pending 파일: Map<entityId, Map<fileId, FileInfo>> */
+  private readonly pendingFiles: Map<number, Map<string, unknown>> = new Map();
 
   /** Claude 누적 사용량 */
   private claudeUsage = {
@@ -255,8 +257,8 @@ export class Pylon {
     lastUpdated: null as string | null,
   };
 
-  /** 메시지 저장 debounce 타이머: Map<sessionId, timerId> */
-  private readonly messageSaveTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** 메시지 저장 debounce 타이머: Map<entityId, timerId> */
+  private readonly messageSaveTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
   /** 메시지 저장 debounce 시간 (ms) */
   private readonly MESSAGE_SAVE_DEBOUNCE_MS = 2000;
@@ -298,14 +300,14 @@ export class Pylon {
     await this.loadPersistedData();
 
     // 워크스페이스 초기화: working/waiting 상태인 대화들을 idle로 리셋
-    const resetIds = this.deps.workspaceStore.resetActiveConversations();
-    for (const conversationId of resetIds) {
-      this.deps.messageStore.addAborted(conversationId, 'session_ended');
-      this.log(`[Startup] Added session_ended to history: ${conversationId}`);
+    const resetEntityIds = this.deps.workspaceStore.resetActiveConversations();
+    for (const entityId of resetEntityIds) {
+      this.deps.messageStore.addAborted(entityId, 'session_ended');
+      this.log(`[Startup] Added session_ended to history: ${entityId}`);
     }
 
     // 리셋된 대화가 있으면 워크스페이스 저장
-    if (resetIds.length > 0) {
+    if (resetEntityIds.length > 0) {
       await this.saveWorkspaceStore();
     }
 
@@ -363,15 +365,15 @@ export class Pylon {
   /**
    * 세션 시청자 수 반환
    */
-  getSessionViewerCount(sessionId: string): number {
-    return this.sessionViewers.get(sessionId)?.size ?? 0;
+  getSessionViewerCount(entityId: number): number {
+    return this.sessionViewers.get(entityId)?.size ?? 0;
   }
 
   /**
    * 세션 시청자 목록 반환
    */
-  getSessionViewers(sessionId: string): Set<string> {
-    return this.sessionViewers.get(sessionId) ?? new Set();
+  getSessionViewers(entityId: number): Set<string> {
+    return this.sessionViewers.get(entityId) ?? new Set();
   }
 
   // ==========================================================================
@@ -548,7 +550,8 @@ export class Pylon {
 
     if (type === 'blob_end') {
       const result = this.deps.blobHandler.handleBlobEnd(message);
-      this.handleBlobEndResult(result, from, payload);
+      // 비동기로 썸네일 생성 후 완료 알림 (에러는 내부에서 처리)
+      void this.handleBlobEndResult(result, from, payload);
       return;
     }
 
@@ -617,6 +620,12 @@ export class Pylon {
       return;
     }
 
+    // ===== Usage 조회 =====
+    if (type === 'usage_request') {
+      this.handleUsageRequest(from);
+      return;
+    }
+
     // 알 수 없는 메시지는 무시
   }
 
@@ -626,32 +635,31 @@ export class Pylon {
    * @description
    * ClaudeManager에서 발생한 이벤트를 클라이언트에게 전달합니다.
    *
-   * @param sessionId - 세션 ID (conversationId)
+   * @param entityId - 엔티티 ID
    * @param event - Claude 이벤트
    */
-  sendClaudeEvent(sessionId: string, event: ClaudeManagerEvent): void {
+  sendClaudeEvent(entityId: number, event: ClaudeManagerEvent): void {
     // 이벤트 타입별 메시지 저장
-    this.saveEventToHistory(sessionId, event);
+    this.saveEventToHistory(entityId, event);
 
     // send_file MCP 도구 결과 처리
-    if (event.type === 'toolComplete' && (event as Record<string, unknown>).toolName === 'mcp__estelle-mcp__send_file') {
-      this.handleSendFileResult(sessionId, event);
+    if (event.type === 'toolComplete') {
+      const toolName = (event as Record<string, unknown>).toolName as string;
+      if (toolName === 'mcp__estelle-mcp__send_file') {
+        this.log(`[send_file] toolComplete detected: toolName=${toolName}`);
+        this.handleSendFileResult(entityId, event);
+      }
     }
 
     // init 이벤트에서 claudeSessionId 저장
     if (event.type === 'init' && (event as Record<string, unknown>).session_id) {
-      const workspaceId = this.deps.workspaceStore.findWorkspaceByConversation(sessionId);
-      if (workspaceId) {
-        this.deps.workspaceStore.updateClaudeSessionId(
-          workspaceId,
-          sessionId,
-          (event as Record<string, unknown>).session_id as string
-        );
-        // claudeSessionId 저장
-        this.saveWorkspaceStore().catch((err) => {
-          this.log(`[Persistence] Failed to save claudeSessionId: ${err}`);
-        });
-      }
+      this.deps.workspaceStore.updateClaudeSessionId(
+        entityId as EntityId,
+        (event as Record<string, unknown>).session_id as string
+      );
+      this.saveWorkspaceStore().catch((err) => {
+        this.log(`[Persistence] Failed to save claudeSessionId: ${err}`);
+      });
     }
 
     // result 이벤트에서 사용량 누적
@@ -661,11 +669,11 @@ export class Pylon {
 
     const message = {
       type: 'claude_event',
-      payload: { conversationId: sessionId, event },
+      payload: { entityId, event },
     };
 
     // 해당 세션을 시청 중인 클라이언트에게만 전송
-    const viewers = this.getSessionViewers(sessionId);
+    const viewers = this.getSessionViewers(entityId);
     if (viewers.size > 0) {
       this.send({
         ...message,
@@ -676,16 +684,13 @@ export class Pylon {
     // 상태 변경은 모든 클라이언트에게 브로드캐스트
     if (event.type === 'state') {
       const state = (event as Record<string, unknown>).state as ConversationStatusValue;
-      const workspaceId = this.deps.workspaceStore.findWorkspaceByConversation(sessionId);
-      if (workspaceId) {
-        this.deps.workspaceStore.updateConversationStatus(workspaceId, sessionId, state);
-      }
+      this.deps.workspaceStore.updateConversationStatus(entityId as EntityId, state);
 
       this.send({
         type: 'conversation_status',
         payload: {
           deviceId: this.config.deviceId,
-          conversationId: sessionId,
+          entityId,
           status: state,
         },
         broadcast: 'clients',
@@ -694,7 +699,7 @@ export class Pylon {
 
     // 안 보고 있는 앱에게 unread 알림
     if (['textComplete', 'toolComplete', 'result', 'claudeAborted'].includes(event.type)) {
-      this.sendUnreadToNonViewers(sessionId, viewers);
+      this.sendUnreadToNonViewers(entityId, viewers);
     }
   }
 
@@ -787,30 +792,34 @@ export class Pylon {
   // ==========================================================================
 
   /**
-   * 히스토리 요청 처리
+   * 히스토리 요청 처리 (페이징: 100KB 제한)
    */
   private handleHistoryRequest(
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { workspaceId, conversationId, limit = 50, offset = 0 } = payload || {};
-    if (!conversationId) return;
+    const { entityId, offset = 0 } = payload || {};
+    if (!entityId) return;
 
-    const cid = conversationId as string;
-    const totalCount = this.deps.messageStore.getCount(cid);
-    const messages = this.deps.messageStore.getMessages(cid, {
-      limit: limit as number,
+    const MAX_BYTES = 100 * 1024; // 100KB
+    const eid = entityId as number;
+    const totalCount = this.deps.messageStore.getCount(eid);
+    const messages = this.deps.messageStore.getMessages(eid, {
+      maxBytes: MAX_BYTES,
       offset: offset as number,
     });
-    const hasMore = (offset as number) + messages.length < totalCount;
+    const loadedCount = (offset as number) + messages.length;
+    const hasMore = loadedCount < totalCount;
+
+    // メッセージセッションをロード (lazy loading)
+    this.loadMessageSession(eid);
 
     this.send({
       type: 'history_result',
       to: from?.deviceId,
       payload: {
         deviceId: this.config.deviceId,
-        workspaceId,
-        conversationId,
+        entityId: eid,
         messages,
         offset,
         totalCount,
@@ -875,7 +884,7 @@ export class Pylon {
     const { workspaceId } = payload || {};
     if (!workspaceId) return;
 
-    const success = this.deps.workspaceStore.deleteWorkspace(workspaceId as string);
+    const success = this.deps.workspaceStore.deleteWorkspace(workspaceId as number);
     this.send({
       type: 'workspace_delete_result',
       to: from?.deviceId,
@@ -896,7 +905,7 @@ export class Pylon {
     const { workspaceId, name, workingDir } = payload || {};
     if (!workspaceId) return;
 
-    const success = this.deps.workspaceStore.updateWorkspace(workspaceId as string, {
+    const success = this.deps.workspaceStore.updateWorkspace(workspaceId as number, {
       name: name as string | undefined,
       workingDir: workingDir as string | undefined,
     });
@@ -919,7 +928,7 @@ export class Pylon {
     const { workspaceIds } = payload || {};
     if (!workspaceIds || !Array.isArray(workspaceIds)) return;
 
-    const success = this.deps.workspaceStore.reorderWorkspaces(workspaceIds as string[]);
+    const success = this.deps.workspaceStore.reorderWorkspaces(workspaceIds as number[]);
     if (success) {
       this.broadcastWorkspaceList();
       this.saveWorkspaceStore().catch((err) => {
@@ -936,8 +945,8 @@ export class Pylon {
     if (!workspaceId || !conversationIds || !Array.isArray(conversationIds)) return;
 
     const success = this.deps.workspaceStore.reorderConversations(
-      workspaceId as string,
-      conversationIds as string[]
+      workspaceId as number,
+      conversationIds as EntityId[]
     );
     if (success) {
       this.broadcastWorkspaceList();
@@ -954,7 +963,7 @@ export class Pylon {
     const { workspaceId, newName } = payload || {};
     if (!workspaceId || !newName) return;
 
-    const success = this.deps.workspaceStore.renameWorkspace(workspaceId as string, newName as string);
+    const success = this.deps.workspaceStore.renameWorkspace(workspaceId as number, newName as string);
     if (success) {
       this.broadcastWorkspaceList();
     }
@@ -968,8 +977,8 @@ export class Pylon {
     if (!workspaceId) return;
 
     this.deps.workspaceStore.setActiveWorkspace(
-      workspaceId as string,
-      conversationId as string | undefined
+      workspaceId as number,
+      conversationId as EntityId | undefined
     );
     this.broadcastWorkspaceList();
   }
@@ -989,7 +998,7 @@ export class Pylon {
     if (!workspaceId) return;
 
     const conversation = this.deps.workspaceStore.createConversation(
-      workspaceId as string,
+      workspaceId as number,
       name as string | undefined
     );
 
@@ -1009,7 +1018,7 @@ export class Pylon {
 
       // 세션 뷰어 등록
       if (from?.deviceId) {
-        this.registerSessionViewer(from.deviceId, conversation.conversationId);
+        this.registerSessionViewer(from.deviceId, conversation.entityId);
       }
     }
   }
@@ -1018,13 +1027,10 @@ export class Pylon {
    * conversation_delete 처리
    */
   private handleConversationDelete(payload: Record<string, unknown> | undefined): void {
-    const { workspaceId, conversationId } = payload || {};
-    if (!workspaceId || !conversationId) return;
+    const { entityId } = payload || {};
+    if (!entityId) return;
 
-    const success = this.deps.workspaceStore.deleteConversation(
-      workspaceId as string,
-      conversationId as string
-    );
+    const success = this.deps.workspaceStore.deleteConversation(entityId as EntityId);
     if (success) {
       this.broadcastWorkspaceList();
     }
@@ -1034,12 +1040,11 @@ export class Pylon {
    * conversation_rename 처리
    */
   private handleConversationRename(payload: Record<string, unknown> | undefined): void {
-    const { workspaceId, conversationId, newName } = payload || {};
-    if (!workspaceId || !conversationId || !newName) return;
+    const { entityId, newName } = payload || {};
+    if (!entityId || !newName) return;
 
     const success = this.deps.workspaceStore.renameConversation(
-      workspaceId as string,
-      conversationId as string,
+      entityId as EntityId,
       newName as string
     );
     if (success) {
@@ -1054,18 +1059,17 @@ export class Pylon {
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { workspaceId, conversationId } = payload || {};
-    if (!conversationId) return;
+    const { entityId, workspaceId } = payload || {};
+    if (!entityId) return;
 
-    const wsId = workspaceId as string | undefined;
-    const cid = conversationId as string;
+    const eid = entityId as number;
+    const wsId = workspaceId as number;
 
     // 워크스페이스와 대화 모두 active 상태로 설정
     if (wsId) {
-      this.deps.workspaceStore.setActiveWorkspace(wsId, cid);
-    } else {
-      this.deps.workspaceStore.setActiveConversation(cid);
+      this.deps.workspaceStore.setActiveWorkspace(wsId);
     }
+    this.deps.workspaceStore.setActiveConversation(eid as EntityId);
 
     // 저장
     this.saveWorkspaceStore().catch((err) => {
@@ -1073,50 +1077,51 @@ export class Pylon {
     });
 
     // 메시지 세션 로드 (lazy loading)
-    this.loadMessageSession(cid);
+    this.loadMessageSession(eid);
 
     // 클라이언트를 해당 세션의 시청자로 등록
     if (from?.deviceId) {
-      this.registerSessionViewer(from.deviceId, cid);
+      this.registerSessionViewer(from.deviceId, eid);
 
       // 활성 세션 정보
-      const hasActiveSession = this.deps.claudeManager.hasActiveSession(cid);
-      const workStartTime = this.deps.claudeManager.getSessionStartTime(cid);
+      const hasActiveSession = this.deps.claudeManager.hasActiveSession(eid);
+      const workStartTime = this.deps.claudeManager.getSessionStartTime(eid);
 
-      // 메시지 히스토리 전송
-      const totalCount = this.deps.messageStore.getCount(cid);
-      const messages = this.deps.messageStore.getMessages(cid);
+      // 메시지 히스토리 전송 (페이징: 100KB 제한)
+      const MAX_BYTES = 100 * 1024; // 100KB
+      const totalCount = this.deps.messageStore.getCount(eid);
+      const messages = this.deps.messageStore.getMessages(eid, { maxBytes: MAX_BYTES });
+      const hasMore = messages.length < totalCount;
 
       this.send({
         type: 'history_result',
         to: from.deviceId,
         payload: {
           deviceId: this.config.deviceId,
-          workspaceId,
-          conversationId,
+          entityId: eid,
           messages,
           offset: 0,
           totalCount,
-          hasMore: false,
+          hasMore,
           hasActiveSession,
           workStartTime,
         },
       });
 
       // pending 이벤트가 있으면 전송
-      const pendingEvent = this.deps.claudeManager.getPendingEvent(cid);
+      const pendingEvent = this.deps.claudeManager.getPendingEvent(eid);
       if (pendingEvent) {
         const pe = pendingEvent as { type: string };
         if (pe.type === 'permission_request' || pe.type === 'askQuestion') {
           this.send({
             type: 'claude_event',
-            payload: { conversationId, event: { type: 'state', state: 'permission' } },
+            payload: { entityId: eid, event: { type: 'state', state: 'permission' } },
             to: [from.deviceId],
           });
         }
         this.send({
           type: 'claude_event',
-          payload: { conversationId, event: pendingEvent },
+          payload: { entityId: eid, event: pendingEvent },
           to: [from.deviceId],
         });
       }
@@ -1134,26 +1139,26 @@ export class Pylon {
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { workspaceId, conversationId, message: userMessage, attachedFileIds } = payload || {};
-    if (!conversationId || !userMessage) return;
+    const { entityId, message: userMessage, attachedFileIds, attachments: attachmentPaths } = payload || {};
+    const hasAttachments = (attachedFileIds as string[] | undefined)?.length || (attachmentPaths as string[] | undefined)?.length;
+    // 메시지나 첨부파일 중 하나는 있어야 함
+    if (!entityId || (!userMessage && !hasAttachments)) return;
 
-    const cid = conversationId as string;
-    const wid = workspaceId as string;
+    const eid = entityId as number;
 
     // workingDir 및 conversation 정보 가져오기
-    let workingDir: string | null = null;
-    let conversation: Conversation | null = null;
-    if (wid) {
-      const workspace = this.deps.workspaceStore.getWorkspace(wid);
-      workingDir = workspace?.workingDir ?? null;
-      conversation = this.deps.workspaceStore.getConversation(wid, cid) ?? null;
-    }
+    const conversation = this.deps.workspaceStore.getConversation(eid as EntityId) ?? null;
+    const decoded = decodeEntityId(eid as EntityId);
+    const workspace = this.deps.workspaceStore.getWorkspace(decoded.workspaceId);
+    const workingDir = workspace?.workingDir ?? null;
 
     // 첨부 파일 처리
     let attachments: unknown[] | null = null;
-    const pendingFilesForConv = this.pendingFiles.get(cid);
+    const pendingFilesForConv = this.pendingFiles.get(eid);
     const fileIds = attachedFileIds as string[] | undefined;
+    const paths = attachmentPaths as string[] | undefined;
 
+    // 방법 1: attachedFileIds로 pendingFiles에서 찾기
     if (fileIds && fileIds.length > 0 && pendingFilesForConv) {
       attachments = [];
       for (const fileId of fileIds) {
@@ -1167,20 +1172,43 @@ export class Pylon {
         attachments = null;
       }
     }
+    // 방법 2: attachments로 경로가 직접 전달된 경우
+    else if (paths && paths.length > 0) {
+      attachments = paths.map((path) => {
+        const filename = path.split(/[/\\]/).pop() || 'unknown';
+        // pendingFiles에서 경로로 thumbnail 찾기
+        let thumbnail: string | undefined;
+        if (pendingFilesForConv) {
+          for (const fileInfo of pendingFilesForConv.values()) {
+            const info = fileInfo as { path?: string; thumbnail?: string };
+            if (info.path === path) {
+              thumbnail = info.thumbnail;
+              break;
+            }
+          }
+        }
+        return { path, filename, ...(thumbnail && { thumbnail }) };
+      });
+      if (attachments.length === 0) {
+        attachments = null;
+      }
+    }
+
+    // 사용자 메시지 (빈 문자열 허용)
+    const messageText = (userMessage as string) || '';
 
     // 사용자 메시지 저장
-    this.deps.messageStore.addUserMessage(cid, userMessage as string, attachments as never);
-    this.scheduleSaveMessages(cid);
+    this.deps.messageStore.addUserMessage(eid, messageText, attachments as never);
+    this.scheduleSaveMessages(eid);
 
     // 사용자 메시지 브로드캐스트
     const userMessageEvent = {
       type: 'claude_event',
       payload: {
-        workspaceId,
-        conversationId,
+        entityId: eid,
         event: {
           type: 'userMessage',
-          content: userMessage,
+          content: messageText,
           timestamp: Date.now(),
           ...(attachments && { attachments }),
         },
@@ -1190,18 +1218,19 @@ export class Pylon {
 
     // Claude에게 메시지 전송
     if (workingDir) {
-      let promptToSend = userMessage as string;
+      let promptToSend = messageText;
 
-      // 첨부 파일 경로 추가
+      // 첨부 파일 경로 추가 (Read 도구 사용 유도)
+      // 이 지시문은 히스토리에 저장되지 않음 (promptToSend만 Claude에게 전송)
       if (attachments && attachments.length > 0) {
-        const fileAttachments = (attachments as Array<{ path: string }>)
-          .map((file) => `[첨부 파일: ${file.path}]`)
+        const filePaths = (attachments as Array<{ path: string }>)
+          .map((file) => `- ${file.path}`)
           .join('\n');
-        promptToSend = `${fileAttachments}\n\n${promptToSend}`;
+        promptToSend = `[시스템: 아래 파일들을 Read 도구로 읽을 것]\n${filePaths}${messageText ? '\n\n' + messageText : ''}`;
       }
 
       const claudeSessionId = conversation?.claudeSessionId ?? undefined;
-      this.deps.claudeManager.sendMessage(cid, promptToSend, {
+      this.deps.claudeManager.sendMessage(eid, promptToSend, {
         workingDir,
         claudeSessionId,
       });
@@ -1212,11 +1241,11 @@ export class Pylon {
    * claude_permission 처리
    */
   private handleClaudePermission(payload: Record<string, unknown> | undefined): void {
-    const { conversationId, toolUseId, decision } = payload || {};
-    if (!conversationId || !toolUseId || !decision) return;
+    const { entityId, toolUseId, decision } = payload || {};
+    if (!entityId || !toolUseId || !decision) return;
 
     this.deps.claudeManager.respondPermission(
-      conversationId as string,
+      entityId as number,
       toolUseId as string,
       decision as 'allow' | 'deny' | 'allowAll'
     );
@@ -1226,11 +1255,11 @@ export class Pylon {
    * claude_answer 처리
    */
   private handleClaudeAnswer(payload: Record<string, unknown> | undefined): void {
-    const { conversationId, toolUseId, answer } = payload || {};
-    if (!conversationId || !toolUseId) return;
+    const { entityId, toolUseId, answer } = payload || {};
+    if (!entityId || !toolUseId) return;
 
     this.deps.claudeManager.respondQuestion(
-      conversationId as string,
+      entityId as number,
       toolUseId as string,
       answer as string
     );
@@ -1240,19 +1269,19 @@ export class Pylon {
    * claude_control 처리
    */
   private handleClaudeControl(payload: Record<string, unknown> | undefined): void {
-    const { conversationId, action } = payload || {};
-    if (!conversationId || !action) return;
+    const { entityId, action } = payload || {};
+    if (!entityId || !action) return;
 
-    const sessionId = conversationId as string;
+    const eid = entityId as number;
 
     switch (action) {
       case 'stop':
-        this.deps.claudeManager.stop(sessionId);
+        this.deps.claudeManager.stop(eid);
         break;
       case 'new_session':
       case 'clear':
-        this.deps.claudeManager.newSession(sessionId);
-        this.deps.messageStore.clear(sessionId);
+        this.deps.claudeManager.newSession(eid);
+        this.deps.messageStore.clear(eid);
         break;
       case 'compact':
         this.log(`Compact not implemented yet`);
@@ -1264,12 +1293,11 @@ export class Pylon {
    * claude_set_permission_mode 처리
    */
   private handleClaudeSetPermissionMode(payload: Record<string, unknown> | undefined): void {
-    const { conversationId, mode } = payload || {};
-    if (!conversationId || !mode) return;
+    const { entityId, mode } = payload || {};
+    if (!entityId || !mode) return;
 
-    // setConversationPermissionMode는 workspaceId 없이 conversationId로 찾음
     const success = this.deps.workspaceStore.setConversationPermissionMode(
-      conversationId as string,
+      entityId as EntityId,
       mode as PermissionModeValue
     );
 
@@ -1288,21 +1316,30 @@ export class Pylon {
   /**
    * blob_end 결과 처리
    */
-  private handleBlobEndResult(
-    result: { success: boolean; path?: string; context?: unknown },
+  private async handleBlobEndResult(
+    result: { success: boolean; path?: string; context?: unknown; mimeType?: string },
     from: MessageFrom | undefined,
     payload: Record<string, unknown> | undefined
-  ): void {
+  ): Promise<void> {
     if (!result.success) return;
 
-    const context = result.context as { type?: string; conversationId?: string } | undefined;
+    const context = result.context as { type?: string; entityId?: number } | undefined;
     if (context?.type === 'image_upload') {
-      const { conversationId } = context;
+      const { entityId } = context;
       const blobId = (payload as { blobId?: string })?.blobId;
 
-      if (conversationId && blobId && result.path) {
+      if (entityId && blobId && result.path) {
         const fileId = blobId;
         const filename = result.path.split(/[/\\]/).pop() || 'unknown';
+        const mimeType = result.mimeType || 'application/octet-stream';
+
+        // 썸네일 생성 (이미지인 경우에만)
+        let thumbnail: string | null = null;
+        try {
+          thumbnail = await generateThumbnail(result.path, mimeType);
+        } catch (err) {
+          console.error('[BLOB] Thumbnail generation failed:', err);
+        }
 
         // 클라이언트에 업로드 완료 알림
         this.send({
@@ -1313,18 +1350,22 @@ export class Pylon {
             fileId,
             path: result.path,
             filename,
-            conversationId,
+            entityId,
+            mimeType,
+            ...(thumbnail && { thumbnail }),
           },
         });
 
         // pending 파일로 저장
-        if (!this.pendingFiles.has(conversationId)) {
-          this.pendingFiles.set(conversationId, new Map());
+        if (!this.pendingFiles.has(entityId)) {
+          this.pendingFiles.set(entityId, new Map());
         }
-        this.pendingFiles.get(conversationId)!.set(fileId, {
+        this.pendingFiles.get(entityId)!.set(fileId, {
           fileId,
           path: result.path,
           filename,
+          mimeType,
+          ...(thumbnail && { thumbnail }),
         });
       }
     }
@@ -1439,7 +1480,7 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace) return;
 
     const result = this.deps.taskManager.listTasks(workspace.workingDir);
@@ -1462,7 +1503,7 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId, taskId } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace || !taskId) return;
 
     const result = this.deps.taskManager.getTask(workspace.workingDir, taskId as string);
@@ -1485,7 +1526,7 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId, taskId, status, error } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace || !taskId || !status) return;
 
     const result = this.deps.taskManager.updateTaskStatus(
@@ -1505,7 +1546,7 @@ export class Pylon {
     });
 
     // 태스크 목록 브로드캐스트
-    this.broadcastTaskList(workspaceId as string);
+    this.broadcastTaskList(workspaceId as number);
   }
 
   // ==========================================================================
@@ -1520,10 +1561,10 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace) return;
 
-    const status = this.deps.workerManager.getWorkerStatus(workspaceId as string, workspace.workingDir);
+    const status = this.deps.workerManager.getWorkerStatus(workspaceId as number, workspace.workingDir);
     this.send({
       type: 'worker_status_result',
       to: from?.deviceId,
@@ -1542,29 +1583,29 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace) return;
 
     // 비동기 처리
     (async () => {
-      const startClaudeCallback = async (_wsId: string, workingDir: string, prompt: string) => {
+      const startClaudeCallback = async (_wsId: number, workingDir: string, prompt: string) => {
         // 워커용 대화 생성 또는 기존 대화 사용
         let conversation = workspace.conversations.find((c) => c.name === 'Worker');
         if (!conversation) {
-          conversation = this.deps.workspaceStore.createConversation(workspaceId as string, 'Worker')!;
+          conversation = this.deps.workspaceStore.createConversation(workspaceId as number, 'Worker')!;
         }
 
-        this.deps.workspaceStore.setActiveConversation(conversation.conversationId);
-        this.deps.claudeManager.sendMessage(conversation.conversationId, prompt, { workingDir });
+        this.deps.workspaceStore.setActiveConversation(conversation.entityId);
+        this.deps.claudeManager.sendMessage(conversation.entityId, prompt, { workingDir });
 
         return {
           process: null,
-          conversationId: conversation.conversationId,
+          entityId: conversation.entityId,
         };
       };
 
       const result = await this.deps.workerManager.startWorker(
-        workspaceId as string,
+        workspaceId as number,
         workspace.workingDir,
         startClaudeCallback
       );
@@ -1579,8 +1620,8 @@ export class Pylon {
       });
 
       if (result.success) {
-        this.broadcastWorkerStatus(workspaceId as string);
-        this.broadcastTaskList(workspaceId as string);
+        this.broadcastWorkerStatus(workspaceId as number);
+        this.broadcastTaskList(workspaceId as number);
       }
     })();
   }
@@ -1593,10 +1634,10 @@ export class Pylon {
     from: MessageFrom | undefined
   ): void {
     const { workspaceId } = payload || {};
-    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as string);
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (!workspace) return;
 
-    const result = this.deps.workerManager.stopWorker(workspaceId as string, workspace.workingDir);
+    const result = this.deps.workerManager.stopWorker(workspaceId as number, workspace.workingDir);
     this.send({
       type: 'worker_stop_result',
       to: from?.deviceId,
@@ -1701,7 +1742,7 @@ Message: ${message}
   /**
    * 태스크 목록 브로드캐스트
    */
-  private broadcastTaskList(workspaceId: string): void {
+  private broadcastTaskList(workspaceId: number): void {
     const workspace = this.deps.workspaceStore.getWorkspace(workspaceId);
     if (!workspace) return;
 
@@ -1725,7 +1766,7 @@ Message: ${message}
   /**
    * 워커 상태 브로드캐스트
    */
-  private broadcastWorkerStatus(workspaceId: string): void {
+  private broadcastWorkerStatus(workspaceId: number): void {
     const workspace = this.deps.workspaceStore.getWorkspace(workspaceId);
     if (!workspace) return;
 
@@ -1765,48 +1806,48 @@ Message: ${message}
   /**
    * 세션 뷰어 등록
    */
-  private registerSessionViewer(clientId: string, sessionId: string): void {
+  private registerSessionViewer(clientId: string, entityId: number): void {
     // 기존 시청 세션에서 제거
-    for (const [existingSessionId, viewers] of this.sessionViewers) {
+    for (const [existingEntityId, viewers] of this.sessionViewers) {
       if (viewers.has(clientId)) {
         viewers.delete(clientId);
         if (viewers.size === 0) {
-          this.sessionViewers.delete(existingSessionId);
-          this.deps.messageStore.unloadCache(existingSessionId);
-          this.log(`Unloaded message cache for session ${existingSessionId} (no viewers)`);
+          this.sessionViewers.delete(existingEntityId);
+          this.deps.messageStore.unloadCache(existingEntityId);
+          this.log(`Unloaded message cache for session ${existingEntityId} (no viewers)`);
         }
         break;
       }
     }
 
     // 새 세션에 등록
-    if (!this.sessionViewers.has(sessionId)) {
-      this.sessionViewers.set(sessionId, new Set());
+    if (!this.sessionViewers.has(entityId)) {
+      this.sessionViewers.set(entityId, new Set());
     }
-    this.sessionViewers.get(sessionId)!.add(clientId);
+    this.sessionViewers.get(entityId)!.add(clientId);
 
     // appUnreadSent 초기화
     if (!this.appUnreadSent.has(clientId)) {
       this.appUnreadSent.set(clientId, new Set());
     }
-    this.appUnreadSent.get(clientId)!.delete(sessionId);
+    this.appUnreadSent.get(clientId)!.delete(entityId);
 
-    this.log(`Client ${clientId} now viewing session ${sessionId}`);
+    this.log(`Client ${clientId} now viewing session ${entityId}`);
   }
 
   /**
    * 세션 뷰어 해제
    */
   private unregisterSessionViewer(clientId: string): void {
-    for (const [sessionId, viewers] of this.sessionViewers) {
+    for (const [entityId, viewers] of this.sessionViewers) {
       if (viewers.has(clientId)) {
         viewers.delete(clientId);
         if (viewers.size === 0) {
-          this.sessionViewers.delete(sessionId);
-          this.deps.messageStore.unloadCache(sessionId);
-          this.log(`Unloaded message cache for session ${sessionId} (no viewers)`);
+          this.sessionViewers.delete(entityId);
+          this.deps.messageStore.unloadCache(entityId);
+          this.log(`Unloaded message cache for session ${entityId} (no viewers)`);
         }
-        this.log(`Client ${clientId} removed from session ${sessionId} viewers`);
+        this.log(`Client ${clientId} removed from session ${entityId} viewers`);
         break;
       }
     }
@@ -1817,34 +1858,31 @@ Message: ${message}
   /**
    * 안 보고 있는 앱에게 unread 알림
    */
-  private sendUnreadToNonViewers(conversationId: string, viewers: Set<string>): void {
+  private sendUnreadToNonViewers(entityId: number, viewers: Set<string>): void {
     const unreadTargets: string[] = [];
 
     for (const [appId, unreadSent] of this.appUnreadSent) {
       if (viewers.has(appId)) continue;
-      if (unreadSent.has(conversationId)) continue;
+      if (unreadSent.has(entityId)) continue;
 
       unreadTargets.push(appId);
-      unreadSent.add(conversationId);
+      unreadSent.add(entityId);
     }
 
     if (unreadTargets.length > 0) {
-      const workspaceId = this.deps.workspaceStore.findWorkspaceByConversation(conversationId);
-      if (workspaceId) {
-        this.deps.workspaceStore.updateConversationUnread(workspaceId, conversationId, true);
-      }
+      this.deps.workspaceStore.updateConversationUnread(entityId as EntityId, true);
 
       this.send({
         type: 'conversation_status',
         payload: {
           deviceId: this.config.deviceId,
-          conversationId,
+          entityId,
           status: 'unread',
         },
         to: unreadTargets,
       });
 
-      this.log(`Sent unread notification for ${conversationId} to ${unreadTargets.length} clients`);
+      this.log(`Sent unread notification for ${entityId} to ${unreadTargets.length} clients`);
     }
   }
 
@@ -1855,19 +1893,19 @@ Message: ${message}
   /**
    * 이벤트를 메시지 히스토리에 저장
    */
-  private saveEventToHistory(sessionId: string, event: ClaudeManagerEvent): void {
+  private saveEventToHistory(entityId: number, event: ClaudeManagerEvent): void {
     const e = event as Record<string, unknown>;
     let shouldSave = false;
 
     switch (event.type) {
       case 'textComplete':
-        this.deps.messageStore.addAssistantText(sessionId, e.text as string);
+        this.deps.messageStore.addAssistantText(entityId, e.text as string);
         shouldSave = true;
         break;
 
       case 'toolInfo':
         this.deps.messageStore.addToolStart(
-          sessionId,
+          entityId,
           e.toolName as string,
           e.input as Record<string, unknown>,
           e.parentToolUseId as string | null | undefined,
@@ -1878,7 +1916,7 @@ Message: ${message}
 
       case 'toolComplete':
         this.deps.messageStore.updateToolComplete(
-          sessionId,
+          entityId,
           e.toolName as string,
           e.success as boolean,
           e.result as string | undefined,
@@ -1888,13 +1926,13 @@ Message: ${message}
         break;
 
       case 'error':
-        this.deps.messageStore.addError(sessionId, e.error as string);
+        this.deps.messageStore.addError(entityId, e.error as string);
         shouldSave = true;
         break;
 
       case 'result': {
         const usage = e.usage as { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number } | undefined;
-        this.deps.messageStore.addResult(sessionId, {
+        this.deps.messageStore.addResult(entityId, {
           durationMs: (e.duration_ms as number) || 0,
           inputTokens: usage?.inputTokens || 0,
           outputTokens: usage?.outputTokens || 0,
@@ -1905,21 +1943,21 @@ Message: ${message}
       }
 
       case 'claudeAborted':
-        this.deps.messageStore.addAborted(sessionId, (e.reason as 'user' | 'session_ended') || 'user');
+        this.deps.messageStore.addAborted(entityId, (e.reason as 'user' | 'session_ended') || 'user');
         shouldSave = true;
         break;
     }
 
     // 메시지 저장 예약 (debounce)
     if (shouldSave) {
-      this.scheduleSaveMessages(sessionId);
+      this.scheduleSaveMessages(entityId);
     }
   }
 
   /**
    * send_file MCP 도구 결과 처리
    */
-  private handleSendFileResult(sessionId: string, event: ClaudeManagerEvent): void {
+  private handleSendFileResult(entityId: number, event: ClaudeManagerEvent): void {
     const e = event as Record<string, unknown>;
     if (!e.success || !e.result) return;
 
@@ -1932,21 +1970,21 @@ Message: ${message}
       this.log(`[send_file] Sending file attachment: ${filename} (${fileType})`);
 
       const fileEvent = {
-        type: 'fileAttachment',
+        type: 'file_attachment',
         file: { path: filePath, filename, mimeType, fileType, size, description },
       };
 
       const message = {
         type: 'claude_event',
-        payload: { conversationId: sessionId, event: fileEvent },
+        payload: { entityId, event: fileEvent },
       };
 
-      const viewers = this.getSessionViewers(sessionId);
+      const viewers = this.getSessionViewers(entityId);
       if (viewers.size > 0) {
         this.send({ ...message, to: Array.from(viewers) });
       }
 
-      this.deps.messageStore.addFileAttachment(sessionId, result.file);
+      this.deps.messageStore.addFileAttachment(entityId, result.file);
     } catch (err) {
       this.log(`[send_file] Failed to parse result: ${(err as Error).message}`);
     }
@@ -2016,41 +2054,41 @@ Message: ${message}
   /**
    * 메시지 세션 저장 예약 (debounce)
    */
-  private scheduleSaveMessages(sessionId: string): void {
+  private scheduleSaveMessages(entityId: number): void {
     const persistence = this.deps.persistence;
     if (!persistence) return;
 
     // 기존 타이머 취소
-    const existingTimer = this.messageSaveTimers.get(sessionId);
+    const existingTimer = this.messageSaveTimers.get(entityId);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
     // 새 타이머 설정
     const timer = setTimeout(async () => {
-      this.messageSaveTimers.delete(sessionId);
-      await this.saveMessageSession(sessionId);
+      this.messageSaveTimers.delete(entityId);
+      await this.saveMessageSession(entityId);
     }, this.MESSAGE_SAVE_DEBOUNCE_MS);
 
-    this.messageSaveTimers.set(sessionId, timer);
+    this.messageSaveTimers.set(entityId, timer);
   }
 
   /**
    * 메시지 세션 즉시 저장
    */
-  private async saveMessageSession(sessionId: string): Promise<void> {
+  private async saveMessageSession(entityId: number): Promise<void> {
     const persistence = this.deps.persistence;
     if (!persistence) return;
 
     try {
-      const sessionData = this.deps.messageStore.getSessionData(sessionId);
+      const sessionData = this.deps.messageStore.getSessionData(entityId);
       if (sessionData) {
-        await persistence.saveMessageSession(sessionId, sessionData);
-        this.deps.messageStore.markClean(sessionId);
-        this.log(`[Persistence] Saved message session: ${sessionId}`);
+        await persistence.saveMessageSession(String(entityId), sessionData);
+        this.deps.messageStore.markClean(entityId);
+        this.log(`[Persistence] Saved message session: ${entityId}`);
       }
     } catch (err) {
-      this.deps.logger.error(`[Persistence] Failed to save session ${sessionId}: ${err}`);
+      this.deps.logger.error(`[Persistence] Failed to save session ${entityId}: ${err}`);
     }
   }
 
@@ -2059,16 +2097,16 @@ Message: ${message}
    */
   private async flushPendingSaves(): Promise<void> {
     // 모든 타이머 취소
-    for (const [sessionId, timer] of this.messageSaveTimers) {
+    for (const [entityId, timer] of this.messageSaveTimers) {
       clearTimeout(timer);
-      this.messageSaveTimers.delete(sessionId);
+      this.messageSaveTimers.delete(entityId);
     }
 
     // dirty 세션 모두 저장
     if (this.deps.messageStore.hasDirtyData()) {
       const dirtySessions = this.deps.messageStore.getDirtySessions();
-      for (const sessionId of dirtySessions) {
-        await this.saveMessageSession(sessionId);
+      for (const entityId of dirtySessions) {
+        await this.saveMessageSession(entityId);
       }
     }
   }
@@ -2076,17 +2114,17 @@ Message: ${message}
   /**
    * 메시지 세션 로드 (lazy loading)
    */
-  loadMessageSession(sessionId: string): void {
+  loadMessageSession(entityId: number): void {
     const persistence = this.deps.persistence;
     if (!persistence) return;
 
     // 이미 캐시되어 있으면 스킵
-    if (this.deps.messageStore.hasCache(sessionId)) return;
+    if (this.deps.messageStore.hasCache(entityId)) return;
 
-    const sessionData = persistence.loadMessageSession(sessionId);
+    const sessionData = persistence.loadMessageSession(String(entityId));
     if (sessionData) {
-      this.deps.messageStore.loadSessionData(sessionId, sessionData);
-      this.log(`[Persistence] Loaded message session: ${sessionId}`);
+      this.deps.messageStore.loadSessionData(entityId, sessionData);
+      this.log(`[Persistence] Loaded message session: ${entityId}`);
     }
   }
 
@@ -2107,5 +2145,52 @@ Message: ${message}
    */
   private log(message: string): void {
     this.deps.logger.log(`[${new Date().toISOString()}] ${message}`);
+  }
+
+  // ==========================================================================
+  // Private 메서드 - Usage 조회
+  // ==========================================================================
+
+  /**
+   * usage_request 처리
+   *
+   * @description
+   * ccusage CLI를 실행하여 Claude Code 사용량 데이터를 조회하고
+   * 요약 정보를 클라이언트에게 응답합니다.
+   */
+  private handleUsageRequest(from: MessageFrom | undefined): void {
+    // 비동기 처리
+    (async () => {
+      try {
+        const { getUsageSummary } = await import('./utils/ccusage.js');
+        const summary = await getUsageSummary();
+
+        this.send({
+          type: 'usage_response',
+          to: from?.deviceId,
+          payload: {
+            deviceId: this.config.deviceId,
+            success: !!summary,
+            summary,
+            error: summary ? undefined : 'ccusage not available',
+          },
+        });
+
+        if (summary) {
+          this.log(`[Usage] Fetched usage: today=$${summary.todayCost.toFixed(2)}, week=$${summary.weekCost.toFixed(2)}`);
+        }
+      } catch (err) {
+        this.send({
+          type: 'usage_response',
+          to: from?.deviceId,
+          payload: {
+            deviceId: this.config.deviceId,
+            success: false,
+            error: (err as Error).message,
+          },
+        });
+        this.deps.logger.error(`[Usage] Failed to fetch usage: ${err}`);
+      }
+    })();
   }
 }

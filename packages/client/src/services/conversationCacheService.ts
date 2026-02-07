@@ -7,7 +7,7 @@
  * - 캐시 만료 관리
  */
 
-import type { ClaudeMessage } from '../stores/claudeStore';
+import type { StoreMessage as ClaudeMessage } from '@estelle/core';
 import { storage } from '../platform/storage';
 
 /**

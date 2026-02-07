@@ -1,12 +1,13 @@
-import { useState, useContext } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { useWorkspaceStore, useDeviceConfigStore } from '../../stores';
+import { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import { ArrowLeft, Check, X } from 'lucide-react';
+import { useWorkspaceStore, useDeviceConfigStore, useConversationStore } from '../../stores';
 import { useResponsive } from '../../hooks/useResponsive';
 import { SessionMenuButton } from '../common/SessionMenuButton';
 import { BugReportDialog } from '../common/BugReportDialog';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
 import { getDeviceIcon } from '../../utils/device-icons';
-import { setPermissionMode } from '../../services';
+import { setPermissionMode, renameConversation, deleteConversation, sendBugReport } from '../../services';
+import { Button } from '../ui/button';
 
 interface ChatHeaderProps {
   showSessionMenu?: boolean;
@@ -21,10 +22,68 @@ interface ChatHeaderProps {
  */
 export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   const [showBugReport, setShowBugReport] = useState(false);
-  const { selectedConversation, updatePermissionMode } = useWorkspaceStore();
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { selectedConversation, updatePermissionMode, selectConversation: selectInStore } = useWorkspaceStore();
   const { getIcon } = useDeviceConfigStore();
   const { isDesktop } = useResponsive();
   const { openSidebar } = useContext(MobileLayoutContext);
+
+  useEffect(() => {
+    if (isRenaming) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isRenaming]);
+
+  // 대화가 바뀌면 편집 모드 해제
+  useEffect(() => {
+    setIsRenaming(false);
+  }, [selectedConversation?.conversationId]);
+
+  const startRename = useCallback(() => {
+    if (!selectedConversation) return;
+    setRenameValue(selectedConversation.conversationName);
+    setIsRenaming(true);
+  }, [selectedConversation]);
+
+  const confirmRename = useCallback(() => {
+    if (!selectedConversation) return;
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== selectedConversation.conversationName) {
+      renameConversation(
+        selectedConversation.workspaceId,
+        selectedConversation.conversationId,
+        trimmed
+      );
+    }
+    setIsRenaming(false);
+  }, [selectedConversation, renameValue]);
+
+  const cancelRename = useCallback(() => {
+    setIsRenaming(false);
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      confirmRename();
+    } else if (e.key === 'Escape') {
+      cancelRename();
+    }
+  }, [confirmRename, cancelRename]);
+
+  const handleDelete = useCallback(() => {
+    if (!selectedConversation) return;
+    deleteConversation(
+      selectedConversation.workspaceId,
+      selectedConversation.conversationId
+    );
+    // 선택 해제
+    selectInStore(selectedConversation.pylonId, selectedConversation.workspaceId, '');
+    // conversationStore에서 대화 상태 삭제
+    useConversationStore.getState().deleteConversation(selectedConversation.conversationId);
+  }, [selectedConversation, selectInStore]);
 
   if (!selectedConversation) {
     return (
@@ -63,21 +122,51 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
 
         {/* 대화명 + 워크스페이스 */}
         <div className="flex-1 flex items-center gap-2 min-w-0">
-          <span className="font-semibold truncate">
-            {selectedConversation.conversationName}
-          </span>
+          {isRenaming ? (
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <input
+                ref={inputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="flex-1 min-w-0 px-2 py-0.5 text-sm font-semibold bg-background border border-primary/50 rounded outline-none"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-primary"
+                onClick={confirmRename}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground"
+                onClick={cancelRename}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <>
+              <span className="font-semibold truncate">
+                {selectedConversation.conversationName}
+              </span>
 
-          {/* 워크스페이스 아이콘 + 이름 (작게) */}
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <IconComponent className="h-3 w-3 opacity-60" />
-            <span className="text-xs truncate opacity-60">
-              {selectedConversation.workspaceName}
-            </span>
-          </div>
+              {/* 워크스페이스 아이콘 + 이름 (작게) */}
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <IconComponent className="h-3 w-3 opacity-60" />
+                <span className="text-xs truncate opacity-60">
+                  {selectedConversation.workspaceName}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* 세션 메뉴 */}
-        {showSessionMenu && (
+        {showSessionMenu && !isRenaming && (
           <SessionMenuButton
             permissionMode={selectedConversation.permissionMode}
             onPermissionModeChange={(mode) => {
@@ -85,6 +174,9 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
               updatePermissionMode(selectedConversation.conversationId, mode);
             }}
             onBugReport={() => setShowBugReport(true)}
+            onRename={startRename}
+            onDelete={handleDelete}
+            conversationName={selectedConversation.conversationName}
           />
         )}
       </div>
@@ -93,6 +185,14 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
       <BugReportDialog
         open={showBugReport}
         onClose={() => setShowBugReport(false)}
+        onSubmit={async (message) => {
+          const sent = sendBugReport(
+            message,
+            selectedConversation?.conversationId,
+            selectedConversation?.workspaceId
+          );
+          if (!sent) throw new Error('WebSocket 연결 안 됨');
+        }}
       />
     </>
   );

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { UsageSummary } from '@estelle/core';
 
 /**
  * 배포 단계 타입
@@ -76,6 +77,15 @@ export interface SettingsState {
   /** 버전 정보 */
   versionInfo: VersionInfo | null;
 
+  /** ccusage 사용량 요약 */
+  usageSummary: UsageSummary | null;
+
+  /** 사용량 로딩 중 */
+  isLoadingUsage: boolean;
+
+  /** 사용량 에러 메시지 */
+  usageError: string | null;
+
   // Actions
   setDeployPhase: (phase: DeployPhase) => void;
   setDeployError: (message: string) => void;
@@ -87,6 +97,8 @@ export interface SettingsState {
   resetDeploy: () => void;
   setClaudeUsage: (usage: ClaudeUsage) => void;
   setVersionInfo: (info: VersionInfo) => void;
+  setUsageSummary: (summary: UsageSummary | null, error?: string) => void;
+  setLoadingUsage: (loading: boolean) => void;
   reset: () => void;
 }
 
@@ -107,6 +119,9 @@ const initialState = {
   pylonAckCount: 0,
   claudeUsage: null as ClaudeUsage | null,
   versionInfo: null as VersionInfo | null,
+  usageSummary: null as UsageSummary | null,
+  isLoadingUsage: false,
+  usageError: null as string | null,
 };
 
 /**
@@ -177,6 +192,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setVersionInfo: (info) => {
     set({ versionInfo: info });
+  },
+
+  setUsageSummary: (summary, error) => {
+    set({
+      usageSummary: summary,
+      usageError: error || null,
+      isLoadingUsage: false,
+    });
+  },
+
+  setLoadingUsage: (loading) => {
+    set({ isLoadingUsage: loading });
   },
 
   reset: () => {

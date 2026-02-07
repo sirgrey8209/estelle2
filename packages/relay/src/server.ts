@@ -30,6 +30,24 @@ import { log, getClientIp, generateClientId, getDeviceInfo } from './utils.js';
 import { DEVICES, DYNAMIC_DEVICE_ID_START, DEFAULT_PORT } from './constants.js';
 
 // ============================================================================
+// main() 함수 반환 타입
+// ============================================================================
+
+/**
+ * main() 함수 반환 타입
+ */
+export interface MainResult {
+  /** 서버 시작 여부 */
+  started: boolean;
+  /** 사용된 포트 */
+  port: number;
+  /** 서버 인스턴스 */
+  server: {
+    stop: () => Promise<void>;
+  };
+}
+
+// ============================================================================
 // 서버 상태
 // ============================================================================
 
@@ -484,7 +502,7 @@ export function createRelayServer(
  * STATIC_DIR=./public PORT=8080 node dist/server.js
  * ```
  */
-export async function main(options: RelayServerOptions = {}): Promise<void> {
+export async function main(options: RelayServerOptions = {}): Promise<MainResult> {
   // 동적 import로 모듈 로드
   const { WebSocketServer } = await import('ws');
   const http = await import('http');
@@ -510,22 +528,42 @@ export async function main(options: RelayServerOptions = {}): Promise<void> {
   } else {
     // WebSocket 전용 서버
     wss = new WebSocketServer({ port });
+    log(`[Estelle Relay v2] Started on port ${port}`);
   }
 
   const relay = createRelayServer(wss, { port, devices: options.devices });
   relay.start();
 
   // Graceful shutdown
-  const shutdown = async () => {
+  const stopServer = async () => {
     await relay.stop();
     if (httpServer) {
       httpServer.close();
     }
-    process.exit(0);
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  // 결과 객체를 먼저 생성하여 시그널 핸들러에서 참조할 수 있게 함
+  const result: MainResult = {
+    started: true,
+    port,
+    server: {
+      stop: stopServer,
+    },
+  };
+
+  // 시그널 핸들러 (테스트에서 server.stop 스파이가 동작하도록 result.server.stop 호출)
+  const handleShutdown = async () => {
+    await result.server.stop();
+    // 프로덕션에서만 exit (테스트 환경에서는 vitest가 process.exit를 차단함)
+    if (process.env['NODE_ENV'] !== 'test') {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGINT', handleShutdown);
+  process.on('SIGTERM', handleShutdown);
+
+  return result;
 }
 
 // CLI로 직접 실행된 경우

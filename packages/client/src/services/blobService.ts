@@ -463,11 +463,12 @@ export class BlobTransferService {
     const transfer = this.transfers.get(blobId);
     if (!transfer || transfer.isUpload) return;
 
-    // 모든 청크 조합
-    const totalLength = transfer.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    // 모든 청크 조합 (누락된 청크 건너뛰기)
+    const validChunks = transfer.chunks.filter((chunk) => chunk && chunk.length > 0);
+    const totalLength = validChunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const bytes = new Uint8Array(totalLength);
     let offset = 0;
-    for (const chunk of transfer.chunks) {
+    for (const chunk of validChunks) {
       bytes.set(chunk, offset);
       offset += chunk.length;
     }
@@ -505,9 +506,10 @@ export class BlobTransferService {
       transfer.state = 'completed';
       transfer.pylonPath = pylonPath;
 
-      // 썸네일 캐시 저장
+      // 썸네일 캐시 저장 (data URI prefix 제거)
       if (thumbnailBase64) {
-        const thumbBytes = base64ToUint8Array(thumbnailBase64);
+        const base64Data = thumbnailBase64.replace(/^data:image\/\w+;base64,/, '');
+        const thumbBytes = base64ToUint8Array(base64Data);
         imageCache.set(`thumb_${transfer.filename}`, thumbBytes);
       }
 

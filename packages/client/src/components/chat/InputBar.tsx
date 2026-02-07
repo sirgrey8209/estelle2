@@ -7,9 +7,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { useWorkspaceStore, useClaudeStore } from '../../stores';
+import { useWorkspaceStore, useConversationStore } from '../../stores';
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
+import { useResponsive } from '../../hooks/useResponsive';
 
 // 대화별 입력 텍스트 저장소
 const draftTexts = new Map<string, string>();
@@ -31,8 +32,11 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const prevConversationIdRef = useRef<string | null>(null);
 
   const { selectedConversation } = useWorkspaceStore();
-  const { status } = useClaudeStore();
+  // conversationStore에서 현재 대화의 status 가져오기
+  const currentState = useConversationStore((s) => s.getCurrentState());
+  const status = currentState?.status ?? 'idle';
   const { attachedImage, setAttachedImage, hasActiveUpload } = useImageUploadStore();
+  const { isDesktop } = useResponsive();
 
   const conversationId = selectedConversation?.conversationId || null;
 
@@ -85,12 +89,62 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // 데스크탑: Enter = 전송, Shift+Enter 또는 Ctrl+Enter = 줄바꾸기
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-      e.preventDefault();
-      handleSend();
+    if (e.key === 'Enter') {
+      if (isDesktop) {
+        // 데스크탑: Enter = 전송, Shift+Enter / Ctrl+Enter = 줄바꿈
+        if (!e.shiftKey && !e.ctrlKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      }
+      // 모바일: Enter = 줄바꿈 (기본 동작), 전송은 Send 버튼으로
     }
   };
+
+  // 붙여넣기: 클립보드 이미지 또는 대용량 텍스트 → 파일 첨부
+  const PASTE_TEXT_THRESHOLD = 1024; // 1KB 이상이면 파일 첨부로 전환
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // 1. 클립보드 이미지 확인
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+
+        const ext = file.type.split('/')[1] || 'png';
+        const filename = `clipboard-${Date.now()}.${ext}`;
+        const uri = URL.createObjectURL(file);
+        setAttachedImage({
+          id: `img_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          uri,
+          fileName: filename,
+          file,
+          mimeType: file.type,
+        });
+        return;
+      }
+    }
+
+    // 2. 대용량 텍스트 확인
+    const pastedText = e.clipboardData.getData('text/plain');
+    if (pastedText && new Blob([pastedText]).size >= PASTE_TEXT_THRESHOLD) {
+      e.preventDefault();
+      const blob = new Blob([pastedText], { type: 'text/plain' });
+      const file = new File([blob], `pasted-${Date.now()}.txt`, { type: 'text/plain' });
+      const uri = URL.createObjectURL(file);
+      setAttachedImage({
+        id: `file_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        uri,
+        fileName: file.name,
+        file,
+        mimeType: 'text/plain',
+      });
+    }
+  }, [setAttachedImage]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,15 +177,21 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
 
   return (
     <div className="bg-secondary/30">
-      {/* 첨부 이미지 미리보기 */}
+      {/* 첨부 파일 미리보기 */}
       {attachedImage && (
         <div className="flex items-center px-2 pt-2 bg-muted/50">
           <div className="relative">
-            <img
-              src={attachedImage.uri}
-              alt={attachedImage.fileName}
-              className="w-16 h-16 rounded-lg object-cover"
-            />
+            {attachedImage.mimeType?.startsWith('image/') ? (
+              <img
+                src={attachedImage.uri}
+                alt={attachedImage.fileName}
+                className="w-16 h-16 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border">
+                <span className="text-2xl">📄</span>
+              </div>
+            )}
             <button
               onClick={removeAttachment}
               className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
@@ -164,6 +224,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
           value={text}
           onChange={setText}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={disabled || isWorking}
           minRows={1}
           maxRows={6}

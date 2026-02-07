@@ -22,8 +22,9 @@ import type {
   BlobRequestPayload,
   BlobContext,
   Message,
+  EntityId,
 } from '@estelle/core';
-import { BlobConfig } from '@estelle/core';
+import { BlobConfig, encodeEntityId } from '@estelle/core';
 
 // ============================================================================
 // 테스트 헬퍼
@@ -65,10 +66,12 @@ function createChunkData(content: string): string {
 /**
  * 테스트용 BlobContext 생성
  */
+const TEST_ENTITY_ID = encodeEntityId(1, 1, 123);
+
 function createTestContext(overrides?: Partial<BlobContext>): BlobContext {
   return {
     type: 'image_upload',
-    conversationId: 'conv-123',
+    entityId: TEST_ENTITY_ID,
     ...overrides,
   };
 }
@@ -132,15 +135,15 @@ describe('BlobHandler', () => {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks: 1,
         encoding: 'base64',
-        context: createTestContext({ conversationId: 'conv-new' }),
+        context: createTestContext({ entityId: encodeEntityId(1, 2, 1) }),
       };
 
       handler.handleBlobStart(payload, 'device-001');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/uploads/conv-new');
+      expect(mockFs.mkdir).toHaveBeenCalledWith(`/uploads/${encodeEntityId(1, 2, 1)}`);
     });
 
-    it('should use root uploads folder when conversationId is empty', () => {
+    it('should use unknown folder when entityId is 0', () => {
       const payload: BlobStartPayload = {
         blobId: 'blob-001',
         filename: 'test.png',
@@ -149,12 +152,12 @@ describe('BlobHandler', () => {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks: 1,
         encoding: 'base64',
-        context: { type: 'image_upload', conversationId: '' },
+        context: { type: 'image_upload', entityId: 0 as EntityId },
       };
 
       handler.handleBlobStart(payload, 'device-001');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/uploads/');
+      expect(mockFs.mkdir).toHaveBeenCalledWith('/uploads/unknown');
     });
 
     it('should sanitize filename', () => {
@@ -495,7 +498,7 @@ describe('BlobHandler', () => {
       });
 
       expect(result.context).toBeDefined();
-      expect(result.context?.conversationId).toBe('conv-123');
+      expect(result.context?.entityId).toBe(TEST_ENTITY_ID);
     });
 
     it('should clean up chunks after successful write', () => {

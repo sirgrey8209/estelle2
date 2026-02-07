@@ -2,7 +2,7 @@
  * @file message-flow.test.ts
  * @description 메시지 전송 플로우 E2E 테스트
  *
- * 사용자 메시지 전송 → Claude 응답 수신 플로우를 검증합니다.
+ * 사용자 메시지 전송 -> Claude 응답 수신 플로우를 검증합니다.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -28,6 +28,7 @@ const mockWorkspaces = [
 
 const mockWorkspaceStore = {
   connectedPylons: [{ deviceId: 1, deviceName: 'Test PC' }],
+  workspacesByPylon: new Map<number, unknown[]>(),
   selectedConversation: {
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
@@ -44,29 +45,28 @@ const mockWorkspaceStore = {
   getAllWorkspaces: vi.fn(() => [{ pylonId: 1, workspaces: mockWorkspaces }]),
 };
 
-const claudeMessages: any[] = [];
-const mockClaudeStore = {
-  messages: claudeMessages,
-  status: 'idle',
-  hasPendingRequests: false,
-  setMessages: vi.fn((msgs) => {
-    claudeMessages.length = 0;
-    claudeMessages.push(...msgs);
-  }),
-  addMessage: vi.fn((msg) => {
-    claudeMessages.push(msg);
-  }),
-  handleClaudeEvent: vi.fn((payload) => {
-    // 실제 handleClaudeEvent 로직 시뮬레이션
-    const { event } = payload;
-    if (event?.type === 'text') {
-      claudeMessages.push({
-        role: 'assistant',
-        content: event.text,
-      });
-    }
+// conversationStore mock
+const convMessages: Map<string, any[]> = new Map();
+const mockConversationStore = {
+  states: new Map<string, unknown>(),
+  currentConversationId: 'conv-1' as string | null,
+  setMessages: vi.fn((convId: string, msgs: any[]) => {
+    convMessages.set(convId, [...msgs]);
   }),
   setStatus: vi.fn(),
+  appendTextBuffer: vi.fn(),
+  flushTextBuffer: vi.fn(),
+  addMessage: vi.fn((convId: string, msg: any) => {
+    const msgs = convMessages.get(convId) || [];
+    msgs.push(msg);
+    convMessages.set(convId, msgs);
+  }),
+  addPendingRequest: vi.fn(),
+  updateRealtimeUsage: vi.fn(),
+  getState: vi.fn((convId: string) => ({
+    messages: convMessages.get(convId) || [],
+    status: 'idle',
+  })),
 };
 
 const mockRelayStore = {
@@ -84,11 +84,11 @@ vi.mock('../stores/workspaceStore', () => ({
   ),
 }));
 
-vi.mock('../stores/claudeStore', () => ({
-  useClaudeStore: Object.assign(
-    (selector?: (state: typeof mockClaudeStore) => any) =>
-      selector ? selector(mockClaudeStore) : mockClaudeStore,
-    { getState: () => mockClaudeStore }
+vi.mock('../stores/conversationStore', () => ({
+  useConversationStore: Object.assign(
+    (selector?: (state: typeof mockConversationStore) => any) =>
+      selector ? selector(mockConversationStore) : mockConversationStore,
+    { getState: () => mockConversationStore }
   ),
 }));
 
@@ -98,6 +98,14 @@ vi.mock('../stores/relayStore', () => ({
       selector ? selector(mockRelayStore) : mockRelayStore,
     { getState: () => mockRelayStore }
   ),
+}));
+
+vi.mock('../stores/settingsStore', () => ({
+  useSettingsStore: {
+    getState: () => ({
+      setUsageSummary: vi.fn(),
+    }),
+  },
 }));
 
 // selectConversation mock
@@ -130,7 +138,7 @@ describe('메시지 플로우 E2E 테스트', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sentMessages = [];
-    claudeMessages.length = 0;
+    convMessages.clear();
     mockRelayStore.desksLoaded = false;
     // WebSocket mock 설정
     setWebSocket(mockWebSocket);
@@ -210,7 +218,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       );
     });
 
-    it('claude_event가 claudeStore에 전달되어야 한다', () => {
+    it('claude_event text가 conversationStore에 전달되어야 한다', () => {
       // Given
       const message = {
         type: MessageType.CLAUDE_EVENT,
@@ -227,7 +235,10 @@ describe('메시지 플로우 E2E 테스트', () => {
       routeMessage(message);
 
       // Then
-      expect(mockClaudeStore.handleClaudeEvent).toHaveBeenCalledWith(message.payload);
+      expect(mockConversationStore.appendTextBuffer).toHaveBeenCalledWith(
+        'conv-1',
+        'Hello! How can I help you?'
+      );
     });
 
     it('history_result가 메시지 목록을 설정해야 한다', () => {
@@ -238,14 +249,17 @@ describe('메시지 플로우 E2E 테스트', () => {
       ];
       const message = {
         type: MessageType.HISTORY_RESULT,
-        payload: { messages },
+        payload: { messages, conversationId: 'conv-1' },
       };
 
       // When
       routeMessage(message);
 
       // Then
-      expect(mockClaudeStore.setMessages).toHaveBeenCalledWith(messages);
+      expect(mockConversationStore.setMessages).toHaveBeenCalledWith('conv-1', messages, {
+        totalCount: 2,
+        hasMore: false,
+      });
     });
   });
 
@@ -270,14 +284,18 @@ describe('메시지 플로우 E2E 테스트', () => {
       });
 
       // 3. 응답이 처리되었는지 확인
-      expect(mockClaudeStore.handleClaudeEvent).toHaveBeenCalled();
+      expect(mockConversationStore.appendTextBuffer).toHaveBeenCalledWith(
+        'conv-1',
+        '2+2 equals 4.'
+      );
     });
 
     it('사용자 메시지가 store에 추가되어야 한다', () => {
       // When - ChatArea의 handleSend 로직 시뮬레이션
-      mockClaudeStore.addMessage({
+      mockConversationStore.addMessage('conv-1', {
         id: `user-${Date.now()}-test`,
-        type: 'user' as const,
+        role: 'user',
+        type: 'text',
         content: 'Hello, Claude!',
         timestamp: Date.now(),
         attachments: undefined,
@@ -285,9 +303,11 @@ describe('메시지 플로우 E2E 테스트', () => {
       sendClaudeMessage('ws-1', 'conv-1', 'Hello, Claude!');
 
       // Then
-      expect(mockClaudeStore.addMessage).toHaveBeenCalledWith(
+      expect(mockConversationStore.addMessage).toHaveBeenCalledWith(
+        'conv-1',
         expect.objectContaining({
-          type: 'user',
+          role: 'user',
+          type: 'text',
           content: 'Hello, Claude!',
         })
       );
@@ -301,9 +321,10 @@ describe('메시지 플로우 E2E 테스트', () => {
       ];
 
       // When - ChatArea의 handleSend 로직 시뮬레이션
-      mockClaudeStore.addMessage({
+      mockConversationStore.addMessage('conv-1', {
         id: `user-${Date.now()}-test`,
-        type: 'user' as const,
+        role: 'user',
+        type: 'text',
         content: 'Check this',
         timestamp: Date.now(),
         attachments,
@@ -311,9 +332,11 @@ describe('메시지 플로우 E2E 테스트', () => {
       sendClaudeMessage('ws-1', 'conv-1', 'Check this', ['/path/to/image.png']);
 
       // Then
-      expect(mockClaudeStore.addMessage).toHaveBeenCalledWith(
+      expect(mockConversationStore.addMessage).toHaveBeenCalledWith(
+        'conv-1',
         expect.objectContaining({
-          type: 'user',
+          role: 'user',
+          type: 'text',
           content: 'Check this',
           attachments: expect.arrayContaining([
             expect.objectContaining({ filename: 'image.png' }),

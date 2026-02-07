@@ -3,7 +3,7 @@ import { Send, Check, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
-import type { QuestionRequest as QuestionRequestType } from '../../stores/claudeStore';
+import type { QuestionRequest as QuestionRequestType } from '@estelle/core';
 
 interface QuestionRequestProps {
   request: QuestionRequestType;

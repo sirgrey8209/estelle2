@@ -4,3 +4,5 @@
  */
 
 export * from './deviceId.js';
+export * from './claude-utils.js';
+export * from './entity-id.js';

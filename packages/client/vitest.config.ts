@@ -4,6 +4,10 @@ import viteConfig from './vite.config';
 export default mergeConfig(
   viteConfig,
   defineConfig({
+    // React의 development 빌드 사용 (act() 지원을 위해 필요)
+    define: {
+      'process.env.NODE_ENV': '"development"',
+    },
     test: {
       globals: true,
       environment: 'jsdom',

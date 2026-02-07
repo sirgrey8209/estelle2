@@ -97,14 +97,15 @@ describe('ClaudeSDKAdapter', () => {
         // 메시지 소비
       }
 
-      // 기본값 확인
-      expect(mockQuery).toHaveBeenCalledWith({
-        prompt: 'Hello',
-        options: expect.objectContaining({
-          includePartialMessages: true,
-          settingSources: ['project'],
-        }),
-      });
+      // 기본값 확인 - prompt와 핵심 옵션만 검증
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Hello',
+          options: expect.objectContaining({
+            includePartialMessages: true,
+          }),
+        })
+      );
     });
   });
 

@@ -5,19 +5,24 @@
  * 워크스페이스와 대화 정보를 관리하는 순수 데이터 클래스입니다.
  * 파일 I/O는 외부에서 처리하여 테스트 용이성을 확보합니다.
  *
+ * ID 체계:
+ * - workspaceId: number (1~127) - 할당 시 빈 번호 검색
+ * - entityId: EntityId (비트 팩 number) - pylonId + workspaceId + localConvId
+ * - UUID 사용하지 않음
+ *
  * 저장 구조:
  * ```json
  * {
- *   "activeWorkspaceId": "uuid",
- *   "activeConversationId": "uuid",
+ *   "activeWorkspaceId": 1,
+ *   "activeConversationId": 2049,
  *   "workspaces": [
  *     {
- *       "workspaceId": "uuid",
+ *       "workspaceId": 1,
  *       "name": "Estelle",
  *       "workingDir": "C:\\workspace\\estelle",
  *       "conversations": [
  *         {
- *           "conversationId": "uuid",
+ *           "entityId": 2049,
  *           "name": "기능 논의",
  *           "claudeSessionId": "session-uuid",
  *           "status": "idle",
@@ -29,29 +34,23 @@
  *   ]
  * }
  * ```
- *
- * @example
- * ```typescript
- * import { WorkspaceStore } from './stores/workspace-store.js';
- * import fs from 'fs';
- *
- * // 파일에서 로드
- * const data = fs.existsSync('workspaces.json')
- *   ? JSON.parse(fs.readFileSync('workspaces.json', 'utf-8'))
- *   : undefined;
- * const store = new WorkspaceStore(data);
- *
- * // 워크스페이스 생성
- * const { workspace, conversation } = store.createWorkspace('Project', 'C:\\project');
- *
- * // 파일에 저장
- * fs.writeFileSync('workspaces.json', JSON.stringify(store.toJSON(), null, 2));
- * ```
  */
 
-import { randomUUID } from 'crypto';
-import { ConversationStatus, PermissionMode } from '@estelle/core';
-import type { ConversationStatusValue, PermissionModeValue } from '@estelle/core';
+import { ConversationStatus, PermissionMode, encodeEntityId, decodeEntityId } from '@estelle/core';
+import type { ConversationStatusValue, PermissionModeValue, EntityId } from '@estelle/core';
+
+// ============================================================================
+// 상수
+// ============================================================================
+
+/** 워크스페이스 ID 최대값 (7비트: 1~127) */
+const MAX_WORKSPACE_ID = 127;
+
+/** 대화 ID 최대값 (10비트: 1~1023) */
+const MAX_CONVERSATION_ID = 1023;
+
+/** 기본 작업 디렉토리 (환경 변수 또는 기본값) */
+const DEFAULT_WORKING_DIR = process.env.DEFAULT_WORKING_DIR || 'C:\\workspace';
 
 // ============================================================================
 // 타입 정의
@@ -59,14 +58,10 @@ import type { ConversationStatusValue, PermissionModeValue } from '@estelle/core
 
 /**
  * 대화(Conversation) 정보
- *
- * @description
- * 워크스페이스 내의 개별 대화를 나타냅니다.
- * 각 대화는 Claude Code 세션과 연결될 수 있습니다.
  */
 export interface Conversation {
-  /** 대화 고유 식별자 (UUID) */
-  conversationId: string;
+  /** 대화 고유 식별자 (EntityId: pylonId + workspaceId + localConvId 인코딩) */
+  entityId: EntityId;
 
   /** 대화 이름 (표시용) */
   name: string;
@@ -89,14 +84,10 @@ export interface Conversation {
 
 /**
  * 워크스페이스(Workspace) 정보
- *
- * @description
- * 특정 작업 디렉토리와 연결된 워크스페이스를 나타냅니다.
- * 각 워크스페이스는 여러 대화를 포함할 수 있습니다.
  */
 export interface Workspace {
-  /** 워크스페이스 고유 식별자 (UUID) */
-  workspaceId: string;
+  /** 워크스페이스 고유 식별자 (1~127) */
+  workspaceId: number;
 
   /** 워크스페이스 이름 (표시용) */
   name: string;
@@ -116,10 +107,6 @@ export interface Workspace {
 
 /**
  * 활성 상태를 포함한 워크스페이스 정보
- *
- * @description
- * getAllWorkspaces()에서 반환되는 타입으로,
- * 기본 Workspace에 isActive 플래그가 추가됩니다.
  */
 export interface WorkspaceWithActive extends Workspace {
   /** 현재 활성화된 워크스페이스 여부 */
@@ -128,16 +115,13 @@ export interface WorkspaceWithActive extends Workspace {
 
 /**
  * 워크스페이스 스토어 데이터 (직렬화용)
- *
- * @description
- * 파일에 저장/로드되는 전체 스토어 데이터 구조입니다.
  */
 export interface WorkspaceStoreData {
   /** 현재 활성 워크스페이스 ID (없으면 null) */
-  activeWorkspaceId: string | null;
+  activeWorkspaceId: number | null;
 
-  /** 현재 활성 대화 ID (없으면 null) */
-  activeConversationId: string | null;
+  /** 현재 활성 대화 EntityId (없으면 null) */
+  activeConversationId: EntityId | null;
 
   /** 모든 워크스페이스 목록 */
   workspaces: Workspace[];
@@ -159,18 +143,17 @@ export interface CreateWorkspaceResult {
  */
 export interface ActiveState {
   /** 현재 활성 워크스페이스 ID */
-  activeWorkspaceId: string | null;
+  activeWorkspaceId: number | null;
 
-  /** 현재 활성 대화 ID */
-  activeConversationId: string | null;
+  /** 현재 활성 대화 EntityId */
+  activeConversationId: EntityId | null;
 }
 
 /**
  * finishing 상태 대화 정보 (재처리용)
  */
 export interface FinishingConversationInfo {
-  workspaceId: string;
-  conversationId: string;
+  entityId: EntityId;
   workingDir: string;
   claudeSessionId: string | null;
 }
@@ -179,16 +162,8 @@ export interface FinishingConversationInfo {
  * finished 상태 대화 정보 (다이얼로그 표시용)
  */
 export interface FinishedConversationInfo {
-  workspaceId: string;
-  conversationId: string;
+  entityId: EntityId;
 }
-
-// ============================================================================
-// 상수
-// ============================================================================
-
-/** 기본 작업 디렉토리 (환경 변수 또는 기본값) */
-const DEFAULT_WORKING_DIR = process.env.DEFAULT_WORKING_DIR || 'C:\\workspace';
 
 // ============================================================================
 // WorkspaceStore 클래스
@@ -199,36 +174,22 @@ const DEFAULT_WORKING_DIR = process.env.DEFAULT_WORKING_DIR || 'C:\\workspace';
  *
  * @description
  * 워크스페이스와 대화 정보를 관리하는 순수 데이터 클래스입니다.
- * 모든 상태 변경은 이 클래스를 통해 이루어지며,
- * 파일 I/O는 외부에서 toJSON()/fromJSON()을 통해 처리합니다.
- *
- * 설계 원칙:
- * - 순수 데이터 클래스: 외부 의존성 없음 (파일 I/O 분리)
- * - 모킹 없이 테스트 가능
- * - Single Source of Truth: 모든 워크스페이스/대화 상태의 유일한 진실 소스
- *
- * @example
- * ```typescript
- * // 빈 스토어 생성
- * const store = new WorkspaceStore();
- *
- * // 기존 데이터로 초기화
- * const store = new WorkspaceStore(existingData);
- *
- * // 정적 팩토리 메서드로 생성
- * const store = WorkspaceStore.fromJSON(jsonData);
- * ```
+ * ID는 숫자 기반으로 할당되며, 삭제된 ID는 다음 할당 시 재사용됩니다.
+ * 대화는 EntityId로 전역 고유 식별됩니다.
  */
 export class WorkspaceStore {
   // ============================================================================
   // Private 필드
   // ============================================================================
 
-  /** 현재 활성 워크스페이스 ID */
-  private _activeWorkspaceId: string | null;
+  /** Pylon ID (EntityId 인코딩에 사용) */
+  private _pylonId: number;
 
-  /** 현재 활성 대화 ID */
-  private _activeConversationId: string | null;
+  /** 현재 활성 워크스페이스 ID */
+  private _activeWorkspaceId: number | null;
+
+  /** 현재 활성 대화 EntityId */
+  private _activeConversationId: EntityId | null;
 
   /** 모든 워크스페이스 목록 */
   private _workspaces: Workspace[];
@@ -237,12 +198,8 @@ export class WorkspaceStore {
   // 생성자
   // ============================================================================
 
-  /**
-   * WorkspaceStore 생성자
-   *
-   * @param data - 초기 데이터 (없으면 빈 상태로 시작)
-   */
-  constructor(data?: WorkspaceStoreData) {
+  constructor(pylonId: number, data?: WorkspaceStoreData) {
+    this._pylonId = pylonId;
     this._activeWorkspaceId = data?.activeWorkspaceId ?? null;
     this._activeConversationId = data?.activeConversationId ?? null;
     this._workspaces = data?.workspaces ?? [];
@@ -252,28 +209,14 @@ export class WorkspaceStore {
   // 정적 팩토리 메서드
   // ============================================================================
 
-  /**
-   * JSON 데이터에서 WorkspaceStore 생성
-   *
-   * @param data - 직렬화된 스토어 데이터
-   * @returns 새 WorkspaceStore 인스턴스
-   */
-  static fromJSON(data: WorkspaceStoreData): WorkspaceStore {
-    return new WorkspaceStore(data);
+  static fromJSON(pylonId: number, data: WorkspaceStoreData): WorkspaceStore {
+    return new WorkspaceStore(pylonId, data);
   }
 
   // ============================================================================
   // 직렬화
   // ============================================================================
 
-  /**
-   * 스토어 데이터를 JSON으로 내보내기
-   *
-   * @description
-   * 파일 저장을 위해 전체 스토어 상태를 직렬화합니다.
-   *
-   * @returns 직렬화 가능한 스토어 데이터
-   */
   toJSON(): WorkspaceStoreData {
     return {
       activeWorkspaceId: this._activeWorkspaceId,
@@ -283,17 +226,57 @@ export class WorkspaceStore {
   }
 
   // ============================================================================
-  // Workspace CRUD
+  // ID 할당 (빈 번호 검색)
   // ============================================================================
 
   /**
-   * 모든 워크스페이스 목록 조회
-   *
-   * @description
-   * 모든 워크스페이스를 isActive 플래그와 함께 반환합니다.
-   *
-   * @returns 활성 상태가 포함된 워크스페이스 목록
+   * 사용 가능한 가장 작은 워크스페이스 ID 할당
    */
+  private allocateWorkspaceId(): number {
+    const used = new Set(this._workspaces.map((w) => w.workspaceId));
+    for (let i = 1; i <= MAX_WORKSPACE_ID; i++) {
+      if (!used.has(i)) return i;
+    }
+    throw new Error('No available workspace IDs (max: 127)');
+  }
+
+  /**
+   * 사용 가능한 가장 작은 대화 로컬 ID 할당
+   */
+  private allocateConversationId(workspace: Workspace): number {
+    const used = new Set(
+      workspace.conversations.map((c) => decodeEntityId(c.entityId).conversationId)
+    );
+    for (let i = 1; i <= MAX_CONVERSATION_ID; i++) {
+      if (!used.has(i)) return i;
+    }
+    throw new Error('No available conversation IDs (max: 1023)');
+  }
+
+  // ============================================================================
+  // Private 헬퍼
+  // ============================================================================
+
+  /**
+   * entityId로 워크스페이스와 대화를 함께 찾기
+   */
+  private findConversation(
+    entityId: EntityId
+  ): { workspace: Workspace; conversation: Conversation } | null {
+    const { workspaceId } = decodeEntityId(entityId);
+    const workspace = this._workspaces.find((w) => w.workspaceId === workspaceId);
+    if (!workspace) return null;
+
+    const conversation = workspace.conversations.find((c) => c.entityId === entityId);
+    if (!conversation) return null;
+
+    return { workspace, conversation };
+  }
+
+  // ============================================================================
+  // Workspace CRUD
+  // ============================================================================
+
   getAllWorkspaces(): WorkspaceWithActive[] {
     return this._workspaces.map((w) => ({
       ...w,
@@ -301,51 +284,26 @@ export class WorkspaceStore {
     }));
   }
 
-  /**
-   * 활성 워크스페이스 조회
-   *
-   * @returns 활성 워크스페이스 또는 null
-   */
   getActiveWorkspace(): Workspace | null {
     return (
-      this._workspaces.find(
-        (w) => w.workspaceId === this._activeWorkspaceId
-      ) || null
+      this._workspaces.find((w) => w.workspaceId === this._activeWorkspaceId) || null
     );
   }
 
-  /**
-   * 워크스페이스 ID로 조회
-   *
-   * @param workspaceId - 조회할 워크스페이스 ID
-   * @returns 워크스페이스 또는 null
-   */
-  getWorkspace(workspaceId: string): Workspace | null {
-    return (
-      this._workspaces.find((w) => w.workspaceId === workspaceId) || null
-    );
+  getWorkspace(workspaceId: number): Workspace | null {
+    return this._workspaces.find((w) => w.workspaceId === workspaceId) || null;
   }
 
-  /**
-   * 워크스페이스 생성
-   *
-   * @description
-   * 새 워크스페이스를 생성하고 첫 번째 대화를 자동으로 추가합니다.
-   * 생성된 워크스페이스와 대화가 활성 상태로 설정됩니다.
-   *
-   * @param name - 워크스페이스 이름
-   * @param workingDir - 작업 디렉토리 경로 (기본값: DEFAULT_WORKING_DIR)
-   * @returns 생성된 워크스페이스와 대화
-   */
   createWorkspace(
     name: string,
     workingDir: string = DEFAULT_WORKING_DIR
   ): CreateWorkspaceResult {
     const now = Date.now();
+    const wsId = this.allocateWorkspaceId();
+    const firstEntityId = encodeEntityId(this._pylonId, wsId, 1);
 
-    // 첫 번째 대화 자동 생성
     const firstConversation: Conversation = {
-      conversationId: randomUUID(),
+      entityId: firstEntityId,
       name: '새 대화',
       claudeSessionId: null,
       status: ConversationStatus.IDLE,
@@ -354,9 +312,8 @@ export class WorkspaceStore {
       createdAt: now,
     };
 
-    // 새 워크스페이스 생성
     const newWorkspace: Workspace = {
-      workspaceId: randomUUID(),
+      workspaceId: wsId,
       name,
       workingDir,
       conversations: [firstConversation],
@@ -364,135 +321,67 @@ export class WorkspaceStore {
       lastUsed: now,
     };
 
-    // 스토어에 추가
     this._workspaces.push(newWorkspace);
-
-    // 활성 상태 설정
-    this._activeWorkspaceId = newWorkspace.workspaceId;
-    this._activeConversationId = firstConversation.conversationId;
+    this._activeWorkspaceId = wsId;
+    this._activeConversationId = firstEntityId;
 
     return { workspace: newWorkspace, conversation: firstConversation };
   }
 
-  /**
-   * 워크스페이스 삭제
-   *
-   * @description
-   * 워크스페이스를 삭제합니다.
-   * 삭제된 워크스페이스가 활성 상태였다면 다음 워크스페이스로 전환됩니다.
-   *
-   * @param workspaceId - 삭제할 워크스페이스 ID
-   * @returns 삭제 성공 여부
-   */
-  deleteWorkspace(workspaceId: string): boolean {
-    const idx = this._workspaces.findIndex(
-      (w) => w.workspaceId === workspaceId
-    );
+  deleteWorkspace(workspaceId: number): boolean {
+    const idx = this._workspaces.findIndex((w) => w.workspaceId === workspaceId);
     if (idx < 0) return false;
 
-    // 워크스페이스 제거
     this._workspaces.splice(idx, 1);
 
-    // 활성 워크스페이스였다면 다음 워크스페이스로 전환
     if (this._activeWorkspaceId === workspaceId) {
-      const nextWorkspace = this._workspaces[0];
-      this._activeWorkspaceId = nextWorkspace?.workspaceId || null;
-      this._activeConversationId =
-        nextWorkspace?.conversations[0]?.conversationId || null;
+      const next = this._workspaces[0];
+      this._activeWorkspaceId = next?.workspaceId ?? null;
+      this._activeConversationId = next?.conversations[0]?.entityId ?? null;
     }
 
     return true;
   }
 
-  /**
-   * 워크스페이스 이름 변경
-   *
-   * @param workspaceId - 변경할 워크스페이스 ID
-   * @param newName - 새 이름
-   * @returns 변경 성공 여부
-   */
-  renameWorkspace(workspaceId: string, newName: string): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
+  renameWorkspace(workspaceId: number, newName: string): boolean {
+    const workspace = this._workspaces.find((w) => w.workspaceId === workspaceId);
     if (!workspace) return false;
 
     workspace.name = newName;
     return true;
   }
 
-  /**
-   * 워크스페이스 업데이트
-   *
-   * @description
-   * 워크스페이스의 이름 또는 작업 디렉토리를 업데이트합니다.
-   * 업데이트된 항목이 있으면 lastUsed 타임스탬프도 갱신됩니다.
-   *
-   * @param workspaceId - 변경할 워크스페이스 ID
-   * @param updates - 업데이트할 필드들 { name?, workingDir? }
-   * @returns 업데이트 성공 여부 (변경 사항이 없거나 워크스페이스를 찾을 수 없으면 false)
-   */
   updateWorkspace(
-    workspaceId: string,
+    workspaceId: number,
     updates: { name?: string; workingDir?: string }
   ): boolean {
     const workspace = this.getWorkspace(workspaceId);
     if (!workspace) return false;
 
-    // 업데이트할 항목이 있는지 확인
     const trimmedName = updates.name?.trim();
     const hasName = trimmedName !== undefined && trimmedName !== '';
     const hasWorkingDir = updates.workingDir !== undefined;
 
-    // 업데이트할 항목이 없으면 false 반환
-    if (!hasName && !hasWorkingDir) {
-      return false;
-    }
+    if (!hasName && !hasWorkingDir) return false;
+    if (updates.name !== undefined && !hasName) return false;
 
-    // 이름이 빈 문자열(trim 후)이면 실패
-    if (updates.name !== undefined && !hasName) {
-      return false;
-    }
+    if (hasName) workspace.name = trimmedName!;
+    if (hasWorkingDir) workspace.workingDir = updates.workingDir!.replace(/\//g, '\\');
 
-    // 이름 업데이트
-    if (hasName) {
-      workspace.name = trimmedName!;
-    }
-
-    // 작업 디렉토리 업데이트 (경로 정규화)
-    if (hasWorkingDir) {
-      // 슬래시를 백슬래시로 정규화
-      workspace.workingDir = updates.workingDir!.replace(/\//g, '\\');
-    }
-
-    // lastUsed 타임스탬프 갱신
     workspace.lastUsed = Date.now();
-
     return true;
   }
 
-  /**
-   * 워크스페이스 순서 변경
-   *
-   * @description
-   * 워크스페이스 목록의 순서를 변경합니다.
-   *
-   * @param workspaceIds - 새 순서의 워크스페이스 ID 배열
-   * @returns 성공 여부
-   */
-  reorderWorkspaces(workspaceIds: string[]): boolean {
-    // 모든 ID가 유효한지 확인
+  reorderWorkspaces(workspaceIds: number[]): boolean {
     const validIds = workspaceIds.every((id) =>
       this._workspaces.some((w) => w.workspaceId === id)
     );
     if (!validIds) return false;
 
-    // 새 순서대로 정렬
     const reordered = workspaceIds
       .map((id) => this._workspaces.find((w) => w.workspaceId === id))
       .filter((w): w is Workspace => w !== undefined);
 
-    // 순서에 포함되지 않은 워크스페이스는 뒤에 유지
     const remaining = this._workspaces.filter(
       (w) => !workspaceIds.includes(w.workspaceId)
     );
@@ -501,74 +390,45 @@ export class WorkspaceStore {
     return true;
   }
 
-  /**
-   * 대화 순서 변경
-   *
-   * @description
-   * 워크스페이스 내 대화 목록의 순서를 변경합니다.
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationIds - 새 순서의 대화 ID 배열
-   * @returns 성공 여부
-   */
-  reorderConversations(workspaceId: string, conversationIds: string[]): boolean {
+  reorderConversations(workspaceId: number, entityIds: EntityId[]): boolean {
     const workspace = this.getWorkspace(workspaceId);
     if (!workspace) return false;
 
-    // 모든 ID가 유효한지 확인
-    const validIds = conversationIds.every((id) =>
-      workspace.conversations.some((c) => c.conversationId === id)
+    const validIds = entityIds.every((id) =>
+      workspace.conversations.some((c) => c.entityId === id)
     );
     if (!validIds) return false;
 
-    // 새 순서대로 정렬
-    const reordered = conversationIds
-      .map((id) => workspace.conversations.find((c) => c.conversationId === id))
+    const reordered = entityIds
+      .map((id) => workspace.conversations.find((c) => c.entityId === id))
       .filter((c): c is Conversation => c !== undefined);
 
-    // 순서에 포함되지 않은 대화는 뒤에 유지
     const remaining = workspace.conversations.filter(
-      (c) => !conversationIds.includes(c.conversationId)
+      (c) => !(entityIds as number[]).includes(c.entityId as number)
     );
 
     workspace.conversations = [...reordered, ...remaining];
     return true;
   }
 
-  /**
-   * 활성 워크스페이스 설정
-   *
-   * @description
-   * 지정된 워크스페이스를 활성 상태로 설정합니다.
-   * conversationId가 주어지면 해당 대화도 활성화됩니다.
-   *
-   * @param workspaceId - 활성화할 워크스페이스 ID
-   * @param conversationId - 활성화할 대화 ID (선택, 없으면 첫 번째 대화)
-   * @returns 설정 성공 여부
-   */
   setActiveWorkspace(
-    workspaceId: string,
-    conversationId?: string | null
+    workspaceId: number,
+    entityId?: EntityId | null
   ): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
+    const workspace = this._workspaces.find((w) => w.workspaceId === workspaceId);
     if (!workspace) return false;
 
     this._activeWorkspaceId = workspaceId;
     workspace.lastUsed = Date.now();
 
-    // conversationId가 주어지면 해당 대화 활성화, 아니면 첫 번째 대화
-    if (conversationId) {
-      const conv = workspace.conversations.find(
-        (c) => c.conversationId === conversationId
-      );
+    if (entityId) {
+      const conv = workspace.conversations.find((c) => c.entityId === entityId);
       this._activeConversationId = conv
-        ? conversationId
-        : workspace.conversations[0]?.conversationId ?? null;
+        ? entityId
+        : workspace.conversations[0]?.entityId ?? null;
     } else {
       this._activeConversationId =
-        workspace.conversations[0]?.conversationId ?? null;
+        workspace.conversations[0]?.entityId ?? null;
     }
 
     return true;
@@ -578,90 +438,28 @@ export class WorkspaceStore {
   // Conversation CRUD
   // ============================================================================
 
-  /**
-   * 대화 조회
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 대화 ID
-   * @returns 대화 또는 null
-   */
-  getConversation(
-    workspaceId: string,
-    conversationId: string
-  ): Conversation | null {
-    const workspace = this.getWorkspace(workspaceId);
-    if (!workspace) return null;
-    return (
-      workspace.conversations.find(
-        (c) => c.conversationId === conversationId
-      ) || null
-    );
+  getConversation(entityId: EntityId): Conversation | null {
+    const found = this.findConversation(entityId);
+    return found?.conversation ?? null;
   }
 
-  /**
-   * 대화 ID로 워크스페이스 찾기
-   *
-   * @description
-   * 주어진 대화 ID가 속한 워크스페이스 ID를 반환합니다.
-   *
-   * @param conversationId - 찾을 대화 ID
-   * @returns 워크스페이스 ID 또는 null
-   */
-  findWorkspaceByConversation(conversationId: string): string | null {
-    for (const workspace of this._workspaces) {
-      if (
-        workspace.conversations.some(
-          (c) => c.conversationId === conversationId
-        )
-      ) {
-        return workspace.workspaceId;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 활성 대화 조회
-   *
-   * @returns 활성 대화 또는 null
-   */
   getActiveConversation(): Conversation | null {
-    if (!this._activeWorkspaceId || !this._activeConversationId) return null;
-
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === this._activeWorkspaceId
-    );
-    if (!workspace) return null;
-
-    return (
-      workspace.conversations.find(
-        (c) => c.conversationId === this._activeConversationId
-      ) || null
-    );
+    if (!this._activeConversationId) return null;
+    return this.getConversation(this._activeConversationId);
   }
 
-  /**
-   * 대화 생성
-   *
-   * @description
-   * 지정된 워크스페이스에 새 대화를 생성합니다.
-   * 생성된 대화가 활성 상태로 설정됩니다.
-   *
-   * @param workspaceId - 대화를 추가할 워크스페이스 ID
-   * @param name - 대화 이름 (기본값: '새 대화')
-   * @returns 생성된 대화 또는 null (워크스페이스 없음)
-   */
   createConversation(
-    workspaceId: string,
+    workspaceId: number,
     name: string = '새 대화'
   ): Conversation | null {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
+    const workspace = this._workspaces.find((w) => w.workspaceId === workspaceId);
     if (!workspace) return null;
 
+    const localId = this.allocateConversationId(workspace);
+    const entityId = encodeEntityId(this._pylonId, workspaceId, localId);
+
     const newConversation: Conversation = {
-      conversationId: randomUUID(),
+      entityId,
       name,
       claudeSessionId: null,
       status: ConversationStatus.IDLE,
@@ -672,79 +470,39 @@ export class WorkspaceStore {
 
     workspace.conversations.push(newConversation);
     workspace.lastUsed = Date.now();
-    this._activeConversationId = newConversation.conversationId;
+    this._activeConversationId = entityId;
 
     return newConversation;
   }
 
-  /**
-   * 대화 삭제
-   *
-   * @description
-   * 대화를 삭제합니다.
-   * 삭제된 대화가 활성 상태였다면 다음 대화로 전환됩니다.
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 삭제할 대화 ID
-   * @returns 삭제 성공 여부
-   */
-  deleteConversation(workspaceId: string, conversationId: string): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
-    if (!workspace) return false;
+  deleteConversation(entityId: EntityId): boolean {
+    const found = this.findConversation(entityId);
+    if (!found) return false;
 
-    const idx = workspace.conversations.findIndex(
-      (c) => c.conversationId === conversationId
-    );
+    const { workspace } = found;
+    const idx = workspace.conversations.findIndex((c) => c.entityId === entityId);
     if (idx < 0) return false;
 
     workspace.conversations.splice(idx, 1);
 
-    // 삭제된 대화가 활성 대화였으면 다른 대화로 전환
-    if (this._activeConversationId === conversationId) {
+    if (this._activeConversationId === entityId) {
       this._activeConversationId =
-        workspace.conversations[0]?.conversationId || null;
+        workspace.conversations[0]?.entityId ?? null;
     }
 
     return true;
   }
 
-  /**
-   * 대화 이름 변경
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 대화 ID
-   * @param newName - 새 이름
-   * @returns 변경 성공 여부
-   */
-  renameConversation(
-    workspaceId: string,
-    conversationId: string,
-    newName: string
-  ): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
-    if (!workspace) return false;
+  renameConversation(entityId: EntityId, newName: string): boolean {
+    const found = this.findConversation(entityId);
+    if (!found) return false;
 
-    const conv = workspace.conversations.find(
-      (c) => c.conversationId === conversationId
-    );
-    if (!conv) return false;
-
-    conv.name = newName;
+    found.conversation.name = newName;
     return true;
   }
 
-  /**
-   * 활성 대화 설정
-   *
-   * @param conversationId - 활성화할 대화 ID
-   * @returns 설정 성공 여부 (항상 true)
-   */
-  setActiveConversation(conversationId: string): boolean {
-    this._activeConversationId = conversationId;
+  setActiveConversation(entityId: EntityId): boolean {
+    this._activeConversationId = entityId;
     return true;
   }
 
@@ -752,89 +510,34 @@ export class WorkspaceStore {
   // Conversation 상태 업데이트
   // ============================================================================
 
-  /**
-   * 대화 상태 업데이트
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 대화 ID
-   * @param status - 새 상태
-   * @returns 업데이트 성공 여부
-   */
   updateConversationStatus(
-    workspaceId: string,
-    conversationId: string,
+    entityId: EntityId,
     status: ConversationStatusValue
   ): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
-    if (!workspace) return false;
+    const found = this.findConversation(entityId);
+    if (!found) return false;
 
-    const conv = workspace.conversations.find(
-      (c) => c.conversationId === conversationId
-    );
-    if (!conv) return false;
-
-    conv.status = status;
+    found.conversation.status = status;
     return true;
   }
 
-  /**
-   * 대화 읽음 상태 업데이트
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 대화 ID
-   * @param unread - 읽지 않음 여부
-   * @returns 업데이트 성공 여부
-   */
-  updateConversationUnread(
-    workspaceId: string,
-    conversationId: string,
-    unread: boolean
-  ): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
-    if (!workspace) return false;
+  updateConversationUnread(entityId: EntityId, unread: boolean): boolean {
+    const found = this.findConversation(entityId);
+    if (!found) return false;
 
-    const conv = workspace.conversations.find(
-      (c) => c.conversationId === conversationId
-    );
-    if (!conv) return false;
-
-    conv.unread = unread;
+    found.conversation.unread = unread;
     return true;
   }
 
-  /**
-   * Claude 세션 ID 업데이트
-   *
-   * @description
-   * 대화에 연결된 Claude Code 세션 ID를 업데이트합니다.
-   * 워크스페이스의 lastUsed도 함께 업데이트됩니다.
-   *
-   * @param workspaceId - 워크스페이스 ID
-   * @param conversationId - 대화 ID
-   * @param sessionId - Claude 세션 ID
-   * @returns 업데이트 성공 여부
-   */
   updateClaudeSessionId(
-    workspaceId: string,
-    conversationId: string,
+    entityId: EntityId,
     sessionId: string | null
   ): boolean {
-    const workspace = this._workspaces.find(
-      (w) => w.workspaceId === workspaceId
-    );
-    if (!workspace) return false;
+    const found = this.findConversation(entityId);
+    if (!found) return false;
 
-    const conv = workspace.conversations.find(
-      (c) => c.conversationId === conversationId
-    );
-    if (!conv) return false;
-
-    conv.claudeSessionId = sessionId;
-    workspace.lastUsed = Date.now();
+    found.conversation.claudeSessionId = sessionId;
+    found.workspace.lastUsed = Date.now();
     return true;
   }
 
@@ -842,63 +545,26 @@ export class WorkspaceStore {
   // Permission Mode
   // ============================================================================
 
-  /**
-   * 대화 권한 모드 조회
-   *
-   * @description
-   * 대화의 현재 권한 모드를 반환합니다.
-   * 대화를 찾을 수 없으면 기본값(default)을 반환합니다.
-   *
-   * @param conversationId - 대화 ID
-   * @returns 권한 모드
-   */
-  getConversationPermissionMode(conversationId: string): PermissionModeValue {
-    for (const workspace of this._workspaces) {
-      const conv = workspace.conversations.find(
-        (c) => c.conversationId === conversationId
-      );
-      if (conv) return conv.permissionMode || PermissionMode.DEFAULT;
-    }
-    return PermissionMode.DEFAULT;
+  getConversationPermissionMode(entityId: EntityId): PermissionModeValue {
+    const conv = this.getConversation(entityId);
+    return conv?.permissionMode || PermissionMode.DEFAULT;
   }
 
-  /**
-   * 대화 권한 모드 설정
-   *
-   * @param conversationId - 대화 ID
-   * @param mode - 권한 모드
-   * @returns 설정 성공 여부
-   */
   setConversationPermissionMode(
-    conversationId: string,
+    entityId: EntityId,
     mode: PermissionModeValue
   ): boolean {
-    for (const workspace of this._workspaces) {
-      const conv = workspace.conversations.find(
-        (c) => c.conversationId === conversationId
-      );
-      if (conv) {
-        conv.permissionMode = mode;
-        return true;
-      }
-    }
-    return false;
+    const conv = this.getConversation(entityId);
+    if (!conv) return false;
+
+    conv.permissionMode = mode;
+    return true;
   }
 
   // ============================================================================
   // Utility 메서드
   // ============================================================================
 
-  /**
-   * 이름으로 워크스페이스 찾기
-   *
-   * @description
-   * 대소문자 구분 없이 워크스페이스를 검색합니다.
-   * 정확히 일치하는 것을 먼저 찾고, 없으면 부분 일치를 찾습니다.
-   *
-   * @param name - 검색할 이름
-   * @returns 워크스페이스 또는 null
-   */
   findWorkspaceByName(name: string): Workspace | null {
     const lowerName = name.toLowerCase();
     return (
@@ -912,21 +578,10 @@ export class WorkspaceStore {
     );
   }
 
-  /**
-   * 작업 디렉토리로 워크스페이스 찾기
-   *
-   * @param workingDir - 검색할 작업 디렉토리
-   * @returns 워크스페이스 또는 null
-   */
   findWorkspaceByWorkingDir(workingDir: string): Workspace | null {
     return this._workspaces.find((w) => w.workingDir === workingDir) || null;
   }
 
-  /**
-   * 활성 상태 정보 조회
-   *
-   * @returns 활성 워크스페이스/대화 ID
-   */
   getActiveState(): ActiveState {
     return {
       activeWorkspaceId: this._activeWorkspaceId,
@@ -941,55 +596,34 @@ export class WorkspaceStore {
   /**
    * 시작 시 활성 상태 대화들 초기화
    *
-   * @description
-   * working, permission 상태인 대화들을 idle로 초기화합니다.
-   * Pylon 재시작 시 이전에 진행 중이던 작업들을 정리하는 데 사용됩니다.
-   *
-   * @returns 초기화된 대화 ID 목록
+   * @returns 초기화된 대화의 entityId 목록
    */
-  resetActiveConversations(): string[] {
-    const resetConversationIds: string[] = [];
+  resetActiveConversations(): EntityId[] {
+    const result: EntityId[] = [];
 
     for (const workspace of this._workspaces) {
       for (const conv of workspace.conversations) {
-        // working, waiting 상태를 idle로 초기화
         if (
           conv.status === ConversationStatus.WORKING ||
           conv.status === ConversationStatus.WAITING
         ) {
           conv.status = ConversationStatus.IDLE;
-          resetConversationIds.push(conv.conversationId);
+          result.push(conv.entityId);
         }
       }
     }
 
-    return resetConversationIds;
+    return result;
   }
 
-  /**
-   * finishing 상태 대화 목록 조회
-   *
-   * @description
-   * Pylon 시작 시 재처리가 필요한 finishing 상태의 대화들을 반환합니다.
-   *
-   * 참고: 현재 ConversationStatus에는 'finishing' 상태가 없습니다.
-   * 원본 코드와의 호환성을 위해 메서드는 유지하지만,
-   * 실제로 finishing 상태가 필요하면 ConversationStatus에 추가해야 합니다.
-   *
-   * @returns finishing 상태 대화 정보 목록
-   */
   getFinishingConversations(): FinishingConversationInfo[] {
     const result: FinishingConversationInfo[] = [];
 
     for (const workspace of this._workspaces) {
       for (const conv of workspace.conversations) {
-        // 원본에서는 'finishing' 상태를 체크했으나,
-        // 현재 ConversationStatus에는 없으므로 빈 배열 반환
-        // 필요시 ConversationStatus 확장 필요
         if ((conv.status as string) === 'finishing') {
           result.push({
-            workspaceId: workspace.workspaceId,
-            conversationId: conv.conversationId,
+            entityId: conv.entityId,
             workingDir: workspace.workingDir,
             claudeSessionId: conv.claudeSessionId,
           });
@@ -1000,31 +634,13 @@ export class WorkspaceStore {
     return result;
   }
 
-  /**
-   * finished 상태 대화 목록 조회
-   *
-   * @description
-   * 앱 재접속 시 완료 다이얼로그를 표시해야 하는 대화들을 반환합니다.
-   *
-   * 참고: 현재 ConversationStatus에는 'finished' 상태가 없습니다.
-   * 원본 코드와의 호환성을 위해 메서드는 유지하지만,
-   * 실제로 finished 상태가 필요하면 ConversationStatus에 추가해야 합니다.
-   *
-   * @returns finished 상태 대화 정보 목록
-   */
   getFinishedConversations(): FinishedConversationInfo[] {
     const result: FinishedConversationInfo[] = [];
 
     for (const workspace of this._workspaces) {
       for (const conv of workspace.conversations) {
-        // 원본에서는 'finished' 상태를 체크했으나,
-        // 현재 ConversationStatus에는 없으므로 빈 배열 반환
-        // 필요시 ConversationStatus 확장 필요
         if ((conv.status as string) === 'finished') {
-          result.push({
-            workspaceId: workspace.workspaceId,
-            conversationId: conv.conversationId,
-          });
+          result.push({ entityId: conv.entityId });
         }
       }
     }

@@ -59,23 +59,25 @@
 
 **목표**: 안정적인 프로덕션 배포
 
-- [x] **릴리즈 빌드 시스템**
-  - [x] `release/` 폴더 구조 (dist만 복사)
-  - [x] `scripts/build-release.ps1` 빌드 스크립트
-  - [x] PM2 ecosystem 설정 (.cjs 확장자)
+- [x] **빌드/배포 시스템** ✅
+  - [x] Dev → Stage → Release 3단계 환경 분리
+  - [x] `scripts/build-deploy.ps1 -Target stage|release` 통합 스크립트
+  - [x] 빌드 버저닝 `(env)vMMDD_N` + build-counter.json
+  - [x] 환경별 데이터 분리 (release-data/, stage-data/, junction)
+  - [x] MCP deploy 도구 (detached 빌드 실행)
+  - [x] PM2 환경별 분리 (estelle-pylon, estelle-pylon-stage)
+  - [x] sync-data.ps1 양방향 동기화 (-From/-To)
 
 - [x] **Relay 배포** ✅
-  - [x] Fly.io 설정 (estelle-relay-v2)
-  - [x] Dockerfile, fly.toml 생성
-  - [x] 배포 완료: https://estelle-relay-v2.fly.dev
+  - [x] Fly.io prod: https://estelle-relay-v2.fly.dev
+  - [x] Fly.io stage: https://estelle-relay-v2-stage.fly.dev
 
 - [x] **Pylon 배포** ✅
-  - [x] PM2 ecosystem 설정
-  - [x] 로컬 실행 완료 (포트 9000)
+  - [x] PM2 estelle-pylon (release)
+  - [x] PM2 estelle-pylon-stage (stage)
 
 - [x] **App 웹 배포** ✅
-  - [x] Expo web export
-  - [x] PM2 + serve 설정 (포트 3000)
+  - [x] Relay 내장 (Fly.io 서빙)
 
 - [x] **App 모바일 빌드** (삭제됨 - 웹 전용 전환)
   - 삭제: APK 빌드 제거 (Expo → Vite 전환)
@@ -98,9 +100,9 @@
 
 | 컴포넌트 | 상태 | Dev 포트 | Release |
 |----------|------|----------|---------|
-| Relay v2 | ✅ 동작 | 3000 | Fly.io (wss://estelle-relay-v2.fly.dev) |
-| Pylon v2 | ✅ 동작 | - | PM2 (release/pylon) |
-| Client (Vite) | ✅ 동작 | 5173 | Relay 내장 (8080) |
+| Relay v2 | ✅ 동작 | 3000 | Fly.io prod / stage |
+| Pylon v2 | ✅ 동작 | - | PM2 (estelle-pylon / estelle-pylon-stage) |
+| Client (Vite) | ✅ 동작 | 5173 | Relay 내장 |
 
 환경 설정: `config/environments.json`
 
@@ -137,6 +139,14 @@
 
 ## 작업 로그
 
+- [260207 22:10] EntityId 마이그레이션 완료 (Pylon 패키지: UUID→숫자 비트패킹, 142개 테스트 통과)
+- [260207 14:30] Dev→Stage→Release 배포 시스템 구축 (3환경 분리, 빌드 버저닝, MCP deploy, Fly.io stage 앱 생성, 양방향 sync-data)
+- [260207 09:35] Phase 5 완료: conversation_status에 workspaceId 추가 (Pylon 2곳 수정, 테스트 2개 추가)
+- [260207 09:22] Phase 4 완료: claudeStore 완전 제거 (conversationStore로 마이그레이션, 543→860 테스트)
+- [260207 02:30] Safe Release Build Pipeline 구현 (staging→verify→atomic swap→healthcheck→rollback, release-data/ junction 분리)
+- [260207 00:15] PWA 키보드 대응 수정 (visualViewport 동기화 방식으로 변경, 멀티라인 입력 시 키보드 아래 밀림 해결)
+- [260206 23:30] PWA 지원 추가 (vite-plugin-pwa, manifest, 아이콘, viewport 대응, Fly.io 배포)
+- [260206 22:00] 채팅 UX 개선 (대화 이름변경/삭제, 파일뷰어 개선, 모바일 Enter, 클립보드 붙여넣기, 첨부카드 컴팩트화)
 - [260205 16:45] 워크스페이스 CRUD Phase 2 완료 (useLongPress 훅, WorkspaceDialog New/Edit 통합, WorkspaceSidebar 롱홀드 편집)
 - [260205 16:15] 워크스페이스 CRUD Phase 1 완료 (updateWorkspace API, foldersWithChildren, listDrives)
 - [260205 15:30] UI 버그 수정 일괄 (색상 테마 Claude.ai 스타일, 퍼미션 버튼 연결, AskUserQuestion 표시, 모바일 레이아웃, 디바이스 아이콘)
@@ -160,4 +170,4 @@
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-05*
+*갱신일: 2026-02-07*

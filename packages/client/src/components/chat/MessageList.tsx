@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useClaudeStore, useUploadStore } from '../../stores';
+import { useUploadStore, useWorkspaceStore, useConversationStore } from '../../stores';
 import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
 import { UploadingBubble } from './UploadingBubble';
@@ -9,8 +9,9 @@ import { ResultInfo } from './ResultInfo';
 import { ClaudeAbortedDivider } from './SystemDivider';
 import { FileAttachmentCard } from './FileAttachmentCard';
 import { WorkingIndicator } from './WorkingIndicator';
-import type { StoreMessage } from '../../stores/claudeStore';
-import type { ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage } from '@estelle/core';
+import { FileViewer } from '../viewers';
+import { blobService } from '../../services/blobService';
+import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
 import type { ChildToolInfo } from './ToolCard';
 
 interface MessageListProps {
@@ -27,10 +28,26 @@ export function MessageList({
   hasMoreHistory = false,
   onLoadMoreHistory,
 }: MessageListProps) {
-  const { messages, textBuffer, workStartTime, status } = useClaudeStore();
+  // conversationStore에서 현재 대화의 상태 가져오기
+  const currentState = useConversationStore((s) => s.getCurrentState());
+  const messages = currentState?.messages ?? [];
+  const textBuffer = currentState?.textBuffer ?? '';
+  const workStartTime = currentState?.workStartTime ?? null;
+  const status = currentState?.status ?? 'idle';
+
   const { uploads } = useUploadStore();
+  const { selectedConversation } = useWorkspaceStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  // FileViewer 상태
+  const [viewerFile, setViewerFile] = useState<{
+    filename: string;
+    size: number;
+    mimeType?: string;
+    description?: string;
+    content: string | null;
+  } | null>(null);
 
   const uploadingItems = Object.values(uploads).filter(
     (u) => u.status === 'uploading'
@@ -76,6 +93,77 @@ export function MessageList({
 
     return { childToolsMap: map, parentToolIds: parentIds };
   }, [messages]);
+
+  // 첨부파일 클릭 → 다운로드 → FileViewer 열기
+  const handleAttachmentPress = useCallback((attachment: Attachment) => {
+    const { filename, path: filePath } = attachment;
+    const pylonId = selectedConversation?.pylonId;
+    const conversationId = selectedConversation?.conversationId;
+    if (!pylonId || !conversationId) return;
+
+    // 캐시에 있으면 바로 표시
+    const cached = blobService.getCachedImage(filename);
+    if (cached) {
+      openFileViewer(filename, cached, attachment);
+      return;
+    }
+
+    // 뷰어를 먼저 열고 로딩 표시
+    setViewerFile({
+      filename,
+      size: 0,
+      mimeType: attachment.thumbnail ? 'image/' : undefined,
+      description: (attachment as { description?: string }).description,
+      content: null,
+    });
+
+    // 다운로드 요청
+    const unsubscribe = blobService.onDownloadComplete((event) => {
+      if (event.filename === filename) {
+        unsubscribe();
+        openFileViewer(filename, event.bytes, attachment);
+      }
+    });
+
+    blobService.requestFile({
+      targetDeviceId: pylonId,
+      conversationId,
+      filename,
+      filePath,
+    });
+  }, [selectedConversation]);
+
+  const openFileViewer = useCallback((filename: string, bytes: Uint8Array, attachment: Attachment & { description?: string }) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const isImage = /^(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(ext);
+    const isText = /^(txt|md|markdown|json|js|ts|tsx|jsx|css|html|xml|yaml|yml|toml|ini|cfg|log|csv|sh|bat|ps1|py|rb|go|rs|java|c|cpp|h|hpp)$/.test(ext);
+
+    let content: string;
+    if (isImage) {
+      const mimeMap: Record<string, string> = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+      };
+      const mime = mimeMap[ext] || 'image/png';
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      content = `data:${mime};base64,${btoa(binary)}`;
+    } else if (isText) {
+      content = new TextDecoder('utf-8').decode(bytes);
+    } else {
+      content = `바이너리 파일 (${bytes.length} bytes)`;
+    }
+
+    setViewerFile({
+      filename,
+      size: bytes.length,
+      mimeType: attachment.thumbnail ? 'image/' + ext : undefined,
+      description: attachment.description,
+      content,
+    });
+  }, []);
 
   const buildDisplayItems = useCallback(() => {
     const items: Array<{ type: string; data: unknown; key: string }> = [];
@@ -235,15 +323,16 @@ export function MessageList({
 
       case 'file_attachment': {
         const fileMsg = message as FileAttachmentMessage;
+        const fileAsAttachment = {
+          filename: fileMsg.file.filename,
+          path: fileMsg.file.path,
+          description: fileMsg.file.description,
+        };
         return (
           <FileAttachmentCard
             file={fileMsg.file}
-            onDownload={() => {
-              console.log('Download:', fileMsg.file.filename);
-            }}
-            onOpen={() => {
-              console.log('Open:', fileMsg.file.filename);
-            }}
+            onDownload={() => handleAttachmentPress(fileAsAttachment)}
+            onOpen={() => handleAttachmentPress(fileAsAttachment)}
           />
         );
       }
@@ -253,7 +342,19 @@ export function MessageList({
         const childTools = (message.type === 'tool_start' || message.type === 'tool_complete')
           ? childToolsMap.get(message.id)
           : undefined;
-        return <MessageBubble message={message} childTools={childTools} />;
+        // 사용자 메시지의 첨부파일에서 attachment 정보를 전달
+        const userMsg = message as { attachments?: Attachment[] };
+        return (
+          <MessageBubble
+            message={message}
+            childTools={childTools}
+            onImagePress={(uri) => {
+              // uri = attachment.path, 해당 attachment 찾기
+              const att = userMsg.attachments?.find(a => a.path === uri);
+              if (att) handleAttachmentPress(att);
+            }}
+          />
+        );
       }
     }
   };
@@ -299,6 +400,15 @@ export function MessageList({
         >
           <ChevronDown className="h-5 w-5" />
         </Button>
+      )}
+
+      {viewerFile && (
+        <FileViewer
+          open={true}
+          onClose={() => setViewerFile(null)}
+          file={viewerFile}
+          content={viewerFile.content}
+        />
       )}
     </div>
   );

@@ -8,6 +8,7 @@
  */
 
 import type { Attachment } from './blob.js';
+import type { EntityId } from '../utils/entity-id.js';
 
 // ============================================================================
 // Claude Send Types
@@ -20,21 +21,24 @@ import type { Attachment } from './blob.js';
  * App에서 Claude에게 메시지를 전송할 때 사용하는 페이로드입니다.
  * 텍스트 메시지와 선택적으로 첨부 파일을 함께 전송할 수 있습니다.
  *
- * @property conversationId - 메시지를 전송할 대상 대화의 고유 식별자
+ * @property entityId - 메시지를 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자)
+ * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
  * @property message - 전송할 텍스트 메시지 내용
  * @property attachments - 첨부 파일 목록 (선택적)
  *
  * @example
  * ```typescript
+ * import { encodeEntityId } from '../utils/entity-id.js';
+ *
  * // 텍스트만 전송
  * const payload: ClaudeSendPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),  // pylonId:1, workspaceId:2, conversationId:3
  *   message: '파일을 읽어주세요.'
  * };
  *
  * // 첨부 파일과 함께 전송
  * const payloadWithAttachment: ClaudeSendPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   message: '이 파일을 분석해주세요.',
  *   attachments: [{
  *     id: 'att-001',
@@ -46,8 +50,14 @@ import type { Attachment } from './blob.js';
  * ```
  */
 export interface ClaudeSendPayload {
-  /** 메시지를 전송할 대상 대화의 고유 식별자 */
-  conversationId: string;
+  /** 메시지를 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자) */
+  entityId: EntityId;
+
+  /**
+   * @deprecated entityId를 사용하세요. 레거시 호환용
+   * 메시지를 전송할 대상 대화의 고유 식별자 (문자열)
+   */
+  conversationId?: string;
 
   /** 전송할 텍스트 메시지 내용 */
   message: string;
@@ -85,22 +95,31 @@ export type PermissionDecision = 'allow' | 'deny' | 'allowAll';
  * Claude의 권한 요청(permission_request 이벤트)에 대한 응답을 전송할 때
  * 사용하는 페이로드입니다. toolUseId를 통해 어떤 요청에 대한 응답인지 식별합니다.
  *
- * @property conversationId - 응답을 전송할 대상 대화의 고유 식별자
+ * @property entityId - 응답을 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자)
+ * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
  * @property toolUseId - 권한 요청의 고유 식별자 (permission_request 이벤트에서 제공)
  * @property decision - 권한 결정 ('allow', 'deny', 'allowAll')
  *
  * @example
  * ```typescript
+ * import { encodeEntityId } from '../utils/entity-id.js';
+ *
  * const payload: ClaudePermissionPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   toolUseId: 'toolu_01234567890abcdef',
  *   decision: 'allow'
  * };
  * ```
  */
 export interface ClaudePermissionPayload {
-  /** 응답을 전송할 대상 대화의 고유 식별자 */
-  conversationId: string;
+  /** 응답을 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자) */
+  entityId: EntityId;
+
+  /**
+   * @deprecated entityId를 사용하세요. 레거시 호환용
+   * 응답을 전송할 대상 대화의 고유 식별자 (문자열)
+   */
+  conversationId?: string;
 
   /** 권한 요청의 고유 식별자 */
   toolUseId: string;
@@ -120,30 +139,39 @@ export interface ClaudePermissionPayload {
  * Claude의 질문(ask_question 이벤트)에 대한 답변을 전송할 때
  * 사용하는 페이로드입니다. 사용자가 선택한 옵션이나 자유 입력 답변을 포함합니다.
  *
- * @property conversationId - 답변을 전송할 대상 대화의 고유 식별자
+ * @property entityId - 답변을 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자)
+ * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
  * @property toolUseId - 질문의 고유 식별자 (ask_question 이벤트에서 제공)
  * @property answer - 사용자의 답변 내용
  *
  * @example
  * ```typescript
+ * import { encodeEntityId } from '../utils/entity-id.js';
+ *
  * // 옵션 선택
  * const payload: ClaudeAnswerPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   toolUseId: 'toolu_abcdef123456',
  *   answer: 'React'
  * };
  *
  * // 자유 입력
  * const freeformPayload: ClaudeAnswerPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   toolUseId: 'toolu_xyz789',
  *   answer: '사용자 정의 응답입니다.'
  * };
  * ```
  */
 export interface ClaudeAnswerPayload {
-  /** 답변을 전송할 대상 대화의 고유 식별자 */
-  conversationId: string;
+  /** 답변을 전송할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자) */
+  entityId: EntityId;
+
+  /**
+   * @deprecated entityId를 사용하세요. 레거시 호환용
+   * 답변을 전송할 대상 대화의 고유 식별자 (문자열)
+   */
+  conversationId?: string;
 
   /** 질문의 고유 식별자 */
   toolUseId: string;
@@ -180,33 +208,42 @@ export type ClaudeControlAction = 'stop' | 'new_session' | 'clear' | 'compact';
  * @description
  * Claude 세션을 제어(중지, 초기화, 압축 등)할 때 사용하는 페이로드입니다.
  *
- * @property conversationId - 제어할 대상 대화의 고유 식별자
+ * @property entityId - 제어할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자)
+ * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
  * @property action - 수행할 제어 액션
  *
  * @example
  * ```typescript
+ * import { encodeEntityId } from '../utils/entity-id.js';
+ *
  * // 작업 중지
  * const stopPayload: ClaudeControlPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   action: 'stop'
  * };
  *
  * // 새 세션 시작
  * const newSessionPayload: ClaudeControlPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   action: 'new_session'
  * };
  *
  * // 컨텍스트 압축
  * const compactPayload: ClaudeControlPayload = {
- *   conversationId: 'main-workspace-001',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   action: 'compact'
  * };
  * ```
  */
 export interface ClaudeControlPayload {
-  /** 제어할 대상 대화의 고유 식별자 */
-  conversationId: string;
+  /** 제어할 대상 엔티티의 고유 식별자 (비트 패킹된 숫자) */
+  entityId: EntityId;
+
+  /**
+   * @deprecated entityId를 사용하세요. 레거시 호환용
+   * 제어할 대상 대화의 고유 식별자 (문자열)
+   */
+  conversationId?: string;
 
   /** 수행할 제어 액션 */
   action: ClaudeControlAction;
@@ -363,7 +400,7 @@ export function isPermissionModeType(value: unknown): value is PermissionModeTyp
  *
  * @description
  * 주어진 값이 ClaudeSendPayload 타입인지 확인합니다.
- * conversationId와 message가 문자열인지, attachments가 있다면 배열인지 검사합니다.
+ * entityId가 숫자인지, message가 문자열인지, attachments가 있다면 배열인지 검사합니다.
  *
  * @param value - 확인할 값
  * @returns ClaudeSendPayload 타입이면 true
@@ -372,16 +409,18 @@ export function isPermissionModeType(value: unknown): value is PermissionModeTyp
  * ```typescript
  * const data: unknown = JSON.parse(message);
  * if (isClaudeSendPayload(data)) {
- *   console.log('Desk:', data.conversationId);
+ *   console.log('EntityId:', data.entityId);
  *   console.log('Message:', data.message);
  * }
  * ```
  */
 export function isClaudeSendPayload(value: unknown): value is ClaudeSendPayload {
   if (!isObject(value)) return false;
-  if (typeof value.conversationId !== 'string') return false;
+  if (typeof value.entityId !== 'number') return false;
   if (typeof value.message !== 'string') return false;
   if (value.attachments !== undefined && !Array.isArray(value.attachments)) return false;
+  // conversationId는 선택적 (레거시 호환)
+  if (value.conversationId !== undefined && typeof value.conversationId !== 'string') return false;
   return true;
 }
 
@@ -398,17 +437,19 @@ export function isClaudeSendPayload(value: unknown): value is ClaudeSendPayload 
  * ```typescript
  * const data: unknown = JSON.parse(message);
  * if (isClaudePermissionPayload(data)) {
+ *   console.log('EntityId:', data.entityId);
  *   console.log('Decision:', data.decision);
  * }
  * ```
  */
 export function isClaudePermissionPayload(value: unknown): value is ClaudePermissionPayload {
-  return (
-    isObject(value) &&
-    typeof value.conversationId === 'string' &&
-    typeof value.toolUseId === 'string' &&
-    isPermissionDecision(value.decision)
-  );
+  if (!isObject(value)) return false;
+  if (typeof value.entityId !== 'number') return false;
+  if (typeof value.toolUseId !== 'string') return false;
+  if (!isPermissionDecision(value.decision)) return false;
+  // conversationId는 선택적 (레거시 호환)
+  if (value.conversationId !== undefined && typeof value.conversationId !== 'string') return false;
+  return true;
 }
 
 /**
@@ -424,17 +465,19 @@ export function isClaudePermissionPayload(value: unknown): value is ClaudePermis
  * ```typescript
  * const data: unknown = JSON.parse(message);
  * if (isClaudeAnswerPayload(data)) {
+ *   console.log('EntityId:', data.entityId);
  *   console.log('Answer:', data.answer);
  * }
  * ```
  */
 export function isClaudeAnswerPayload(value: unknown): value is ClaudeAnswerPayload {
-  return (
-    isObject(value) &&
-    typeof value.conversationId === 'string' &&
-    typeof value.toolUseId === 'string' &&
-    typeof value.answer === 'string'
-  );
+  if (!isObject(value)) return false;
+  if (typeof value.entityId !== 'number') return false;
+  if (typeof value.toolUseId !== 'string') return false;
+  if (typeof value.answer !== 'string') return false;
+  // conversationId는 선택적 (레거시 호환)
+  if (value.conversationId !== undefined && typeof value.conversationId !== 'string') return false;
+  return true;
 }
 
 /**
@@ -450,16 +493,18 @@ export function isClaudeAnswerPayload(value: unknown): value is ClaudeAnswerPayl
  * ```typescript
  * const data: unknown = JSON.parse(message);
  * if (isClaudeControlPayload(data)) {
+ *   console.log('EntityId:', data.entityId);
  *   console.log('Action:', data.action);
  * }
  * ```
  */
 export function isClaudeControlPayload(value: unknown): value is ClaudeControlPayload {
-  return (
-    isObject(value) &&
-    typeof value.conversationId === 'string' &&
-    isClaudeControlAction(value.action)
-  );
+  if (!isObject(value)) return false;
+  if (typeof value.entityId !== 'number') return false;
+  if (!isClaudeControlAction(value.action)) return false;
+  // conversationId는 선택적 (레거시 호환)
+  if (value.conversationId !== undefined && typeof value.conversationId !== 'string') return false;
+  return true;
 }
 
 /**

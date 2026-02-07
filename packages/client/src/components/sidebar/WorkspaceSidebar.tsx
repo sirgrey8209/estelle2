@@ -22,8 +22,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '../../lib/utils';
 import { Collapsible } from '../common/Collapsible';
 import { Card } from '../ui/card';
-import { useWorkspaceStore, useDeviceConfigStore } from '../../stores';
-import { useClaudeStore } from '../../stores/claudeStore';
+import { useWorkspaceStore, useDeviceConfigStore, useConversationStore } from '../../stores';
 import { useLongPress } from '../../hooks/useLongPress';
 import { ConversationItem } from './ConversationItem';
 import { WorkspaceDialog } from './WorkspaceDialog';
@@ -450,16 +449,22 @@ export function WorkspaceSidebar() {
 
   // 대화 선택 핸들러
   const handleConversationSelect = useCallback((workspace: WorkspaceWithPylon, conversation: Conversation) => {
+    // workspaceStore에서 대화 선택
     selectInStore(
       workspace.pylonId,
       workspace.workspaceId,
       conversation.conversationId
     );
+
+    // conversationStore에서 현재 대화 설정
+    useConversationStore.getState().setCurrentConversation(conversation.conversationId);
+
+    // Pylon에 대화 선택 알림 (히스토리 로드 요청)
     selectConversation(
       workspace.workspaceId,
       conversation.conversationId
     );
-    useClaudeStore.getState().clearMessages();
+
     closeSidebar();
   }, [selectInStore, closeSidebar]);
 

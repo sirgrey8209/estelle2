@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useClaudeStore } from '../../stores';
+import { useConversationStore } from '../../stores';
 
 interface WorkingIndicatorProps {
   startTime?: number | null;
@@ -9,8 +9,9 @@ interface WorkingIndicatorProps {
  * 작업 표시기 (펄스 점 + 경과 시간 + 토큰 정보)
  */
 export function WorkingIndicator({ startTime }: WorkingIndicatorProps = {}) {
-  const storeStartTime = useClaudeStore((s) => s.workStartTime);
-  const realtimeUsage = useClaudeStore((s) => s.realtimeUsage);
+  const currentState = useConversationStore((s) => s.getCurrentState());
+  const storeStartTime = currentState?.workStartTime ?? null;
+  const realtimeUsage = currentState?.realtimeUsage ?? null;
   const workStartTime = startTime ?? storeStartTime;
   const [elapsed, setElapsed] = useState(0);
 

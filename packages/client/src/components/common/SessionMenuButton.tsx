@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Pencil, AlertTriangle, MoreVertical, RefreshCw, Package, Bug } from 'lucide-react';
+import { Lock, Pencil, AlertTriangle, MoreVertical, RefreshCw, Package, Bug, Type, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -40,6 +40,9 @@ interface SessionMenuButtonProps {
   onNewSession?: () => void;
   onCompact?: () => void;
   onBugReport?: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
+  conversationName?: string;
 }
 
 /**
@@ -51,8 +54,12 @@ export function SessionMenuButton({
   onNewSession,
   onCompact,
   onBugReport,
+  onRename,
+  onDelete,
+  conversationName,
 }: SessionMenuButtonProps) {
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const config = PERMISSION_CONFIG[permissionMode];
   const Icon = config.icon;
 
@@ -64,12 +71,17 @@ export function SessionMenuButton({
   };
 
   const handleNewSession = () => {
-    setShowConfirmDialog(true);
+    setShowNewSessionDialog(true);
   };
 
   const confirmNewSession = () => {
-    setShowConfirmDialog(false);
+    setShowNewSessionDialog(false);
     onNewSession?.();
+  };
+
+  const confirmDelete = () => {
+    setShowDeleteDialog(false);
+    onDelete?.();
   };
 
   return (
@@ -91,6 +103,12 @@ export function SessionMenuButton({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {onRename && (
+              <DropdownMenuItem onClick={onRename}>
+                <Type className="mr-2 h-4 w-4" />
+                이름 변경
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={handleNewSession}>
               <RefreshCw className="mr-2 h-4 w-4" />
               새 세션
@@ -104,11 +122,21 @@ export function SessionMenuButton({
               <Bug className="mr-2 h-4 w-4" />
               버그 리포트
             </DropdownMenuItem>
+            {onDelete && (
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                대화 삭제
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+      {/* 새 세션 확인 다이얼로그 */}
+      <Dialog open={showNewSessionDialog} onOpenChange={setShowNewSessionDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>새 세션</DialogTitle>
@@ -119,11 +147,33 @@ export function SessionMenuButton({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+            <Button variant="outline" onClick={() => setShowNewSessionDialog(false)}>
               취소
             </Button>
             <Button variant="destructive" onClick={confirmNewSession}>
               새 세션 시작
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 대화 삭제 확인 다이얼로그 */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>대화 삭제</DialogTitle>
+            <DialogDescription>
+              "{conversationName}" 대화를 삭제할까요?
+              <br />
+              삭제된 대화는 복구할 수 없어요.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              삭제
             </Button>
           </DialogFooter>
         </DialogContent>

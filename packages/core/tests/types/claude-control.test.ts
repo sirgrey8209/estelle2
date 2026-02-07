@@ -24,21 +24,35 @@ import {
   isPermissionDecision,
   isClaudeControlAction,
 } from '../../src/types/claude-control.js';
+import { encodeEntityId } from '../../src/utils/entity-id.js';
+
+/** 테스트용 EntityId (pylonId:1, workspaceId:1, conversationId:1) */
+const TEST_ENTITY_ID = encodeEntityId(1, 1, 1);
 
 describe('ClaudeSendPayload', () => {
-  it('should have conversationId and message as required properties', () => {
+  it('should have entityId and message as required properties', () => {
     const payload: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: 'Hello, Claude!',
     };
 
-    expect(payload.conversationId).toBe('conv-001');
+    expect(payload.entityId).toBe(TEST_ENTITY_ID);
     expect(payload.message).toBe('Hello, Claude!');
+  });
+
+  it('should support optional conversationId for legacy compat', () => {
+    const payload: ClaudeSendPayload = {
+      entityId: TEST_ENTITY_ID,
+      conversationId: 'conv-001',
+      message: 'Hello',
+    };
+
+    expect(payload.conversationId).toBe('conv-001');
   });
 
   it('should support unicode in message', () => {
     const payload: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: '안녕하세요! 한글 메시지입니다.',
     };
 
@@ -51,7 +65,7 @@ Line 2
 Line 3`;
 
     const payload: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: multilineMessage,
     };
 
@@ -60,7 +74,7 @@ Line 3`;
 
   it('should support empty message', () => {
     const payload: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: '',
     };
 
@@ -69,7 +83,7 @@ Line 3`;
 
   it('should support optional attachments property', () => {
     const payloadWithAttachments: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: 'Check this file',
       attachments: [{
         id: 'att-001',
@@ -82,7 +96,7 @@ Line 3`;
     expect(payloadWithAttachments.attachments).toHaveLength(1);
 
     const payloadWithoutAttachments: ClaudeSendPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: 'No attachments',
     };
 
@@ -110,12 +124,12 @@ describe('PermissionDecision', () => {
 describe('ClaudePermissionPayload', () => {
   it('should have all required properties', () => {
     const payload: ClaudePermissionPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       toolUseId: 'toolu_12345',
       decision: 'allow',
     };
 
-    expect(payload.conversationId).toBe('conv-001');
+    expect(payload.entityId).toBe(TEST_ENTITY_ID);
     expect(payload.toolUseId).toBe('toolu_12345');
     expect(payload.decision).toBe('allow');
   });
@@ -125,7 +139,7 @@ describe('ClaudePermissionPayload', () => {
 
     decisions.forEach((decision) => {
       const payload: ClaudePermissionPayload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         decision,
       };
@@ -142,7 +156,7 @@ describe('ClaudePermissionPayload', () => {
 
     toolUseIds.forEach((toolUseId) => {
       const payload: ClaudePermissionPayload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId,
         decision: 'allow',
       };
@@ -154,19 +168,19 @@ describe('ClaudePermissionPayload', () => {
 describe('ClaudeAnswerPayload', () => {
   it('should have all required properties', () => {
     const payload: ClaudeAnswerPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       toolUseId: 'toolu_12345',
       answer: 'Option A',
     };
 
-    expect(payload.conversationId).toBe('conv-001');
+    expect(payload.entityId).toBe(TEST_ENTITY_ID);
     expect(payload.toolUseId).toBe('toolu_12345');
     expect(payload.answer).toBe('Option A');
   });
 
   it('should support unicode in answer', () => {
     const payload: ClaudeAnswerPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       toolUseId: 'toolu_12345',
       answer: '옵션 A를 선택합니다.',
     };
@@ -176,7 +190,7 @@ describe('ClaudeAnswerPayload', () => {
 
   it('should support empty answer', () => {
     const payload: ClaudeAnswerPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       toolUseId: 'toolu_12345',
       answer: '',
     };
@@ -190,7 +204,7 @@ Second line
 Third line`;
 
     const payload: ClaudeAnswerPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       toolUseId: 'toolu_12345',
       answer: multilineAnswer,
     };
@@ -222,13 +236,13 @@ describe('ClaudeControlAction', () => {
 });
 
 describe('ClaudeControlPayload', () => {
-  it('should have conversationId and action as required properties', () => {
+  it('should have entityId and action as required properties', () => {
     const payload: ClaudeControlPayload = {
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       action: 'stop',
     };
 
-    expect(payload.conversationId).toBe('conv-001');
+    expect(payload.entityId).toBe(TEST_ENTITY_ID);
     expect(payload.action).toBe('stop');
   });
 
@@ -237,7 +251,7 @@ describe('ClaudeControlPayload', () => {
 
     actions.forEach((action) => {
       const payload: ClaudeControlPayload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         action,
       };
       expect(payload.action).toBe(action);
@@ -333,13 +347,13 @@ describe('Type Guards', () => {
 
   describe('isClaudeSendPayload', () => {
     it('should return true for valid payloads', () => {
-      const payload = { conversationId: 'conv-001', message: 'Hello' };
+      const payload = { entityId: TEST_ENTITY_ID, message: 'Hello' };
       expect(isClaudeSendPayload(payload)).toBe(true);
     });
 
     it('should return true for payloads with attachments', () => {
       const payload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         message: 'Hello',
         attachments: [{
           id: 'att-001',
@@ -351,20 +365,25 @@ describe('Type Guards', () => {
       expect(isClaudeSendPayload(payload)).toBe(true);
     });
 
+    it('should return true for payloads with legacy conversationId', () => {
+      const payload = { entityId: TEST_ENTITY_ID, conversationId: 'conv-001', message: 'Hello' };
+      expect(isClaudeSendPayload(payload)).toBe(true);
+    });
+
     it('should return false for invalid payloads', () => {
       expect(isClaudeSendPayload(null)).toBe(false);
       expect(isClaudeSendPayload(undefined)).toBe(false);
       expect(isClaudeSendPayload({})).toBe(false);
-      expect(isClaudeSendPayload({ conversationId: 'conv-001' })).toBe(false); // missing message
-      expect(isClaudeSendPayload({ message: 'Hello' })).toBe(false); // missing conversationId
-      expect(isClaudeSendPayload({ conversationId: 123, message: 'Hello' })).toBe(false); // wrong type
+      expect(isClaudeSendPayload({ entityId: TEST_ENTITY_ID })).toBe(false); // missing message
+      expect(isClaudeSendPayload({ message: 'Hello' })).toBe(false); // missing entityId
+      expect(isClaudeSendPayload({ entityId: 'not-a-number', message: 'Hello' })).toBe(false); // wrong type
     });
   });
 
   describe('isClaudePermissionPayload', () => {
     it('should return true for valid payloads', () => {
       const payload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         decision: 'allow',
       };
@@ -375,12 +394,12 @@ describe('Type Guards', () => {
       expect(isClaudePermissionPayload(null)).toBe(false);
       expect(isClaudePermissionPayload({})).toBe(false);
       expect(isClaudePermissionPayload({
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         decision: 'invalid',
       })).toBe(false);
       expect(isClaudePermissionPayload({
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         // missing decision
       })).toBe(false);
@@ -390,7 +409,7 @@ describe('Type Guards', () => {
   describe('isClaudeAnswerPayload', () => {
     it('should return true for valid payloads', () => {
       const payload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         answer: 'Option A',
       };
@@ -399,7 +418,7 @@ describe('Type Guards', () => {
 
     it('should return true for empty answer', () => {
       const payload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         answer: '',
       };
@@ -410,7 +429,7 @@ describe('Type Guards', () => {
       expect(isClaudeAnswerPayload(null)).toBe(false);
       expect(isClaudeAnswerPayload({})).toBe(false);
       expect(isClaudeAnswerPayload({
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         toolUseId: 'toolu_12345',
         // missing answer
       })).toBe(false);
@@ -420,7 +439,7 @@ describe('Type Guards', () => {
   describe('isClaudeControlPayload', () => {
     it('should return true for valid payloads', () => {
       const payload = {
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         action: 'stop',
       };
       expect(isClaudeControlPayload(payload)).toBe(true);
@@ -429,7 +448,7 @@ describe('Type Guards', () => {
     it('should return true for all valid actions', () => {
       const actions = ['stop', 'new_session', 'clear', 'compact'];
       actions.forEach((action) => {
-        const payload = { conversationId: 'conv-001', action };
+        const payload = { entityId: TEST_ENTITY_ID, action };
         expect(isClaudeControlPayload(payload)).toBe(true);
       });
     });
@@ -438,7 +457,7 @@ describe('Type Guards', () => {
       expect(isClaudeControlPayload(null)).toBe(false);
       expect(isClaudeControlPayload({})).toBe(false);
       expect(isClaudeControlPayload({
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
         action: 'invalid',
       })).toBe(false);
     });

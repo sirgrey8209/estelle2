@@ -44,6 +44,9 @@ export {
   sendQuestionResponse,
   sendClaudeControl,
   setPermissionMode,
+  deleteConversation,
+  renameConversation,
+  sendBugReport,
 } from './relaySender';
 
 export {

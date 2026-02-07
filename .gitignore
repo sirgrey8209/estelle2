@@ -4,7 +4,15 @@ node_modules/
 # Build output
 dist/
 release/
+release-stage/
+release-data/
+stage-data/
+release.staging/
+release.rollback/
+release.failed/
+.release-data-backup/
 .turbo/
+config/build-counter.json
 
 # Environment
 .env

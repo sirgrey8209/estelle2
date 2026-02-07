@@ -82,10 +82,16 @@ export const MessageType = {
   CONVERSATION_SELECT: 'conversation_select',
   /** 대화 상태 변경 알림 */
   CONVERSATION_STATUS: 'conversation_status',
+  /** 메시지 히스토리 요청 (페이징) */
+  HISTORY_REQUEST: 'history_request',
   /** 메시지 히스토리 응답 */
   HISTORY_RESULT: 'history_result',
   /** 대화 순서 변경 요청 */
   CONVERSATION_REORDER: 'conversation_reorder',
+  /** 대화 삭제 요청 */
+  CONVERSATION_DELETE: 'conversation_delete',
+  /** 대화 이름 변경 요청 */
+  CONVERSATION_RENAME: 'conversation_rename',
 
   // === Claude ===
   /** Claude에 메시지 전송 */
@@ -160,6 +166,12 @@ export const MessageType = {
   WORKER_STOP: 'worker_stop',
   /** 워커 정지 응답 */
   WORKER_STOP_RESULT: 'worker_stop_result',
+
+  // === Usage ===
+  /** 사용량 조회 요청 */
+  USAGE_REQUEST: 'usage_request',
+  /** 사용량 조회 응답 */
+  USAGE_RESPONSE: 'usage_response',
 
   // === Utility ===
   /** 연결 유지 확인 요청 */

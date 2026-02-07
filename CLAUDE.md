@@ -170,98 +170,105 @@ function routeMessage(msg, connections): RouteResult { ... }
 
 ```json
 {
-  "dev": {
-    "relay": { "port": 3000, "url": "ws://localhost:3000" },
-    "client": { "relayUrl": "ws://localhost:3000", "title": "Estelle (dev)" }
-  },
-  "release": {
-    "relay": { "url": "wss://estelle-relay-v2.fly.dev" },
-    "client": { "webPort": 8080, "title": "Estelle" }
-  }
+  "dev": { "relay": { "url": "ws://localhost:3000" }, "client": { "title": "Estelle (dev)" } },
+  "stage": { "relay": { "url": "wss://estelle-relay-v2-stage.fly.dev", "flyApp": "estelle-relay-v2-stage" }, "pylon": { "pm2Name": "estelle-pylon-stage" } },
+  "release": { "relay": { "url": "wss://estelle-relay-v2.fly.dev", "flyApp": "estelle-relay-v2" }, "pylon": { "pm2Name": "estelle-pylon" } }
 }
 ```
 
-- 스크립트들이 이 파일을 읽어 포트/URL 설정
-- Dev 환경에서 웹 타이틀에 "(dev)" 표시됨
+## 빌드 환경 (Dev → Stage → Release)
 
-## 빌드 환경
+### 환경 구조
 
-### Dev 빌드 vs Release 빌드
+| 환경 | Relay | Pylon (PM2) | Client | 용도 |
+|------|-------|-------------|--------|------|
+| dev | localhost:3000 | pnpm dev (직접) | Vite dev server | PC에서 빠른 개발 |
+| stage | Fly.io stage앱 | estelle-pylon-stage | Fly.io stage에서 서빙 | 모바일에서 개발 확인 |
+| release | Fly.io prod앱 | estelle-pylon | Fly.io prod에서 서빙 | 실사용 |
 
-| 구분 | Dev 빌드 | Release 빌드 |
-|------|----------|--------------|
-| 명령어 | `pnpm dev` | `.\scripts\build-release.ps1` |
-| Relay | 로컬 (ws://localhost:3000) | Fly.io (wss://estelle-relay-v2.fly.dev) |
-| Pylon | packages/pylon 직접 실행 | release/pylon (PM2) |
-| Client | Vite Dev Server (5173) | Relay 내장 (Fly.io) |
-| 데이터 | packages/pylon/data | release/pylon/data (분리됨) |
-| 웹 타이틀 | Estelle (dev) | Estelle |
-| 용도 | 개발/디버깅 | 실제 사용 |
+**배포 경로**: `dev → stage → release` 또는 `dev → release` (직행)
+
+### 버전 체계
+
+**포맷**: `(env)vMMDD_N` — 예: `(stage)v0207_1`, `(release)v0207_3`
+- dev 환경: `(dev)` (빌드 번호 없음)
+- 카운터: `config/build-counter.json`에 저장, 날짜 바뀌면 리셋
 
 ### Dev 빌드 (개발 서버)
 
 ```bash
-# 시작 (Relay + Pylon + Vite)
-pnpm dev
-
-# 종료
-pnpm dev:stop
-
-# 상태 확인
-pnpm dev:status
-
-# 재시작
-pnpm dev:restart
+pnpm dev          # 시작 (Relay + Pylon + Vite)
+pnpm dev:stop     # 종료
+pnpm dev:status   # 상태 확인
+pnpm dev:restart  # 재시작
 ```
 
-### Release 빌드
+### Stage / Release 빌드
 
 ```powershell
-# 풀 빌드 (TypeScript + 웹 + PM2 시작 + 헬스체크)
-.\scripts\build-release.ps1
+# Stage 배포 (release pylon에 영향 없음 — 안전)
+.\scripts\build-deploy.ps1 -Target stage
 
-# Fly.io 배포
-cd release\relay
-.\deploy.ps1
-
-# Release → Dev 데이터 동기화
-.\scripts\sync-data.ps1
+# Release 배포
+.\scripts\build-deploy.ps1 -Target release
 ```
 
-**Release 빌드 과정:**
-1. TypeScript 빌드
-2. release/ 폴더 초기화
-3. Core/Pylon/Relay 패키지 복사
-4. Client 웹 빌드 (Vite → relay/public)
-5. PM2 서비스 시작 (Pylon)
-6. 헬스체크 (Relay 연결)
+> **주의: Pylon(Claude) 세션에서 release 빌드 실행 시**
+> PM2 재시작이 Pylon을 종료하면 Claude SDK 세션이 끊긴다.
+> 반드시 **detached 프로세스**로 실행할 것:
+> ```powershell
+> Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','.\scripts\build-deploy.ps1','-Target','release' -WindowStyle Hidden
+> ```
+> **stage 빌드는 안전** — release pylon에 영향 없음.
+
+**MCP deploy 도구**: Claude가 대화 중 직접 배포 가능 (detached로 실행됨)
+
+**빌드 파이프라인:**
+1. Phase 0: 사전 검증 (pnpm, pm2, fly.exe, config)
+2. Version: 빌드 버전 생성 (build-counter.json)
+3. Phase 1: TypeScript 빌드 (VITE_BUILD_ENV, VITE_BUILD_VERSION 주입)
+4. Phase 2: 타겟 폴더 구축 (core, pylon, relay + junction)
+5. Phase 3: 무결성 검증
+6. Phase 4: Fly.io Relay 배포
+7. Phase 5: PM2 재시작 + 헬스체크
 
 ### 데이터 관리
 
-Dev와 Release는 **별도의 데이터**를 사용한다 (대화, 워크스페이스 등).
+환경별 **완전 분리된 데이터** 디렉토리 사용.
 
 | 환경 | 데이터 경로 |
 |------|------------|
 | Dev | `packages/pylon/data/` |
-| Release | `release/pylon/data/` |
+| Stage | `stage-data/data/` (실제), `release-stage/pylon/data/` (junction) |
+| Release | `release-data/data/` (실제), `release/pylon/data/` (junction) |
+
+**데이터 동기화** (임의 방향):
 
 ```powershell
-# Release 데이터를 Dev로 복사 (백업 후 덮어쓰기)
-.\scripts\sync-data.ps1
-
-# 확인 없이 강제 실행
-.\scripts\sync-data.ps1 -Force
+.\scripts\sync-data.ps1                           # release → dev (기본)
+.\scripts\sync-data.ps1 -From release -To stage   # release → stage
+.\scripts\sync-data.ps1 -From stage -To dev       # stage → dev
+.\scripts\sync-data.ps1 -Force                    # 확인 없이 실행
 ```
 
-- Release에서 실사용한 대화를 Dev에서 디버깅할 때 유용
-- 기존 Dev 데이터는 `packages/pylon/data.backup/`에 백업됨
+### 폴더 구조
 
-### 포트 구성
+```
+config/
+├── environments.json    ← dev/stage/release 설정
+└── build-counter.json   ← 빌드 번호 추적 (.gitignore)
 
-| 서비스 | Dev | Release |
-|--------|-----|---------|
-| Relay | 3000 | Fly.io (443) |
-| Client (Vite) | 5173 | Relay 내장 |
+release/                 ← production
+├── core/ pylon/ relay/
+└── pylon/data,uploads → release-data/ (junction)
+
+release-stage/           ← staging
+├── core/ pylon/ relay/
+└── pylon/data,uploads → stage-data/ (junction)
+
+release-data/            ← release 전용 데이터
+stage-data/              ← stage 전용 데이터
+```
 
 ### Client 앱 (별도 실행 시)
 

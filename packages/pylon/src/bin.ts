@@ -11,7 +11,9 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
+import { decodeEntityId, type EntityId } from '@estelle/core';
 import { Pylon, type PylonConfig, type PylonDependencies } from './pylon.js';
 import { WorkspaceStore } from './stores/workspace-store.js';
 import { MessageStore } from './stores/message-store.js';
@@ -31,7 +33,8 @@ import { FileSystemPersistence, type FileSystemInterface } from './persistence/f
 const config: PylonConfig = {
   deviceId: parseInt(process.env['DEVICE_ID'] || '1', 10),
   relayUrl: process.env['RELAY_URL'] || 'ws://localhost:8080',
-  uploadsDir: process.env['UPLOADS_DIR'] || './uploads',
+  // 절대 경로로 변환 (Claude가 프로젝트 루트에서 실행되므로)
+  uploadsDir: path.resolve(process.env['UPLOADS_DIR'] || './uploads'),
 };
 
 /** 데이터 저장 디렉토리 */
@@ -179,6 +182,18 @@ let pylonInstance: Pylon | null = null;
  * @returns MCP 서버 설정 또는 null
  */
 function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
+  // estelle-mcp 서버 자동 주입
+  const binDir = path.dirname(fileURLToPath(import.meta.url));
+  const mcpServerPath = path.join(binDir, 'mcp', 'server.js');
+
+  const estelleMcp: Record<string, unknown> = {
+    command: 'node',
+    args: [mcpServerPath],
+    env: { ESTELLE_WORKING_DIR: workingDir },
+  };
+
+  // 프로젝트별 MCP 설정 로드
+  let userConfig: Record<string, unknown> = {};
   const configPaths = [
     path.join(workingDir, '.estelle', 'mcp-config.json'),
     path.join(workingDir, '.mcp.json'),
@@ -188,27 +203,31 @@ function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
     try {
       if (fs.existsSync(configPath)) {
         const content = fs.readFileSync(configPath, 'utf-8');
-        const config = JSON.parse(content);
+        userConfig = JSON.parse(content);
         logger.log(`[MCP] Loaded config from ${configPath}`);
-        return config;
+        break;
       }
     } catch (err) {
       logger.error(`[MCP] Failed to load config from ${configPath}: ${err}`);
     }
   }
 
-  return null;
+  // estelle-mcp를 항상 포함
+  return {
+    ...userConfig,
+    'estelle-mcp': estelleMcp,
+  };
 }
 
-function createDependencies(): PylonDependencies {
+function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: unknown) => void) => void } {
   // Persistence 생성
   const persistence = new FileSystemPersistence(dataDir, persistenceFileSystem);
 
   // WorkspaceStore 로드 또는 새로 생성
   const workspaceData = persistence.loadWorkspaceStore();
   const workspaceStore = workspaceData
-    ? WorkspaceStore.fromJSON(workspaceData)
-    : new WorkspaceStore();
+    ? WorkspaceStore.fromJSON(config.deviceId, workspaceData)
+    : new WorkspaceStore(config.deviceId);
 
   if (workspaceData) {
     logger.log(`[Persistence] Loaded ${workspaceData.workspaces?.length || 0} workspaces from ${dataDir}`);
@@ -229,34 +248,58 @@ function createDependencies(): PylonDependencies {
   // ClaudeManager - 지연 바인딩으로 pylon 연결
   const claudeManager = new ClaudeManager({
     adapter: claudeAdapter,
-    getPermissionMode: (sessionId: string) => {
-      // sessionId = conversationId
-      const workspaceId = workspaceStore.findWorkspaceByConversation(sessionId);
-      if (!workspaceId) return 'default';
-      const conversation = workspaceStore.getConversation(workspaceId, sessionId);
+    getPermissionMode: (entityId: number) => {
+      const conversation = workspaceStore.getConversation(entityId as EntityId);
       return conversation?.permissionMode ?? 'default';
     },
     loadMcpConfig,
-    onEvent: (sessionId, event) => {
+    onEvent: (entityId, event) => {
       // 지연 바인딩: pylon이 생성된 후에 호출됨
       if (pylonInstance) {
-        pylonInstance.sendClaudeEvent(sessionId, event);
+        pylonInstance.sendClaudeEvent(entityId, event);
       } else {
         logger.warn(`[Claude] Event received but pylon not ready: ${event.type}`);
       }
     },
-    onRawMessage: (sessionId, message) => {
+    onRawMessage: (entityId, message) => {
       // SDK raw 메시지 로깅
-      logSdkRawMessage(sessionId, message);
+      logSdkRawMessage(String(entityId), message);
     },
   });
 
-  // BlobHandler
+  // BlobHandler (sendFn은 pylon 생성 후 지연 바인딩)
+  let pylonSendFn: (msg: unknown) => void = () => {};
   const blobHandler = new BlobHandler({
     uploadsDir: config.uploadsDir,
     fs: blobFileSystem,
-    sendFn: () => {},
+    sendFn: (msg) => pylonSendFn(msg),
   });
+
+  // BlobHandler 어댑터 래퍼 - 메시지에서 payload/from 추출
+  const blobHandlerAdapter: PylonDependencies['blobHandler'] = {
+    handleBlobStart: (message: unknown) => {
+      const msg = message as { payload?: unknown; from?: { deviceId?: string } };
+      const payload = msg.payload as Parameters<typeof blobHandler.handleBlobStart>[0];
+      const from = String(msg.from?.deviceId ?? 'unknown');
+      return blobHandler.handleBlobStart(payload, from);
+    },
+    handleBlobChunk: (message: unknown) => {
+      const msg = message as { payload?: unknown };
+      const payload = msg.payload as Parameters<typeof blobHandler.handleBlobChunk>[0];
+      blobHandler.handleBlobChunk(payload);
+    },
+    handleBlobEnd: (message: unknown) => {
+      const msg = message as { payload?: unknown };
+      const payload = msg.payload as Parameters<typeof blobHandler.handleBlobEnd>[0];
+      return blobHandler.handleBlobEnd(payload);
+    },
+    handleBlobRequest: (message: unknown) => {
+      const msg = message as { payload?: unknown; from?: { deviceId?: string } };
+      const payload = msg.payload as Parameters<typeof blobHandler.handleBlobRequest>[0];
+      const from = String(msg.from?.deviceId ?? 'unknown');
+      blobHandler.handleBlobRequest(payload, from);
+    },
+  };
 
   // TaskManager
   const taskManager = new TaskManager(taskFileSystem);
@@ -267,14 +310,16 @@ function createDependencies(): PylonDependencies {
   // FolderManager
   const folderManager = new FolderManager(folderFileSystem);
 
-  // 어댑터 인터페이스와 실제 구현체 시그니처 차이로 인한 타입 캐스팅
-  // TODO: pylon.ts의 어댑터 인터페이스를 실제 구현체에 맞게 정리 필요
   return {
     workspaceStore,
     messageStore,
     relayClient,
     claudeManager,
-    blobHandler: blobHandler as unknown as PylonDependencies['blobHandler'],
+    blobHandler: blobHandlerAdapter,
+    // pylonSendFn 바인딩을 위한 setter 추가
+    _bindPylonSend: (sendFn: (msg: unknown) => void) => {
+      pylonSendFn = sendFn;
+    },
     taskManager,
     workerManager: workerManager as unknown as PylonDependencies['workerManager'],
     folderManager,
@@ -306,6 +351,9 @@ async function main(): Promise<void> {
 
   // 지연 바인딩: ClaudeManager.onEvent가 pylon을 참조할 수 있도록 설정
   pylonInstance = pylon;
+
+  // 지연 바인딩: BlobHandler.sendFn이 relayClient.send를 사용하도록 설정
+  deps._bindPylonSend((msg) => deps.relayClient.send(msg));
 
   // Graceful shutdown
   process.on('SIGINT', async () => {

@@ -37,3 +37,9 @@ export {
 
 // store-message.js - 모든 타입 export
 export * from './store-message.js';
+
+// usage.js - Claude Code 사용량 타입
+export * from './usage.js';
+
+// conversation-claude.js - 대화별 Claude 상태 타입
+export * from './conversation-claude.js';

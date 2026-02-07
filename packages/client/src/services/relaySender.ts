@@ -129,6 +129,41 @@ export function selectConversation(workspaceId: string, conversationId: string):
   });
 }
 
+/**
+ * 추가 히스토리 요청 (페이징)
+ */
+export function requestMoreHistory(
+  workspaceId: string,
+  conversationId: string,
+  offset: number,
+  limit: number = 50
+): boolean {
+  return sendMessage({
+    type: MessageType.HISTORY_REQUEST,
+    payload: { workspaceId, conversationId, offset, limit },
+  });
+}
+
+/**
+ * 대화 삭제 요청
+ */
+export function deleteConversation(workspaceId: string, conversationId: string): boolean {
+  return sendMessage({
+    type: MessageType.CONVERSATION_DELETE,
+    payload: { workspaceId, conversationId },
+  });
+}
+
+/**
+ * 대화 이름 변경 요청
+ */
+export function renameConversation(workspaceId: string, conversationId: string, newName: string): boolean {
+  return sendMessage({
+    type: MessageType.CONVERSATION_RENAME,
+    payload: { workspaceId, conversationId, newName },
+  });
+}
+
 // ============================================================================
 // Claude 관련
 // ============================================================================
@@ -262,5 +297,45 @@ export function requestWorkspaceCreate(deviceId: number, name: string, workingDi
   return sendMessage({
     type: MessageType.WORKSPACE_CREATE,
     payload: { deviceId, name, workingDir },
+  });
+}
+
+// ============================================================================
+// Usage 관련
+// ============================================================================
+
+/**
+ * Claude 사용량 조회 요청
+ *
+ * @description
+ * 특정 Pylon에 ccusage를 통한 사용량 조회를 요청합니다.
+ */
+export function requestUsage(): boolean {
+  return sendMessage({
+    type: MessageType.USAGE_REQUEST,
+    payload: {},
+  });
+}
+
+// ============================================================================
+// 버그 리포트 관련
+// ============================================================================
+
+/**
+ * 버그 리포트 전송
+ */
+export function sendBugReport(
+  message: string,
+  conversationId?: string,
+  workspaceId?: string
+): boolean {
+  return sendMessage({
+    type: MessageType.BUG_REPORT,
+    payload: {
+      message,
+      conversationId,
+      workspaceId,
+      timestamp: new Date().toISOString(),
+    },
   });
 }

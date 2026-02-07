@@ -48,6 +48,9 @@ const AutoResizeTextarea = React.forwardRef<
 
     const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
     textarea.style.height = `${newHeight}px`;
+
+    // 내용이 maxHeight를 넘을 때만 스크롤바 표시
+    textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
   }, [maxRows, minRows]);
 
   // 값 변경 시 높이 조절
@@ -77,7 +80,7 @@ const AutoResizeTextarea = React.forwardRef<
       style={{
         minHeight: `${minRows * lineHeight}px`,
         maxHeight: `${maxRows * lineHeight}px`,
-        overflow: 'auto',
+        overflowY: 'hidden', // adjustHeight에서 동적으로 변경
       }}
       {...props}
     />

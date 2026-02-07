@@ -22,9 +22,9 @@ import {
 } from '../../src/constants/index.js';
 
 describe('MessageType', () => {
-  it('should have all message types (64 total)', () => {
+  it('should have all message types (71 total)', () => {
     const messageTypes = Object.keys(MessageType);
-    expect(messageTypes).toHaveLength(64);
+    expect(messageTypes).toHaveLength(71);
   });
 
   it('should have correct auth message types', () => {
@@ -110,6 +110,11 @@ describe('MessageType', () => {
     expect(MessageType.ERROR).toBe('error');
     expect(MessageType.BUG_REPORT).toBe('bug_report');
     expect(MessageType.FROM_RELAY).toBe('from_relay');
+  });
+
+  it('should have correct usage message types', () => {
+    expect(MessageType.USAGE_REQUEST).toBe('usage_request');
+    expect(MessageType.USAGE_RESPONSE).toBe('usage_response');
   });
 
   it('should have legacy desk types for backward compatibility', () => {

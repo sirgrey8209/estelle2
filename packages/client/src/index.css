@@ -48,7 +48,7 @@
   }
 }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling - 스크롤 가능할 때만 표시 */
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--primary) / 0.5) transparent;

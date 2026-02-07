@@ -326,7 +326,7 @@ export class FolderManager {
               drives.push({
                 path: drivePath,
                 label: `${driveLetter}:`,
-                hasChildren: true,  // 드라이브는 항상 하위 폴더 있다고 가정
+                hasChildren: this.checkHasChildrenForDrive(drivePath),
               });
             }
           }

@@ -24,6 +24,9 @@ import {
   isBlobAckPayload,
   isBlobRequestPayload,
 } from '../../src/types/blob.js';
+import { encodeEntityId } from '../../src/utils/entity-id.js';
+
+const TEST_ENTITY_ID = encodeEntityId(1, 1, 1);
 
 describe('Attachment', () => {
   it('should have all required properties', () => {
@@ -121,17 +124,17 @@ describe('BlobContext', () => {
   it('should have all required properties', () => {
     const context: BlobContext = {
       type: 'image_upload',
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
     };
 
     expect(context.type).toBe('image_upload');
-    expect(context.conversationId).toBe('conv-001');
+    expect(context.entityId).toBe(TEST_ENTITY_ID);
   });
 
   it('should support optional message property', () => {
     const contextWithMessage: BlobContext = {
       type: 'file_transfer',
-      conversationId: 'conv-001',
+      entityId: TEST_ENTITY_ID,
       message: 'Please analyze this file.',
     };
 
@@ -141,12 +144,12 @@ describe('BlobContext', () => {
   it('should support all properties together', () => {
     const fullContext: BlobContext = {
       type: 'image_upload',
-      conversationId: 'conv-456',
+      entityId: TEST_ENTITY_ID,
       message: '이 이미지를 분석해주세요.',
     };
 
     expect(fullContext.type).toBe('image_upload');
-    expect(fullContext.conversationId).toBe('conv-456');
+    expect(fullContext.entityId).toBe(TEST_ENTITY_ID);
     expect(fullContext.message).toBe('이 이미지를 분석해주세요.');
   });
 });
@@ -163,7 +166,7 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'file_transfer',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       },
     };
 
@@ -175,7 +178,7 @@ describe('BlobStartPayload', () => {
     expect(payload.totalChunks).toBe(160);
     expect(payload.encoding).toBe('base64');
     expect(payload.context.type).toBe('file_transfer');
-    expect(payload.context.conversationId).toBe('conv-001');
+    expect(payload.context.entityId).toBe(TEST_ENTITY_ID);
   });
 
   it('should support optional sameDevice property', () => {
@@ -189,7 +192,7 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'file_transfer',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       },
       sameDevice: true,
     };
@@ -206,7 +209,7 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'file_transfer',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       },
     };
 
@@ -224,7 +227,7 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'image_upload',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       },
       localPath: 'C:\\Users\\user\\images\\image.png',
     };
@@ -243,7 +246,7 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'file_transfer',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       },
     };
 
@@ -261,13 +264,12 @@ describe('BlobStartPayload', () => {
       encoding: 'base64',
       context: {
         type: 'image_upload',
-        conversationId: 'conv-001',
-        conversationId: 'conv-123',
+        entityId: TEST_ENTITY_ID,
         message: 'Analyze this screenshot',
       },
     };
 
-    expect(payload.context.conversationId).toBe('conv-123');
+    expect(payload.context.entityId).toBe(TEST_ENTITY_ID);
     expect(payload.context.message).toBe('Analyze this screenshot');
   });
 });
@@ -542,7 +544,7 @@ describe('Type Guards', () => {
     it('should return true for valid contexts', () => {
       const context = {
         type: 'image_upload',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       };
       expect(isBlobContext(context)).toBe(true);
     });
@@ -550,7 +552,7 @@ describe('Type Guards', () => {
     it('should return true for contexts with optional properties', () => {
       const context = {
         type: 'file_transfer',
-        conversationId: 'conv-123',
+        entityId: TEST_ENTITY_ID,
         message: 'Hello',
       };
       expect(isBlobContext(context)).toBe(true);
@@ -560,11 +562,11 @@ describe('Type Guards', () => {
       expect(isBlobContext(null)).toBe(false);
       expect(isBlobContext(undefined)).toBe(false);
       expect(isBlobContext({})).toBe(false);
-      expect(isBlobContext({ type: 'image_upload' })).toBe(false); // missing conversationId
-      expect(isBlobContext({ conversationId: 'conv-001' })).toBe(false); // missing type
+      expect(isBlobContext({ type: 'image_upload' })).toBe(false); // missing entityId
+      expect(isBlobContext({ entityId: TEST_ENTITY_ID })).toBe(false); // missing type
       expect(isBlobContext({
         type: 'invalid_type',
-        conversationId: 'conv-001',
+        entityId: TEST_ENTITY_ID,
       })).toBe(false);
     });
   });
@@ -581,7 +583,7 @@ describe('Type Guards', () => {
         encoding: 'base64',
         context: {
           type: 'file_transfer',
-          conversationId: 'conv-001',
+          entityId: TEST_ENTITY_ID,
         },
       };
       expect(isBlobStartPayload(payload)).toBe(true);
@@ -598,7 +600,7 @@ describe('Type Guards', () => {
         encoding: 'base64',
         context: {
           type: 'file_transfer',
-          conversationId: 'conv-001',
+          entityId: TEST_ENTITY_ID,
         },
         sameDevice: true,
         localPath: '/path/to/file.txt',
@@ -624,7 +626,7 @@ describe('Type Guards', () => {
         encoding: 'utf-8', // wrong encoding
         context: {
           type: 'file_transfer',
-          conversationId: 'conv-001',
+          entityId: TEST_ENTITY_ID,
         },
       })).toBe(false);
     });

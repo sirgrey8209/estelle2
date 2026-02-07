@@ -35,7 +35,7 @@ export function DesktopLayout({ sidebar, main }: DesktopLayoutProps) {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex flex-col bg-background" style={{ height: 'var(--app-height, 100vh)' }}>
       <AppHeader />
 
       <div className="flex flex-1 overflow-hidden">

@@ -38,6 +38,7 @@ import type {
   BlobRequestPayload,
   BlobContext,
   Message,
+  EntityId,
 } from '@estelle/core';
 import { BlobConfig, MessageType } from '@estelle/core';
 
@@ -175,6 +176,9 @@ export interface BlobHandlerResult {
 
   /** 수신된 청크 수 */
   received?: number;
+
+  /** MIME 타입 */
+  mimeType?: string;
 }
 
 // ============================================================================
@@ -340,8 +344,8 @@ export class BlobHandler {
     }
 
     // 대화별 폴더 생성
-    const conversationId = context.conversationId ?? 'unknown';
-    const conversationDir = this.joinPath(this.uploadsDir, conversationId);
+    const folderName = context.entityId ? String(context.entityId) : 'unknown';
+    const conversationDir = this.joinPath(this.uploadsDir, folderName);
     this.fs.mkdir(conversationDir);
 
     // 파일명 정제 (위험한 문자 제거)
@@ -438,6 +442,7 @@ export class BlobHandler {
         success: true,
         path: transfer.localPath,
         context: transfer.context,
+        mimeType: transfer.mimeType,
       };
     }
 
@@ -477,6 +482,7 @@ export class BlobHandler {
       success: true,
       path: transfer.savePath,
       context: transfer.context,
+      mimeType: transfer.mimeType,
     };
   }
 
@@ -535,7 +541,7 @@ export class BlobHandler {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks,
         encoding: BlobConfig.ENCODING,
-        context: { type: 'file_transfer', conversationId: '' },
+        context: { type: 'file_transfer', entityId: 0 as EntityId },
       } satisfies BlobStartPayload,
       timestamp: Date.now(),
     });

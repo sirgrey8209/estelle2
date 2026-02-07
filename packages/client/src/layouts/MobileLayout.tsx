@@ -69,7 +69,11 @@ export function MobileLayout({ sidebar, main }: MobileLayoutProps) {
   return (
     <MobileLayoutContext.Provider value={contextValue}>
       <div
-        className="flex h-screen flex-col bg-background"
+        className="flex flex-col bg-background"
+        style={{
+          height: 'var(--app-height, 100vh)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
         onTouchStart={handleTouchStart}
       >
         <AppHeader />

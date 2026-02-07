@@ -167,7 +167,7 @@ export interface PendingPermission {
   input: Record<string, unknown>;
 
   /** 세션 ID */
-  sessionId: string;
+  sessionId: number;
 }
 
 /**
@@ -224,14 +224,14 @@ export interface SendMessageOptions {
  * Claude 이벤트 핸들러
  */
 export type ClaudeEventHandler = (
-  sessionId: string,
+  sessionId: number,
   event: ClaudeManagerEvent
 ) => void;
 
 /**
  * 권한 모드 조회 함수
  */
-export type GetPermissionModeFn = (sessionId: string) => PermissionModeValue;
+export type GetPermissionModeFn = (sessionId: number) => PermissionModeValue;
 
 /**
  * MCP 설정 로드 함수
@@ -392,7 +392,7 @@ export interface ClaudeMessage {
  * SDK raw 메시지 로거
  */
 export type RawMessageLogger = (
-  sessionId: string,
+  sessionId: number,
   message: ClaudeMessage
 ) => void;
 
@@ -467,7 +467,7 @@ export class ClaudeManager {
   private readonly onRawMessage?: RawMessageLogger;
 
   /** 활성 세션 (sessionId -> ClaudeSession) */
-  private readonly sessions: Map<string, ClaudeSession> = new Map();
+  private readonly sessions: Map<number, ClaudeSession> = new Map();
 
   /** 대기 중인 권한 요청 (toolUseId -> PendingPermission) */
   private readonly pendingPermissions: Map<string, PendingPermission> =
@@ -477,7 +477,7 @@ export class ClaudeManager {
   private readonly pendingQuestions: Map<string, PendingQuestion> = new Map();
 
   /** 재연결 시 전송할 대기 이벤트 (sessionId -> PendingEvent) */
-  private readonly pendingEvents: Map<string, PendingEvent> = new Map();
+  private readonly pendingEvents: Map<number, PendingEvent> = new Map();
 
   // ============================================================================
   // 생성자
@@ -520,7 +520,7 @@ export class ClaudeManager {
    * ```
    */
   async sendMessage(
-    sessionId: string,
+    sessionId: number,
     message: string,
     options: SendMessageOptions
   ): Promise<void> {
@@ -575,7 +575,7 @@ export class ClaudeManager {
    * manager.stop('conv-123');
    * ```
    */
-  stop(sessionId: string): void {
+  stop(sessionId: number): void {
     const session = this.sessions.get(sessionId);
 
     // 1. abort 시도 (실패해도 계속 진행)
@@ -630,7 +630,7 @@ export class ClaudeManager {
    *
    * @param sessionId - 세션 ID
    */
-  newSession(sessionId: string): void {
+  newSession(sessionId: number): void {
     this.stop(sessionId);
     this.emitEvent(sessionId, { type: 'state', state: 'idle' });
   }
@@ -655,7 +655,7 @@ export class ClaudeManager {
    * ```
    */
   respondPermission(
-    sessionId: string,
+    sessionId: number,
     toolUseId: string,
     decision: 'allow' | 'deny' | 'allowAll'
   ): void {
@@ -690,7 +690,7 @@ export class ClaudeManager {
    * manager.respondQuestion('conv-123', 'tool-456', 'Yes, proceed');
    * ```
    */
-  respondQuestion(sessionId: string, toolUseId: string, answer: string): void {
+  respondQuestion(sessionId: number, toolUseId: string, answer: string): void {
     // toolUseId로 찾기
     let pending = this.pendingQuestions.get(toolUseId);
     let foundId = toolUseId;
@@ -726,7 +726,7 @@ export class ClaudeManager {
    * @param sessionId - 세션 ID
    * @returns 대기 중인 이벤트 또는 null
    */
-  getPendingEvent(sessionId: string): PendingEvent | null {
+  getPendingEvent(sessionId: number): PendingEvent | null {
     return this.pendingEvents.get(sessionId) || null;
   }
 
@@ -735,8 +735,8 @@ export class ClaudeManager {
    *
    * @returns 세션별 대기 이벤트 목록
    */
-  getAllPendingEvents(): Array<{ sessionId: string; event: PendingEvent }> {
-    const result: Array<{ sessionId: string; event: PendingEvent }> = [];
+  getAllPendingEvents(): Array<{ sessionId: number; event: PendingEvent }> {
+    const result: Array<{ sessionId: number; event: PendingEvent }> = [];
     for (const [sessionId, event] of this.pendingEvents) {
       result.push({ sessionId, event });
     }
@@ -749,7 +749,7 @@ export class ClaudeManager {
    * @param sessionId - 세션 ID
    * @returns 활성 세션 존재 여부
    */
-  hasActiveSession(sessionId: string): boolean {
+  hasActiveSession(sessionId: number): boolean {
     return this.sessions.has(sessionId);
   }
 
@@ -759,7 +759,7 @@ export class ClaudeManager {
    * @param sessionId - 세션 ID
    * @returns 시작 시간 또는 null
    */
-  getSessionStartTime(sessionId: string): number | null {
+  getSessionStartTime(sessionId: number): number | null {
     return this.sessions.get(sessionId)?.startTime ?? null;
   }
 
@@ -768,7 +768,7 @@ export class ClaudeManager {
    *
    * @returns 세션 ID 배열
    */
-  getActiveSessionIds(): string[] {
+  getActiveSessionIds(): number[] {
     return Array.from(this.sessions.keys());
   }
 
@@ -800,7 +800,7 @@ export class ClaudeManager {
    * @param message - 사용자 메시지
    */
   private async runQuery(
-    sessionId: string,
+    sessionId: number,
     sessionInfo: { workingDir: string; claudeSessionId?: string },
     message: string
   ): Promise<void> {
@@ -880,7 +880,7 @@ export class ClaudeManager {
    * @param msg - SDK 메시지
    */
   private handleMessage(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -920,7 +920,7 @@ export class ClaudeManager {
    * system 메시지 처리 (init)
    */
   private handleSystemMessage(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -940,7 +940,7 @@ export class ClaudeManager {
    * assistant 메시지 처리
    */
   private handleAssistantMessage(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -984,7 +984,7 @@ export class ClaudeManager {
    * user 메시지 처리 (도구 실행 결과)
    */
   private handleUserMessage(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -1025,7 +1025,7 @@ export class ClaudeManager {
    * stream_event 처리
    */
   private handleStreamEvent(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -1105,7 +1105,7 @@ export class ClaudeManager {
    * tool_progress 처리
    */
   private handleToolProgress(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -1125,7 +1125,7 @@ export class ClaudeManager {
    * result 처리
    */
   private handleResult(
-    sessionId: string,
+    sessionId: number,
     session: ClaudeSession,
     msg: ClaudeMessage
   ): void {
@@ -1167,7 +1167,7 @@ export class ClaudeManager {
    * 해당되지 않으면 사용자에게 권한을 요청합니다.
    */
   private async handlePermission(
-    sessionId: string,
+    sessionId: number,
     toolName: string,
     input: Record<string, unknown>
   ): Promise<PermissionCallbackResult> {
@@ -1224,7 +1224,7 @@ export class ClaudeManager {
   /**
    * 이벤트 발생
    */
-  private emitEvent(sessionId: string, event: ClaudeManagerEvent): void {
+  private emitEvent(sessionId: number, event: ClaudeManagerEvent): void {
     this.onEvent(sessionId, event);
   }
 

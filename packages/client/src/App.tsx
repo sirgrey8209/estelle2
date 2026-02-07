@@ -7,6 +7,7 @@ import { setWebSocket, requestWorkspaceList } from './services/relaySender';
 import { blobService } from './services/blobService';
 import type { RelayMessage } from './services/relayService';
 import { HomePage } from './pages/HomePage';
+import { useViewportHeight } from './hooks/useViewportHeight';
 
 /**
  * 웹 문서 타이틀 설정
@@ -139,6 +140,7 @@ function useRelayConnection() {
 
 export function App() {
   useDocumentTitle();
+  useViewportHeight();
   useRelayConnection();
 
   return (

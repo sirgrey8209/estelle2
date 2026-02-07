@@ -22,6 +22,20 @@ export interface CliArgs {
   port?: number;
 }
 
+/**
+ * CLI 실행 결과
+ */
+export interface CliResult {
+  /** 서버 시작 여부 */
+  started: boolean;
+  /** 사용된 포트 */
+  port: number;
+  /** 서버 인스턴스 */
+  server: {
+    stop: () => Promise<void>;
+  };
+}
+
 // ============================================================================
 // 유효성 검사
 // ============================================================================
@@ -155,19 +169,22 @@ export function parseCliArgs(args: string[]): CliArgs {
 /**
  * CLI를 실행하여 서버를 시작합니다.
  *
- * @returns CLI 실행 결과 (main() 사용 시 void)
+ * @returns CLI 실행 결과
  * @throws 포트가 유효하지 않으면 에러
  *
  * @example
  * ```typescript
- * await runCli();
+ * const result = await runCli();
+ * console.log(`Server started on port ${result.port}`);
  * ```
  */
-export async function runCli(): Promise<void> {
+export async function runCli(): Promise<CliResult> {
   // 환경변수에서 포트 파싱
   const port = parsePortFromEnv();
 
   // main() 함수 사용 (STATIC_DIR 지원)
   const { main } = await import('./server.js');
-  await main({ port });
+  const result = await main({ port });
+
+  return result;
 }

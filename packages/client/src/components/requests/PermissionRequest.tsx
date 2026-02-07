@@ -1,6 +1,6 @@
 import { Button } from '../ui/button';
 import { parseToolInput } from '../../utils/toolInputParser';
-import type { PermissionRequest as PermissionRequestType } from '../../stores/claudeStore';
+import type { PermissionRequest as PermissionRequestType } from '@estelle/core';
 
 interface PermissionRequestProps {
   request: PermissionRequestType;

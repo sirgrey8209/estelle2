@@ -1,6 +1,5 @@
-import { Loader2 } from 'lucide-react';
-import { type FileInfo, formatFileSize, useDownloadStore } from '../../stores';
-import { cn } from '../../lib/utils';
+import { Loader2, FileDown, Check, AlertCircle } from 'lucide-react';
+import { type FileInfo, useDownloadStore } from '../../stores';
 
 interface FileAttachmentCardProps {
   file: FileInfo;
@@ -8,8 +7,14 @@ interface FileAttachmentCardProps {
   onOpen?: () => void;
 }
 
+const FILE_ICONS: Record<string, string> = {
+  image: '🖼️',
+  markdown: '📝',
+  text: '📄',
+};
+
 /**
- * 파일 첨부 카드
+ * 파일 첨부 카드 (한 줄 컴팩트)
  */
 export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentCardProps) {
   const downloadStatus = useDownloadStore((s) => s.getStatus(file.filename));
@@ -17,31 +22,8 @@ export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentC
   const isDownloaded = downloadStatus === 'downloaded';
   const isFailed = downloadStatus === 'failed';
 
-  const getFileIcon = (): string => {
-    switch (file.fileType) {
-      case 'image':
-        return '🖼️';
-      case 'markdown':
-        return '📝';
-      case 'text':
-        return '📄';
-      default:
-        return '📁';
-    }
-  };
-
-  const getStatusIcon = () => {
-    if (isDownloading) {
-      return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-    }
-    if (isDownloaded) {
-      return <span className="text-green-500 text-sm">✓</span>;
-    }
-    if (isFailed) {
-      return <span className="text-destructive text-sm">!</span>;
-    }
-    return <span className="text-primary text-sm">⬇</span>;
-  };
+  const icon = FILE_ICONS[file.fileType] ?? '📁';
+  const label = file.description || file.filename;
 
   const handlePress = () => {
     if (isDownloaded) {
@@ -54,50 +36,18 @@ export function FileAttachmentCard({ file, onDownload, onOpen }: FileAttachmentC
   return (
     <button
       onClick={handlePress}
-      className="w-full text-left"
+      className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-blue-500 bg-card flex items-center gap-1.5 max-w-[400px] text-left hover:bg-accent/30 transition-colors"
     >
-      <div
-        className="my-0.5 max-w-[90%] border-l-2 border-primary px-3 py-2 rounded bg-card"
-      >
-        <div className="flex items-center">
-          <span className="text-xl mr-3">{getFileIcon()}</span>
-
-          <div className="flex-1 min-w-0">
-            <p className="truncate">
-              {file.filename}
-            </p>
-            <div className="flex items-center mt-0.5">
-              <span className="text-xs text-muted-foreground">
-                {formatFileSize(file.size)}
-              </span>
-              {file.description && (
-                <>
-                  <span className="text-xs text-muted-foreground/40 mx-1">|</span>
-                  <span className="text-xs text-muted-foreground truncate flex-1">
-                    {file.description}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="ml-3 w-6 h-6 flex items-center justify-center">
-            {getStatusIcon()}
-          </div>
-        </div>
-
-        {isFailed && (
-          <p className="text-xs text-destructive mt-2">
-            다운로드 실패. 탭하여 재시도
-          </p>
+      <span className="text-sm shrink-0">{icon}</span>
+      <span className="text-sm truncate">{label}</span>
+      <span className="ml-auto shrink-0">
+        {isDownloading && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+        {isDownloaded && <Check className="h-3.5 w-3.5 text-green-500" />}
+        {isFailed && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
+        {!isDownloading && !isDownloaded && !isFailed && (
+          <FileDown className="h-3.5 w-3.5 text-muted-foreground" />
         )}
-
-        {!isDownloaded && !isDownloading && !isFailed && (
-          <p className="text-xs text-muted-foreground mt-1">
-            탭하여 다운로드
-          </p>
-        )}
-      </div>
+      </span>
     </button>
   );
 }

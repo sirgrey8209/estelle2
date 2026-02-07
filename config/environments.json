@@ -15,15 +15,34 @@
       "title": "Estelle (dev)"
     }
   },
+  "stage": {
+    "name": "Staging",
+    "relay": {
+      "port": 8080,
+      "url": "wss://estelle-relay-v2-stage.fly.dev",
+      "flyApp": "estelle-relay-v2-stage"
+    },
+    "pylon": {
+      "deviceId": "1",
+      "relayUrl": "wss://estelle-relay-v2-stage.fly.dev",
+      "pm2Name": "estelle-pylon-stage"
+    },
+    "client": {
+      "relayUrl": "wss://estelle-relay-v2-stage.fly.dev",
+      "title": "Estelle"
+    }
+  },
   "release": {
     "name": "Production",
     "relay": {
       "port": 8080,
-      "url": "wss://estelle-relay-v2.fly.dev"
+      "url": "wss://estelle-relay-v2.fly.dev",
+      "flyApp": "estelle-relay-v2"
     },
     "pylon": {
       "deviceId": "1",
-      "relayUrl": "wss://estelle-relay-v2.fly.dev"
+      "relayUrl": "wss://estelle-relay-v2.fly.dev",
+      "pm2Name": "estelle-pylon"
     },
     "client": {
       "webPort": 8080,

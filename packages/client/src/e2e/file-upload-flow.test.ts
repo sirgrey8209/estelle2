@@ -15,10 +15,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageType } from '@estelle/core';
 
 // Mock stores
-const mockClaudeStore = {
-  status: 'idle',
-  hasPendingRequests: false,
+const mockConversationStore = {
+  states: new Map<string, unknown>(),
+  currentConversationId: 'conv-1' as string | null,
   addMessage: vi.fn(),
+  getState: vi.fn(() => ({ messages: [], status: 'idle' })),
+  getCurrentState: vi.fn(() => ({ messages: [], status: 'idle' })),
+  hasPendingRequests: vi.fn(() => false),
 };
 
 const mockWorkspaceStore = {
@@ -51,11 +54,11 @@ const mockBlobService = {
 };
 
 // Mock modules
-vi.mock('../stores/claudeStore', () => ({
-  useClaudeStore: Object.assign(
-    (selector?: (state: typeof mockClaudeStore) => any) =>
-      selector ? selector(mockClaudeStore) : mockClaudeStore,
-    { getState: () => mockClaudeStore }
+vi.mock('../stores/conversationStore', () => ({
+  useConversationStore: Object.assign(
+    (selector?: (state: typeof mockConversationStore) => any) =>
+      selector ? selector(mockConversationStore) : mockConversationStore,
+    { getState: () => mockConversationStore }
   ),
 }));
 

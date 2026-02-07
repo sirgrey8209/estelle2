@@ -7,6 +7,8 @@
  * 등의 기능을 포함합니다.
  */
 
+import type { EntityId } from '../utils/entity-id.js';
+
 // ============================================================================
 // Attachment Types
 // ============================================================================
@@ -89,25 +91,28 @@ export type BlobContextType = 'image_upload' | 'file_transfer';
  *
  * @description
  * Blob 전송이 어떤 맥락에서 이루어지는지에 대한 정보를 담습니다.
- * 대상 대화, 전송 목적 등의 정보를 포함합니다.
+ * 대상 엔티티, 전송 목적 등의 정보를 포함합니다.
  *
  * @property type - 전송 유형 ('image_upload' 또는 'file_transfer')
- * @property conversationId - 전송 대상 대화의 고유 식별자
+ * @property entityId - 전송 대상 엔티티의 고유 식별자 (비트 패킹된 숫자)
+ * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
  * @property message - 파일과 함께 전송할 메시지 (선택적)
  *
  * @example
  * ```typescript
+ * import { encodeEntityId } from '../utils/entity-id.js';
+ *
  * // 이미지 업로드 컨텍스트
  * const uploadContext: BlobContext = {
  *   type: 'image_upload',
- *   conversationId: 'conv-123',
+ *   entityId: encodeEntityId(1, 2, 3),
  *   message: '이 이미지를 분석해주세요.'
  * };
  *
  * // 파일 전송 컨텍스트
  * const transferContext: BlobContext = {
  *   type: 'file_transfer',
- *   conversationId: 'conv-123'
+ *   entityId: encodeEntityId(1, 2, 3)
  * };
  * ```
  */
@@ -115,8 +120,14 @@ export interface BlobContext {
   /** 전송 유형 */
   type: BlobContextType;
 
-  /** 전송 대상 대화의 고유 식별자 */
-  conversationId: string;
+  /** 전송 대상 엔티티의 고유 식별자 (비트 패킹된 숫자) */
+  entityId: EntityId;
+
+  /**
+   * @deprecated entityId를 사용하세요. 레거시 호환용
+   * 전송 대상 대화의 고유 식별자 (문자열)
+   */
+  conversationId?: string;
 
   /** 파일과 함께 전송할 메시지 (선택적) */
   message?: string;
@@ -419,7 +430,9 @@ export function isBlobContextType(value: unknown): value is BlobContextType {
 export function isBlobContext(value: unknown): value is BlobContext {
   if (!isObject(value)) return false;
   if (!isBlobContextType(value.type)) return false;
-  if (typeof value.conversationId !== 'string') return false;
+  if (typeof value.entityId !== 'number') return false;
+  // conversationId는 선택적 (레거시 호환)
+  if (value.conversationId !== undefined && typeof value.conversationId !== 'string') return false;
   if (value.message !== undefined && typeof value.message !== 'string') return false;
   return true;
 }
