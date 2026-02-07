@@ -483,8 +483,8 @@ function Deploy-Relay {
 
     Push-Location $TargetDir
     try {
-        # fly.exe는 진행 메시지를 stderr로 출력하므로 2>&1로 합침
-        $flyOutput = & $script:FlyExe deploy --config $flyToml --dockerfile $dockerfile 2>&1
+        # fly.exe는 config 파일의 디렉토리를 빌드 컨텍스트로 사용하므로 상대경로 필요
+        $flyOutput = & $script:FlyExe deploy --config "relay/fly.toml" --dockerfile "relay/Dockerfile" 2>&1
         $flyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
         if ($LASTEXITCODE -ne 0) {
             throw "Fly.io deploy failed (exit code: $LASTEXITCODE)"
