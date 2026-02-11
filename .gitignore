@@ -28,6 +28,13 @@ config/build-counter.json
 .dev-server.pid
 .dev-logs/
 nul
+test-thumbnails/
+test-permission-check.txt
+
+# Pylon local data
+packages/pylon/data/
+packages/pylon/uploads/
+packages/pylon/test-thumbnails/
 
 # OS
 .DS_Store
