@@ -7,6 +7,8 @@ release/
 release-stage/
 release-data/
 stage-data/
+data/
+dev-data/
 release.staging/
 release.rollback/
 release.failed/
@@ -24,6 +26,7 @@ config/build-counter.json
 
 # Temp files
 .dev-server.pid
+.dev-logs/
 nul
 
 # OS
