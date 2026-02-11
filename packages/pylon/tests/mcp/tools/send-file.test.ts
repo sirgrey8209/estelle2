@@ -10,10 +10,12 @@
  * - MCP 표준 응답 포맷 반환
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { executeSendFile } from '../../../src/mcp/tools/send-file.js';
+import { PylonClient } from '../../../src/mcp/pylon-client.js';
 
 // ============================================================================
 // 테스트 헬퍼
@@ -397,4 +399,181 @@ describe('executeSendFile', () => {
       expect(typeof result.content[0].text).toBe('string');
     });
   });
+
+  // ==========================================================================
+  // PylonClient 통합 테스트 (마이그레이션 대상)
+  // ==========================================================================
+  describe('PylonClient 통합', () => {
+    // Mock Pylon Server
+    let mockServer: net.Server | null = null;
+    const MOCK_PORT = 9880;
+
+    /**
+     * MockPylonServer 시작
+     * - 실제 PylonMcpServer처럼 요청을 처리
+     */
+    const startMockServer = (): Promise<void> => {
+      return new Promise((resolve) => {
+        mockServer = net.createServer((socket) => {
+          socket.on('data', (data) => {
+            try {
+              const request = JSON.parse(data.toString());
+              let response: Record<string, unknown>;
+
+              if (request.action === 'send_file') {
+                // 파일 존재 확인 (nonexistent 패턴 체크)
+                if (request.path?.toLowerCase().includes('nonexistent')) {
+                  response = {
+                    success: false,
+                    error: `파일을 찾을 수 없습니다: ${request.path}`,
+                  };
+                } else {
+                  // 성공 응답
+                  const filename = path.basename(request.path || 'unknown');
+                  const ext = path.extname(request.path || '').toLowerCase();
+                  const mimeTypes: Record<string, string> = {
+                    '.txt': 'text/plain',
+                    '.md': 'text/markdown',
+                    '.png': 'image/png',
+                  };
+                  response = {
+                    success: true,
+                    file: {
+                      filename,
+                      mimeType: mimeTypes[ext] || 'application/octet-stream',
+                      size: 100,
+                      path: request.path,
+                      description: request.description ?? null,
+                    },
+                  };
+                }
+              } else {
+                response = { success: false, error: 'Unknown action' };
+              }
+
+              socket.write(JSON.stringify(response));
+            } catch {
+              socket.write(JSON.stringify({ success: false, error: 'Parse error' }));
+            }
+          });
+        });
+
+        mockServer.listen(MOCK_PORT, '127.0.0.1', () => {
+          resolve();
+        });
+      });
+    };
+
+    /**
+     * MockPylonServer 종료
+     */
+    const stopMockServer = (): Promise<void> => {
+      return new Promise((resolve) => {
+        if (mockServer) {
+          mockServer.close(() => {
+            mockServer = null;
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    };
+
+    beforeEach(() => {
+      // PylonClient 싱글턴 리셋
+      PylonClient.resetInstance();
+    });
+
+    afterEach(async () => {
+      await stopMockServer();
+      PylonClient.resetInstance();
+    });
+
+    it('should_return_isError_true_when_pylon_not_connected', async () => {
+      // Arrange - 서버를 시작하지 않음 (연결 불가 상태)
+      const entityId = 132097;
+      const filePath = path.join(TEST_DIR, 'notes.txt');
+
+      // Act
+      const result = await executeSendFileWithPylon(entityId, { path: filePath });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const text = extractText(result);
+      expect(text).toMatch(/pylon.*연결|connected/i);
+    });
+
+    it('should_return_success_when_pylon_connected_and_file_exists', async () => {
+      // Arrange - MockServer 시작
+      await startMockServer();
+      const entityId = 132097;
+      const filePath = path.join(TEST_DIR, 'notes.txt');
+
+      // Act
+      const result = await executeSendFileWithPylon(entityId, { path: filePath });
+
+      // Assert
+      expect(result.isError).toBeUndefined();
+      const json = extractJson(result);
+      expect(json.success).toBe(true);
+    });
+
+    it('should_include_description_in_pylon_request', async () => {
+      // Arrange - MockServer 시작
+      await startMockServer();
+      const entityId = 132097;
+      const filePath = path.join(TEST_DIR, 'notes.txt');
+      const description = '테스트 설명';
+
+      // Act
+      const result = await executeSendFileWithPylon(entityId, {
+        path: filePath,
+        description,
+      });
+
+      // Assert
+      expect(result.isError).toBeUndefined();
+      const json = extractJson(result);
+      const file = json.file as Record<string, unknown>;
+      expect(file.description).toBe(description);
+    });
+
+    it('should_return_error_when_entityId_is_invalid', async () => {
+      // Arrange - entityId가 0인 경우 클라이언트 단에서 실패
+      const invalidEntityId = 0;
+      const filePath = path.join(TEST_DIR, 'notes.txt');
+
+      // Act
+      const result = await executeSendFileWithPylon(invalidEntityId, { path: filePath });
+
+      // Assert
+      expect(result.isError).toBe(true);
+    });
+
+    it('should_return_error_from_pylon_when_file_not_found', async () => {
+      // Arrange - MockServer 시작
+      await startMockServer();
+      const entityId = 132097;
+      const nonExistentPath = path.join(TEST_DIR, 'nonexistent-file.txt');
+
+      // Act
+      const result = await executeSendFileWithPylon(entityId, { path: nonExistentPath });
+
+      // Assert
+      expect(result.isError).toBe(true);
+      const text = extractText(result);
+      expect(text).toMatch(/찾을 수 없|not found/i);
+    });
+  });
 });
+
+// ============================================================================
+// 아직 구현되지 않은 함수 (테스트 실패 예상)
+// ============================================================================
+
+/**
+ * PylonClient를 통한 파일 전송 (마이그레이션 대상)
+ * 이 함수는 아직 구현되지 않음 - 테스트 실패 예상
+ */
+import { executeSendFileWithPylon } from '../../../src/mcp/tools/send-file.js';

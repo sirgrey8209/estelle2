@@ -311,11 +311,11 @@ describe('MessageStore', () => {
         expect((messages[4] as UserTextMessage).content).toBe('Message 10');
       });
 
-      it('should support offset option', () => {
-        const messages = store.getMessages(1, { limit: 3, offset: 2 });
+      it('should support loadBefore option', () => {
+        // loadBefore=8 → 인덱스 0~7 (Message 1~8) 중 마지막 3개
+        const messages = store.getMessages(1, { limit: 3, loadBefore: 8 });
         expect(messages).toHaveLength(3);
-        // offset=2 이므로 끝에서 3~5번째, limit=3이므로 3개
-        // 즉, Message 6, 7, 8 (끝에서 5,4,3번째)
+        // 인덱스 5, 6, 7 → Message 6, 7, 8
         expect((messages[0] as UserTextMessage).content).toBe('Message 6');
         expect((messages[2] as UserTextMessage).content).toBe('Message 8');
       });

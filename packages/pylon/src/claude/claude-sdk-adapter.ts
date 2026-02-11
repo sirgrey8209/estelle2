@@ -106,6 +106,7 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
       resume: options.resume,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
+      env: options.env,
     };
 
     // SDK query 호출

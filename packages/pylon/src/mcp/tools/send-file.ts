@@ -199,3 +199,72 @@ export async function executeSendFile(
     file: buildFileInfo(absolutePath, args.description),
   });
 }
+
+// ============================================================================
+// PylonClient 통합 함수
+// ============================================================================
+
+import { PylonClient } from '../pylon-client.js';
+
+/** PylonClient 통합 인자 타입 */
+interface SendFileWithPylonArgs {
+  path: string;
+  description?: string;
+}
+
+/**
+ * PylonClient를 통한 파일 전송
+ *
+ * MCP 도구가 Pylon을 통해 파일을 전송할 때 사용합니다.
+ *
+ * @param entityId - 대화 엔티티 ID
+ * @param args - 도구 인자 (path, description)
+ * @returns MCP 표준 응답
+ */
+export async function executeSendFileWithPylon(
+  entityId: number,
+  args: SendFileWithPylonArgs,
+): Promise<McpResponse> {
+  // 1. entityId 검증
+  if (!entityId || entityId <= 0) {
+    return createErrorResponse('유효하지 않은 entityId입니다.');
+  }
+
+  // 2. path 인자 검증
+  if (!args.path) {
+    return createErrorResponse('path 인자가 필요해요.');
+  }
+
+  // 3. PylonClient를 통한 파일 전송
+  const client = PylonClient.getInstance();
+
+  try {
+    const result = await client.sendFile(entityId, args.path, args.description);
+
+    if (!result.success) {
+      // 에러 메시지에 따라 적절한 응답 반환
+      return createErrorResponse(result.error || '파일 전송에 실패했습니다.');
+    }
+
+    // 성공 응답
+    return createSuccessResponse({
+      success: true,
+      file: result.file,
+    });
+  } catch (error) {
+    // 연결 실패 등의 예외 처리
+    const errorMessage =
+      error instanceof Error ? error.message : 'Pylon 연결에 실패했습니다.';
+
+    // 연결 관련 에러인지 확인
+    if (
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('Connection')
+    ) {
+      return createErrorResponse('Pylon에 연결되지 않았습니다.');
+    }
+
+    return createErrorResponse(errorMessage);
+  }
+}

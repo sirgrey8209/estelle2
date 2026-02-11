@@ -6,6 +6,9 @@
  * - workspaceId: number (1~127)
  * - entityId: EntityId (pylonId + workspaceId + localConvId 비트 팩)
  * - 삭제된 ID는 할당 시 검색으로 재사용
+ *
+ * NOTE: createWorkspace는 빈 conversations 배열로 워크스페이스를 생성합니다.
+ *       대화가 필요한 테스트에서는 createConversation을 명시적으로 호출합니다.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -79,14 +82,13 @@ describe('WorkspaceStore', () => {
   // ============================================================================
   describe('Workspace CRUD', () => {
     describe('createWorkspace', () => {
-      it('should create workspace with first conversation', () => {
+      it('should create workspace with empty conversations', () => {
         const result = store.createWorkspace('New Workspace', 'C:\\workspace');
 
         expect(result.workspace.name).toBe('New Workspace');
         expect(result.workspace.workingDir).toBe('C:\\workspace');
-        expect(result.workspace.conversations).toHaveLength(1);
-        expect(result.conversation.name).toBe('새 대화');
-        expect(result.conversation.status).toBe(ConversationStatus.IDLE);
+        expect(result.workspace.conversations).toHaveLength(0);
+        expect(result.conversation).toBeUndefined();
       });
 
       it('should assign numeric workspaceId starting from 1', () => {
@@ -96,12 +98,10 @@ describe('WorkspaceStore', () => {
         expect(typeof result.workspace.workspaceId).toBe('number');
       });
 
-      it('should assign entityId with correct encoding', () => {
-        const result = store.createWorkspace('WS1', 'C:\\ws1');
-        const expected = encodeEntityId(PYLON_ID, 1, 1);
+      it('should set activeConversationId to null on create', () => {
+        store.createWorkspace('WS1', 'C:\\ws1');
 
-        expect(result.conversation.entityId).toBe(expected);
-        expect(typeof result.conversation.entityId).toBe('number');
+        expect(store.getActiveState().activeConversationId).toBeNull();
       });
 
       it('should set new workspace as active', () => {
@@ -109,9 +109,6 @@ describe('WorkspaceStore', () => {
 
         expect(store.getActiveState().activeWorkspaceId).toBe(
           result.workspace.workspaceId
-        );
-        expect(store.getActiveState().activeConversationId).toBe(
-          result.conversation.entityId
         );
       });
 
@@ -121,23 +118,6 @@ describe('WorkspaceStore', () => {
 
         expect(result1.workspace.workspaceId).toBe(1);
         expect(result2.workspace.workspaceId).toBe(2);
-      });
-
-      it('should generate unique entityIds across workspaces', () => {
-        const result1 = store.createWorkspace('WS1', 'C:\\ws1');
-        const result2 = store.createWorkspace('WS2', 'C:\\ws2');
-
-        // 다른 워크스페이스의 첫 대화는 서로 다른 entityId를 가짐
-        expect(result1.conversation.entityId).not.toBe(result2.conversation.entityId);
-
-        // 각각 올바른 워크스페이스에 속함
-        const decoded1 = decodeEntityId(result1.conversation.entityId);
-        const decoded2 = decodeEntityId(result2.conversation.entityId);
-        expect(decoded1.workspaceId).toBe(1);
-        expect(decoded2.workspaceId).toBe(2);
-        // 둘 다 로컬 ID는 1
-        expect(decoded1.conversationId).toBe(1);
-        expect(decoded2.conversationId).toBe(1);
       });
 
       it('should use default working directory if not provided', () => {
@@ -401,7 +381,8 @@ describe('WorkspaceStore', () => {
 
     describe('reorderConversations', () => {
       it('should reorder conversations within workspace', () => {
-        const { workspace, conversation: conv1 } = store.createWorkspace('WS', 'C:\\ws');
+        const { workspace } = store.createWorkspace('WS', 'C:\\ws');
+        const conv1 = store.createConversation(workspace.workspaceId, 'Conv1')!;
         const conv2 = store.createConversation(workspace.workspaceId, 'Conv2')!;
 
         const result = store.reorderConversations(
@@ -443,7 +424,7 @@ describe('WorkspaceStore', () => {
         expect(conv?.name).toBe('새 대화');
         expect(conv?.status).toBe(ConversationStatus.IDLE);
         expect(conv?.unread).toBe(false);
-        expect(conv?.permissionMode).toBe(PermissionMode.DEFAULT);
+        expect(conv?.permissionMode).toBe(PermissionMode.BYPASS);
       });
 
       it('should create conversation with custom name', () => {
@@ -453,12 +434,11 @@ describe('WorkspaceStore', () => {
       });
 
       it('should assign sequential local IDs (via entityId decoding)', () => {
-        // 첫 대화는 워크스페이스 생성 시 자동 생성 (localId=1)
+        const conv1 = store.createConversation(workspaceId, 'Conv1');
         const conv2 = store.createConversation(workspaceId, 'Conv2');
-        const conv3 = store.createConversation(workspaceId, 'Conv3');
 
+        expect(decodeEntityId(conv1!.entityId).conversationId).toBe(1);
         expect(decodeEntityId(conv2!.entityId).conversationId).toBe(2);
-        expect(decodeEntityId(conv3!.entityId).conversationId).toBe(3);
       });
 
       it('should set new conversation as active', () => {
@@ -541,11 +521,10 @@ describe('WorkspaceStore', () => {
       });
 
       it('should switch active conversation when deleting active', () => {
-        const workspace = store.getWorkspace(workspaceId);
-        const firstConv = workspace!.conversations[0];
-        const secondConv = store.createConversation(workspaceId, 'Second');
+        const firstConv = store.createConversation(workspaceId, 'First')!;
+        const secondConv = store.createConversation(workspaceId, 'Second')!;
 
-        store.deleteConversation(secondConv!.entityId);
+        store.deleteConversation(secondConv.entityId);
 
         expect(store.getActiveState().activeConversationId).toBe(firstConv.entityId);
       });
@@ -560,8 +539,7 @@ describe('WorkspaceStore', () => {
 
     describe('setActiveConversation', () => {
       it('should set active conversation', () => {
-        const workspace = store.getWorkspace(workspaceId);
-        const firstConv = workspace!.conversations[0];
+        const firstConv = store.createConversation(workspaceId, 'First')!;
         store.createConversation(workspaceId, 'Second');
 
         const result = store.setActiveConversation(firstConv.entityId);
@@ -579,7 +557,8 @@ describe('WorkspaceStore', () => {
     let entityId: EntityId;
 
     beforeEach(() => {
-      const { conversation } = store.createWorkspace('Test', 'C:\\test');
+      const { workspace } = store.createWorkspace('Test', 'C:\\test');
+      const conversation = store.createConversation(workspace.workspaceId)!;
       entityId = conversation.entityId;
     });
 
@@ -641,15 +620,16 @@ describe('WorkspaceStore', () => {
     let entityId: EntityId;
 
     beforeEach(() => {
-      const { conversation } = store.createWorkspace('Test', 'C:\\test');
+      const { workspace } = store.createWorkspace('Test', 'C:\\test');
+      const conversation = store.createConversation(workspace.workspaceId)!;
       entityId = conversation.entityId;
     });
 
     describe('getConversationPermissionMode', () => {
-      it('should return default permission mode', () => {
+      it('should return bypass permission mode by default', () => {
         const mode = store.getConversationPermissionMode(entityId);
 
-        expect(mode).toBe(PermissionMode.DEFAULT);
+        expect(mode).toBe(PermissionMode.BYPASS);
       });
 
       it('should return default for non-existent conversation', () => {
@@ -734,8 +714,9 @@ describe('WorkspaceStore', () => {
     });
 
     describe('getActiveState', () => {
-      it('should return active IDs as numbers', () => {
-        const { workspace, conversation } = store.createWorkspace('Test', 'C:\\test');
+      it('should return active IDs as numbers when conversation exists', () => {
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const conversation = store.createConversation(workspace.workspaceId)!;
 
         const state = store.getActiveState();
 
@@ -753,7 +734,8 @@ describe('WorkspaceStore', () => {
   describe('상태 초기화', () => {
     describe('resetActiveConversations', () => {
       it('should reset working status to idle and return entityIds', () => {
-        const { conversation } = store.createWorkspace('Test', 'C:\\test');
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const conversation = store.createConversation(workspace.workspaceId)!;
         store.updateConversationStatus(conversation.entityId, ConversationStatus.WORKING);
 
         const resetIds = store.resetActiveConversations();
@@ -764,7 +746,8 @@ describe('WorkspaceStore', () => {
       });
 
       it('should not reset idle status', () => {
-        const { conversation } = store.createWorkspace('Test', 'C:\\test');
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const conversation = store.createConversation(workspace.workspaceId)!;
 
         const resetIds = store.resetActiveConversations();
 
@@ -772,7 +755,8 @@ describe('WorkspaceStore', () => {
       });
 
       it('should reset waiting status to idle', () => {
-        const { conversation } = store.createWorkspace('Test', 'C:\\test');
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const conversation = store.createConversation(workspace.workspaceId)!;
         store.updateConversationStatus(conversation.entityId, ConversationStatus.WAITING);
 
         const resetIds = store.resetActiveConversations();
@@ -790,8 +774,10 @@ describe('WorkspaceStore', () => {
   describe('데이터 직렬화', () => {
     describe('toJSON', () => {
       it('should export all data with numeric IDs', () => {
-        store.createWorkspace('WS1', 'C:\\ws1');
-        store.createWorkspace('WS2', 'C:\\ws2');
+        const { workspace: ws1 } = store.createWorkspace('WS1', 'C:\\ws1');
+        store.createConversation(ws1.workspaceId);
+        const { workspace: ws2 } = store.createWorkspace('WS2', 'C:\\ws2');
+        store.createConversation(ws2.workspaceId);
 
         const data = store.toJSON();
 
@@ -805,7 +791,8 @@ describe('WorkspaceStore', () => {
 
     describe('fromJSON', () => {
       it('should restore from exported data', () => {
-        store.createWorkspace('Test', 'C:\\test');
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        store.createConversation(workspace.workspaceId);
         const exported = store.toJSON();
 
         const restored = WorkspaceStore.fromJSON(PYLON_ID, exported);
@@ -815,7 +802,8 @@ describe('WorkspaceStore', () => {
       });
 
       it('should preserve entityIds after restore', () => {
-        const { workspace, conversation } = store.createWorkspace('Test', 'C:\\test');
+        const { workspace } = store.createWorkspace('Test', 'C:\\test');
+        const conversation = store.createConversation(workspace.workspaceId)!;
         const exported = store.toJSON();
 
         const restored = WorkspaceStore.fromJSON(PYLON_ID, exported);
@@ -866,6 +854,7 @@ describe('WorkspaceStore', () => {
     describe('대화 ID 재사용', () => {
       it('should reuse deleted conversation local ID within workspace', () => {
         const { workspace } = store.createWorkspace('WS', 'C:\\ws');
+        store.createConversation(workspace.workspaceId, 'Conv1');
         const conv2 = store.createConversation(workspace.workspaceId, 'Conv2')!;
         store.createConversation(workspace.workspaceId, 'Conv3');
 
@@ -878,7 +867,8 @@ describe('WorkspaceStore', () => {
       });
 
       it('should reuse smallest available conversation local ID', () => {
-        const { workspace, conversation: conv1 } = store.createWorkspace('WS', 'C:\\ws');
+        const { workspace } = store.createWorkspace('WS', 'C:\\ws');
+        const conv1 = store.createConversation(workspace.workspaceId, 'Conv1')!;
         store.createConversation(workspace.workspaceId, 'Conv2');
         store.createConversation(workspace.workspaceId, 'Conv3');
 
@@ -907,9 +897,9 @@ describe('WorkspaceStore', () => {
         const conv1a = store.createConversation(ws1.workspaceId, 'Conv1A')!;
         const conv2a = store.createConversation(ws2.workspaceId, 'Conv2A')!;
 
-        // 로컬 ID는 둘 다 2이지만 entityId는 다름
-        expect(decodeEntityId(conv1a.entityId).conversationId).toBe(2);
-        expect(decodeEntityId(conv2a.entityId).conversationId).toBe(2);
+        // 각 워크스페이스의 첫 대화이므로 로컬 ID는 둘 다 1
+        expect(decodeEntityId(conv1a.entityId).conversationId).toBe(1);
+        expect(decodeEntityId(conv2a.entityId).conversationId).toBe(1);
         expect(conv1a.entityId).not.toBe(conv2a.entityId);
       });
     });

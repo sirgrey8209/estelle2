@@ -9,6 +9,8 @@
  * - send_file: 사용자에게 파일 전송
  */
 
+import fs from 'fs';
+import path from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -16,9 +18,28 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { executeSendFile } from './tools/send-file.js';
-import { executeDeploy } from './tools/deploy.js';
+import {
+  executeLinkDoc,
+  executeUnlinkDoc,
+  executeListDocs,
+  getLinkDocToolDefinition,
+  getUnlinkDocToolDefinition,
+  getListDocsToolDefinition,
+} from './tools/link-document.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
+
+// DEBUG: 파일 로그
+const LOG_FILE = path.join(WORKING_DIR, '.estelle-mcp-debug.log');
+function debugLog(message: string): void {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] ${message}\n`;
+  try {
+    fs.appendFileSync(LOG_FILE, logLine);
+  } catch {
+    // 로그 실패 무시
+  }
+}
 
 const server = new Server(
   { name: 'estelle-mcp', version: '2.0.0' },
@@ -46,26 +67,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['path'],
       },
     },
-    {
-      name: 'deploy',
-      description: 'stage 또는 release 환경에 빌드 및 배포합니다. detached 프로세스로 실행되어 현재 세션에 영향을 주지 않습니다.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          target: {
-            type: 'string',
-            enum: ['stage', 'release'],
-            description: '배포 대상 환경: stage 또는 release',
-          },
-        },
-        required: ['target'],
-      },
-    },
+    getLinkDocToolDefinition(),
+    getUnlinkDocToolDefinition(),
+    getListDocsToolDefinition(),
   ],
 }));
 
 // 도구 실행
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const meta = (request.params as Record<string, unknown>)._meta as Record<string, unknown> | undefined;
+  const toolUseId = (meta?.['claudecode/toolUseId'] as string) || '';
+
+  debugLog(`[MCP] Tool call: ${request.params.name}, toolUseId: ${toolUseId}`);
+
   const { name, arguments: args } = request.params;
 
   switch (name) {
@@ -73,8 +87,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = await executeSendFile(WORKING_DIR, args as { path?: string; description?: string });
       return result as unknown as Record<string, unknown>;
     }
-    case 'deploy': {
-      const result = await executeDeploy(args as { target?: string });
+    case 'link_doc': {
+      const result = await executeLinkDoc(args as { path?: string }, { toolUseId });
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'unlink_doc': {
+      const result = await executeUnlinkDoc(args as { path?: string }, { toolUseId });
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'list_docs': {
+      const result = await executeListDocs(args as Record<string, unknown>, { toolUseId });
       return result as unknown as Record<string, unknown>;
     }
     default:

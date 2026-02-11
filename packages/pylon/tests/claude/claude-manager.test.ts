@@ -243,6 +243,273 @@ describe('ClaudeManager', () => {
       });
     });
 
+    // ============================================================================
+    // textComplete 중복 이벤트 버그 수정 테스트 (TDD)
+    // ============================================================================
+    describe('textComplete 중복 emit 방지', () => {
+      /**
+       * 버그 시나리오:
+       * Claude가 도구 사용 전후로 텍스트를 출력하면 content 배열에 여러 text 블록이 생김.
+       * 현재는 각 text 블록마다 textComplete가 emit되어 메시지가 중복 저장됨.
+       *
+       * 기대 동작:
+       * 모든 text 블록을 합쳐서 textComplete를 한 번만 emit
+       */
+
+      it('should_emit_single_textComplete_when_content_has_multiple_text_blocks', async () => {
+        // Arrange: content에 여러 text 블록이 있는 assistant 메시지
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '분석 결과입니다.' },
+                { type: 'tool_use', name: 'Read', id: 'tool-1', input: {} },
+                { type: 'text', text: '결론적으로 문제가 없습니다.' },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert: textComplete 이벤트가 한 번만 발생해야 함
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(1);
+        // 합쳐진 텍스트 확인
+        expect(textCompleteEvents[0].event.text).toBe(
+          '분석 결과입니다.\n\n결론적으로 문제가 없습니다.'
+        );
+      });
+
+      it('should_emit_single_textComplete_when_content_has_only_multiple_text_blocks', async () => {
+        // Arrange: text 블록만 여러 개 있는 경우
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '첫 번째 문단입니다.' },
+                { type: 'text', text: '두 번째 문단입니다.' },
+                { type: 'text', text: '세 번째 문단입니다.' },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(1);
+        expect(textCompleteEvents[0].event.text).toBe(
+          '첫 번째 문단입니다.\n\n두 번째 문단입니다.\n\n세 번째 문단입니다.'
+        );
+      });
+
+      it('should_emit_single_textComplete_even_with_text_before_and_after_multiple_tools', async () => {
+        // Arrange: 도구 사용 전후로 텍스트가 있고, 중간에도 도구가 있는 복잡한 케이스
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '파일을 읽겠습니다.' },
+                { type: 'tool_use', name: 'Read', id: 'tool-1', input: {} },
+                { type: 'text', text: '내용을 확인했습니다.' },
+                { type: 'tool_use', name: 'Write', id: 'tool-2', input: {} },
+                { type: 'text', text: '수정이 완료되었습니다.' },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(1);
+        expect(textCompleteEvents[0].event.text).toBe(
+          '파일을 읽겠습니다.\n\n내용을 확인했습니다.\n\n수정이 완료되었습니다.'
+        );
+      });
+
+      it('should_not_emit_textComplete_when_no_text_blocks_exist', async () => {
+        // Arrange: text 블록이 없고 tool_use만 있는 경우
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'tool_use', name: 'Read', id: 'tool-1', input: {} },
+                { type: 'tool_use', name: 'Write', id: 'tool-2', input: {} },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(0);
+      });
+
+      it('should_not_emit_textComplete_when_text_blocks_are_empty', async () => {
+        // Arrange: text 블록이 있지만 내용이 비어있는 경우
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '' },
+                { type: 'text', text: '' },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(0);
+      });
+
+      it('should_emit_textComplete_only_with_non_empty_text_blocks', async () => {
+        // Arrange: 일부 text 블록만 내용이 있는 경우
+        queryMessages = [
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '' },
+                { type: 'text', text: '유효한 텍스트' },
+                { type: 'text', text: '' },
+                { type: 'text', text: '또 다른 텍스트' },
+              ],
+            },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert
+        const textCompleteEvents = events.filter(
+          (e) => e.event.type === 'textComplete'
+        );
+
+        expect(textCompleteEvents).toHaveLength(1);
+        // 빈 문자열은 무시하고 유효한 텍스트만 합침
+        expect(textCompleteEvents[0].event.text).toBe(
+          '유효한 텍스트\n\n또 다른 텍스트'
+        );
+      });
+
+      it('should_clear_partialText_after_emitting_combined_textComplete', async () => {
+        // Arrange: stateUpdate 이벤트로 partialText 확인
+        queryMessages = [
+          {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              content_block: { type: 'text' },
+            },
+          },
+          {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'streaming text' },
+            },
+          },
+          {
+            type: 'assistant',
+            message: {
+              content: [
+                { type: 'text', text: '첫 번째' },
+                { type: 'text', text: '두 번째' },
+              ],
+            },
+          },
+          {
+            type: 'stream_event',
+            event: { type: 'content_block_stop' },
+          },
+        ];
+        mockAdapter = createMockAdapter(queryMessages);
+        manager = createManager();
+
+        // Act
+        await manager.sendMessage(1, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // Assert: textComplete 후 stateUpdate의 partialText가 비어있어야 함
+        const textCompleteIndex = events.findIndex(
+          (e) => e.event.type === 'textComplete'
+        );
+        const stateUpdateAfterTextComplete = events
+          .slice(textCompleteIndex + 1)
+          .find(
+            (e) =>
+              e.event.type === 'stateUpdate' &&
+              (e.event as ClaudeManagerEvent & { partialText: string }).partialText !== undefined
+          );
+
+        if (stateUpdateAfterTextComplete) {
+          expect(
+            (stateUpdateAfterTextComplete.event as ClaudeManagerEvent & { partialText: string }).partialText
+          ).toBe('');
+        }
+      });
+    });
+
     it('should process toolInfo event', async () => {
       queryMessages = [
         {
@@ -507,6 +774,270 @@ describe('ClaudeManager', () => {
 
       // 에러 없이 진행되어야 함
       expect(events).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
+  // PendingQuestion sessionId 테스트 (다중 대화 시나리오)
+  // ============================================================================
+  describe('PendingQuestion with sessionId', () => {
+    /**
+     * 시나리오: 다중 대화에서 동시에 AskUserQuestion이 발생했을 때
+     * - 대화 A (sessionId: 100)에서 질문 발생
+     * - 대화 B (sessionId: 200)에서 질문 발생
+     * - 대화 A의 질문에 응답하면 대화 A로만 전달되어야 함
+     */
+    describe('다중 대화 질문 응답 라우팅', () => {
+      it('should_route_answer_to_correct_session_when_multiple_sessions_have_pending_questions', async () => {
+        // Arrange
+        const resolvedSessions: number[] = [];
+        let questionCallbacks: Map<
+          number,
+          (result: { behavior: string; updatedInput?: object }) => void
+        > = new Map();
+
+        // AskUserQuestion이 발생하면 콜백을 저장하고 Promise 반환
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              // canUseTool에서 AskUserQuestion 호출 시뮬레이션
+              if (options.canUseTool) {
+                const sessionId = options.entityId as number;
+                const result = options.canUseTool('AskUserQuestion', {
+                  questions: [`Question for session ${sessionId}`],
+                });
+
+                // Promise가 resolve되면 sessionId 기록
+                result.then(() => resolvedSessions.push(sessionId));
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act: 두 세션에서 동시에 메시지 전송 (각각 AskUserQuestion 발생)
+        const session100Promise = manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+        });
+        const session200Promise = manager.sendMessage(200, 'Hello', {
+          workingDir: '/project',
+        });
+
+        // 잠시 대기하여 AskUserQuestion이 pendingQuestions에 추가되도록 함
+        await new Promise((r) => setTimeout(r, 50));
+
+        // session100의 질문에 응답
+        manager.respondQuestion(100, 'non-matching-id', 'Answer for 100');
+
+        await Promise.race([
+          Promise.all([session100Promise, session200Promise]),
+          new Promise((r) => setTimeout(r, 200)),
+        ]);
+
+        // Assert: session 100만 resolve되어야 함, session 200은 대기 중
+        expect(resolvedSessions).toContain(100);
+        expect(resolvedSessions).not.toContain(200);
+      });
+
+      it('should_fallback_to_same_session_question_when_toolUseId_not_found', async () => {
+        // Arrange
+        let resolvedAnswer: string | null = null;
+        let resolvedSessionId: number | null = null;
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              if (options.canUseTool) {
+                const sessionId = options.entityId as number;
+                const result = await options.canUseTool('AskUserQuestion', {
+                  questions: ['Test question'],
+                });
+
+                // resolve 시 sessionId와 답변 기록
+                if (result.updatedInput) {
+                  resolvedSessionId = sessionId;
+                  resolvedAnswer = (result.updatedInput as { answers?: { '0'?: string } })
+                    .answers?.['0'] ?? null;
+                }
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act
+        const promise = manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+        });
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // toolUseId가 매칭되지 않지만 sessionId 100의 질문에 fallback으로 응답
+        manager.respondQuestion(100, 'wrong-tool-use-id', 'Fallback answer');
+
+        await Promise.race([promise, new Promise((r) => setTimeout(r, 200))]);
+
+        // Assert
+        expect(resolvedSessionId).toBe(100);
+        expect(resolvedAnswer).toBe('Fallback answer');
+      });
+
+      it('should_not_resolve_other_session_question_when_toolUseId_not_found', async () => {
+        // Arrange
+        const resolvedSessions: number[] = [];
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              if (options.canUseTool) {
+                const sessionId = options.entityId as number;
+                options.canUseTool('AskUserQuestion', {
+                  questions: ['Test question'],
+                }).then(() => resolvedSessions.push(sessionId));
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act: session 200에서 질문 대기 중
+        const session200Promise = manager.sendMessage(200, 'Hello', {
+          workingDir: '/project',
+        });
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // session 100에서 응답 시도 (session 100의 질문은 없음)
+        // 기존 버그: session 200의 질문이 잘못 resolve됨
+        manager.respondQuestion(100, 'any-id', 'Wrong answer');
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        // Assert: session 200의 질문은 resolve되지 않아야 함
+        expect(resolvedSessions).not.toContain(200);
+      });
+    });
+
+    describe('stop 시 sessionId별 질문 정리', () => {
+      it('should_only_clear_questions_for_stopped_session_when_stop_called', async () => {
+        // Arrange
+        const deniedSessions: number[] = [];
+        const pendingPromises: Promise<unknown>[] = [];
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              if (options.canUseTool) {
+                const sessionId = options.entityId as number;
+                const promise = options.canUseTool('AskUserQuestion', {
+                  questions: ['Test'],
+                }).then((result) => {
+                  if (result.behavior === 'deny') {
+                    deniedSessions.push(sessionId);
+                  }
+                });
+                pendingPromises.push(promise);
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act: 두 세션에서 질문 대기 중
+        manager.sendMessage(100, 'Hello', { workingDir: '/project' });
+        manager.sendMessage(200, 'Hello', { workingDir: '/project' });
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // session 100만 stop
+        manager.stop(100);
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // Assert: session 100의 질문만 deny되어야 함
+        expect(deniedSessions).toContain(100);
+        expect(deniedSessions).not.toContain(200);
+      });
+
+      it('should_keep_other_session_questions_pending_after_stop', async () => {
+        // Arrange
+        let session200Resolved = false;
+        let session200Answer: string | null = null;
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              if (options.canUseTool) {
+                const sessionId = options.entityId as number;
+                const result = await options.canUseTool('AskUserQuestion', {
+                  questions: ['Test'],
+                });
+
+                if (sessionId === 200 && result.behavior === 'allow') {
+                  session200Resolved = true;
+                  session200Answer = (result.updatedInput as { answers?: { '0'?: string } })
+                    .answers?.['0'] ?? null;
+                }
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act
+        manager.sendMessage(100, 'Hello', { workingDir: '/project' });
+        const session200Promise = manager.sendMessage(200, 'Hello', {
+          workingDir: '/project',
+        });
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // session 100 stop (session 200은 영향 없어야 함)
+        manager.stop(100);
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        // session 200의 질문에 응답
+        manager.respondQuestion(200, 'any-id', 'Answer for 200');
+
+        await Promise.race([
+          session200Promise,
+          new Promise((r) => setTimeout(r, 200)),
+        ]);
+
+        // Assert: session 200의 질문이 정상적으로 resolve됨
+        expect(session200Resolved).toBe(true);
+        expect(session200Answer).toBe('Answer for 200');
+      });
+    });
+
+    describe('PendingQuestion 인터페이스 확장', () => {
+      it('should_store_sessionId_in_pending_question', async () => {
+        // Arrange
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              if (options.canUseTool) {
+                // AskUserQuestion 호출하여 pendingQuestions에 저장
+                options.canUseTool('AskUserQuestion', { questions: ['Test'] });
+              }
+              yield { type: 'system', subtype: 'init', session_id: 'sess' };
+            },
+          },
+        });
+
+        // Act
+        manager.sendMessage(100, 'Hello', { workingDir: '/project' });
+        await new Promise((r) => setTimeout(r, 50));
+
+        // Assert: getPendingQuestionSessionId 메서드로 sessionId 확인
+        // 이 메서드는 아직 구현되지 않음 - 테스트가 실패해야 함
+        const pendingQuestionSessionIds =
+          (manager as unknown as { getPendingQuestionSessionIds?: () => number[] })
+            .getPendingQuestionSessionIds?.() ?? [];
+
+        expect(pendingQuestionSessionIds).toContain(100);
+      });
     });
   });
 

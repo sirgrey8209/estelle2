@@ -36,8 +36,8 @@
  * ```
  */
 
-import { ConversationStatus, PermissionMode, encodeEntityId, decodeEntityId } from '@estelle/core';
-import type { ConversationStatusValue, PermissionModeValue, EntityId } from '@estelle/core';
+import { ConversationStatus, PermissionMode, encodeEntityIdWithEnv, decodeEntityIdWithEnv } from '@estelle/core';
+import type { ConversationStatusValue, PermissionModeValue, EntityId, LinkedDocument } from '@estelle/core';
 
 // ============================================================================
 // 상수
@@ -80,6 +80,9 @@ export interface Conversation {
 
   /** 대화 생성 시각 (Unix timestamp) */
   createdAt: number;
+
+  /** 연결된 문서 목록 */
+  linkedDocuments?: LinkedDocument[];
 }
 
 /**
@@ -134,8 +137,8 @@ export interface CreateWorkspaceResult {
   /** 생성된 워크스페이스 */
   workspace: Workspace;
 
-  /** 자동 생성된 첫 번째 대화 */
-  conversation: Conversation;
+  /** 자동 생성된 첫 번째 대화 (현재 사용 안 함, undefined) */
+  conversation: Conversation | undefined;
 }
 
 /**
@@ -182,6 +185,9 @@ export class WorkspaceStore {
   // Private 필드
   // ============================================================================
 
+  /** Env ID (0=release, 1=stage, 2=dev) */
+  private _envId: number;
+
   /** Pylon ID (EntityId 인코딩에 사용) */
   private _pylonId: number;
 
@@ -198,7 +204,8 @@ export class WorkspaceStore {
   // 생성자
   // ============================================================================
 
-  constructor(pylonId: number, data?: WorkspaceStoreData) {
+  constructor(pylonId: number, data?: WorkspaceStoreData, envId: number = 0) {
+    this._envId = envId;
     this._pylonId = pylonId;
     this._activeWorkspaceId = data?.activeWorkspaceId ?? null;
     this._activeConversationId = data?.activeConversationId ?? null;
@@ -209,8 +216,8 @@ export class WorkspaceStore {
   // 정적 팩토리 메서드
   // ============================================================================
 
-  static fromJSON(pylonId: number, data: WorkspaceStoreData): WorkspaceStore {
-    return new WorkspaceStore(pylonId, data);
+  static fromJSON(pylonId: number, data: WorkspaceStoreData, envId: number = 0): WorkspaceStore {
+    return new WorkspaceStore(pylonId, data, envId);
   }
 
   // ============================================================================
@@ -245,7 +252,7 @@ export class WorkspaceStore {
    */
   private allocateConversationId(workspace: Workspace): number {
     const used = new Set(
-      workspace.conversations.map((c) => decodeEntityId(c.entityId).conversationId)
+      workspace.conversations.map((c) => decodeEntityIdWithEnv(c.entityId).conversationId)
     );
     for (let i = 1; i <= MAX_CONVERSATION_ID; i++) {
       if (!used.has(i)) return i;
@@ -263,7 +270,7 @@ export class WorkspaceStore {
   private findConversation(
     entityId: EntityId
   ): { workspace: Workspace; conversation: Conversation } | null {
-    const { workspaceId } = decodeEntityId(entityId);
+    const { workspaceId } = decodeEntityIdWithEnv(entityId);
     const workspace = this._workspaces.find((w) => w.workspaceId === workspaceId);
     if (!workspace) return null;
 
@@ -300,32 +307,22 @@ export class WorkspaceStore {
   ): CreateWorkspaceResult {
     const now = Date.now();
     const wsId = this.allocateWorkspaceId();
-    const firstEntityId = encodeEntityId(this._pylonId, wsId, 1);
 
-    const firstConversation: Conversation = {
-      entityId: firstEntityId,
-      name: '새 대화',
-      claudeSessionId: null,
-      status: ConversationStatus.IDLE,
-      unread: false,
-      permissionMode: PermissionMode.DEFAULT,
-      createdAt: now,
-    };
-
+    // 빈 conversations 배열로 워크스페이스 생성
     const newWorkspace: Workspace = {
       workspaceId: wsId,
       name,
       workingDir,
-      conversations: [firstConversation],
+      conversations: [],
       createdAt: now,
       lastUsed: now,
     };
 
     this._workspaces.push(newWorkspace);
     this._activeWorkspaceId = wsId;
-    this._activeConversationId = firstEntityId;
+    this._activeConversationId = null;
 
-    return { workspace: newWorkspace, conversation: firstConversation };
+    return { workspace: newWorkspace, conversation: undefined };
   }
 
   deleteWorkspace(workspaceId: number): boolean {
@@ -456,7 +453,7 @@ export class WorkspaceStore {
     if (!workspace) return null;
 
     const localId = this.allocateConversationId(workspace);
-    const entityId = encodeEntityId(this._pylonId, workspaceId, localId);
+    const entityId = encodeEntityIdWithEnv(this._envId, this._pylonId, workspaceId, localId);
 
     const newConversation: Conversation = {
       entityId,
@@ -464,7 +461,7 @@ export class WorkspaceStore {
       claudeSessionId: null,
       status: ConversationStatus.IDLE,
       unread: false,
-      permissionMode: PermissionMode.DEFAULT,
+      permissionMode: PermissionMode.BYPASS,
       createdAt: Date.now(),
     };
 
@@ -559,6 +556,108 @@ export class WorkspaceStore {
 
     conv.permissionMode = mode;
     return true;
+  }
+
+  // ============================================================================
+  // LinkedDocument 관리
+  // ============================================================================
+
+  /**
+   * 경로 정규화: 슬래시를 백슬래시로 변환하고 공백 제거
+   */
+  private normalizePath(path: string): string {
+    return path.trim().replace(/\//g, '\\');
+  }
+
+  /**
+   * 대화에 문서 연결
+   *
+   * @param entityId 대화 EntityId
+   * @param path 문서 경로
+   * @returns 연결 성공 여부 (중복이면 false)
+   */
+  linkDocument(entityId: EntityId, path: string): boolean {
+    // 빈 경로 또는 공백만 있는 경로 처리
+    const normalizedPath = this.normalizePath(path);
+    if (normalizedPath === '') {
+      return false;
+    }
+
+    const found = this.findConversation(entityId);
+    if (!found) return false;
+
+    const { conversation } = found;
+
+    // linkedDocuments 배열 초기화
+    if (!conversation.linkedDocuments) {
+      conversation.linkedDocuments = [];
+    }
+
+    // 중복 체크 (정규화된 경로로 비교)
+    const exists = conversation.linkedDocuments.some(
+      (doc) => doc.path === normalizedPath
+    );
+    if (exists) {
+      return false;
+    }
+
+    // 문서 추가
+    conversation.linkedDocuments.push({
+      path: normalizedPath,
+      addedAt: Date.now(),
+    });
+
+    return true;
+  }
+
+  /**
+   * 대화에서 문서 연결 해제
+   *
+   * @param entityId 대화 EntityId
+   * @param path 문서 경로
+   * @returns 해제 성공 여부 (없으면 false)
+   */
+  unlinkDocument(entityId: EntityId, path: string): boolean {
+    // 빈 경로 처리
+    const normalizedPath = this.normalizePath(path);
+    if (normalizedPath === '') {
+      return false;
+    }
+
+    const found = this.findConversation(entityId);
+    if (!found) return false;
+
+    const { conversation } = found;
+
+    // linkedDocuments가 없거나 비어있으면 false
+    if (!conversation.linkedDocuments || conversation.linkedDocuments.length === 0) {
+      return false;
+    }
+
+    // 경로 찾기
+    const idx = conversation.linkedDocuments.findIndex(
+      (doc) => doc.path === normalizedPath
+    );
+    if (idx < 0) {
+      return false;
+    }
+
+    // 제거
+    conversation.linkedDocuments.splice(idx, 1);
+    return true;
+  }
+
+  /**
+   * 대화에 연결된 문서 목록 조회
+   *
+   * @param entityId 대화 EntityId
+   * @returns 연결된 문서 목록 (추가 순서대로)
+   */
+  getLinkedDocuments(entityId: EntityId): LinkedDocument[] {
+    const found = this.findConversation(entityId);
+    if (!found) return [];
+
+    return found.conversation.linkedDocuments ?? [];
   }
 
   // ============================================================================

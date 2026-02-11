@@ -20,25 +20,90 @@ import { MessageStore } from './stores/message-store.js';
 import { createRelayClient } from './network/relay-client.js';
 import { ClaudeManager } from './claude/claude-manager.js';
 import { ClaudeSDKAdapter } from './claude/claude-sdk-adapter.js';
+import { ClaudeBeaconAdapter } from '@estelle/claude-beacon';
 import { BlobHandler, type FileSystemAdapter } from './handlers/blob-handler.js';
 import { TaskManager, type FileSystem } from './managers/task-manager.js';
 import { WorkerManager } from './managers/worker-manager.js';
 import { FolderManager, type FolderFileSystem } from './managers/folder-manager.js';
 import { FileSystemPersistence, type FileSystemInterface } from './persistence/file-system-persistence.js';
+import { CredentialManager } from './auth/credential-manager.js';
+import { PylonMcpServer } from './servers/pylon-mcp-server.js';
+import os from 'os';
 
 // ============================================================================
-// 설정
+// 환경 설정 로드
+// ============================================================================
+
+/**
+ * 환경 설정 인터페이스
+ */
+interface EnvConfig {
+  envId?: number;
+  pylon?: {
+    deviceId?: string;
+    relayUrl?: string;
+    configDir?: string;
+    credentialsBackupDir?: string;
+    dataDir?: string;
+    mcpPort?: number;
+  };
+  beacon?: {
+    enabled?: boolean;
+    host?: string;
+    port?: number;
+    env?: string;
+    reconnect?: boolean;
+    reconnectInterval?: number;
+  };
+}
+
+/**
+ * ESTELLE_ENV_CONFIG 환경변수에서 설정 로드
+ * dev-server.js 또는 빌드 스크립트에서 주입됨
+ */
+function loadEnvConfig(): EnvConfig | null {
+  const envConfigStr = process.env['ESTELLE_ENV_CONFIG'];
+  if (!envConfigStr) return null;
+
+  try {
+    return JSON.parse(envConfigStr) as EnvConfig;
+  } catch (err) {
+    console.error('[Config] Failed to parse ESTELLE_ENV_CONFIG:', err);
+    return null;
+  }
+}
+
+const envConfig = loadEnvConfig();
+
+// ============================================================================
+// 설정 (ESTELLE_ENV_CONFIG 우선, 개별 환경변수 fallback)
 // ============================================================================
 
 const config: PylonConfig = {
-  deviceId: parseInt(process.env['DEVICE_ID'] || '1', 10),
-  relayUrl: process.env['RELAY_URL'] || 'ws://localhost:8080',
-  // 절대 경로로 변환 (Claude가 프로젝트 루트에서 실행되므로)
+  deviceId: parseInt(envConfig?.pylon?.deviceId || process.env['DEVICE_ID'] || '1', 10),
+  relayUrl: envConfig?.pylon?.relayUrl || process.env['RELAY_URL'] || 'ws://localhost:8080',
   uploadsDir: path.resolve(process.env['UPLOADS_DIR'] || './uploads'),
 };
 
 /** 데이터 저장 디렉토리 */
-const dataDir = process.env['DATA_DIR'] || './data';
+const dataDir = envConfig?.pylon?.dataDir || process.env['DATA_DIR'] || './data';
+
+/** Claude config 디렉토리 */
+const claudeConfigDir = envConfig?.pylon?.configDir || process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude');
+
+/** 인증 백업 디렉토리 */
+const credentialsBackupDir = envConfig?.pylon?.credentialsBackupDir || process.env['CREDENTIALS_BACKUP_DIR'] || path.join(os.homedir(), '.claude-credentials');
+
+/** Beacon 설정 */
+const beaconEnabled = envConfig?.beacon?.enabled || process.env['BEACON_ENABLED'] === 'true';
+const beaconHost = envConfig?.beacon?.host || process.env['BEACON_HOST'] || '127.0.0.1';
+const beaconPort = envConfig?.beacon?.port || parseInt(process.env['BEACON_PORT'] || '9875', 10);
+const beaconEnv = envConfig?.beacon?.env || process.env['BEACON_ENV'] || 'release';
+const beaconReconnect = envConfig?.beacon?.reconnect ?? true; // 기본 활성화
+const beaconReconnectInterval = envConfig?.beacon?.reconnectInterval ?? 3000;
+
+/** envId (0=release, 1=stage, 2=dev) */
+const envId = envConfig?.envId ?? parseInt(process.env['ENV_ID'] || '0', 10);
 
 // ============================================================================
 // Logger 구현
@@ -186,14 +251,38 @@ function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
   const binDir = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(binDir, 'mcp', 'server.js');
 
+  // MCP 포트 설정 (환경별)
+  const mcpPort = envConfig?.pylon?.mcpPort || parseInt(process.env['MCP_PORT'] || '9880', 10);
+
   const estelleMcp: Record<string, unknown> = {
     command: 'node',
     args: [mcpServerPath],
-    env: { ESTELLE_WORKING_DIR: workingDir },
+    env: {
+      ESTELLE_WORKING_DIR: workingDir,
+      ESTELLE_MCP_PORT: String(mcpPort),
+    },
   };
 
-  // 프로젝트별 MCP 설정 로드
-  let userConfig: Record<string, unknown> = {};
+  // 1. 전역 MCP 설정 로드 (claudeConfigDir/.claude.json의 mcpServers)
+  let globalConfig: Record<string, unknown> = {};
+  if (claudeConfigDir) {
+    const globalConfigPath = path.join(claudeConfigDir, '.claude.json');
+    try {
+      if (fs.existsSync(globalConfigPath)) {
+        const content = fs.readFileSync(globalConfigPath, 'utf-8');
+        const parsed = JSON.parse(content);
+        if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
+          globalConfig = parsed.mcpServers;
+          logger.log(`[MCP] Loaded global config from ${globalConfigPath} (${Object.keys(globalConfig).length} servers)`);
+        }
+      }
+    } catch (err) {
+      logger.error(`[MCP] Failed to load global config from ${globalConfigPath}: ${err}`);
+    }
+  }
+
+  // 2. 프로젝트별 MCP 설정 로드
+  let projectConfig: Record<string, unknown> = {};
   const configPaths = [
     path.join(workingDir, '.estelle', 'mcp-config.json'),
     path.join(workingDir, '.mcp.json'),
@@ -203,8 +292,8 @@ function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
     try {
       if (fs.existsSync(configPath)) {
         const content = fs.readFileSync(configPath, 'utf-8');
-        userConfig = JSON.parse(content);
-        logger.log(`[MCP] Loaded config from ${configPath}`);
+        projectConfig = JSON.parse(content);
+        logger.log(`[MCP] Loaded project config from ${configPath}`);
         break;
       }
     } catch (err) {
@@ -212,22 +301,26 @@ function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
     }
   }
 
-  // estelle-mcp를 항상 포함
+  // 전역 + 프로젝트 + estelle-mcp (프로젝트가 전역을 오버라이드)
   return {
-    ...userConfig,
+    ...globalConfig,
+    ...projectConfig,
     'estelle-mcp': estelleMcp,
   };
 }
 
-function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: unknown) => void) => void } {
+function createDependencies(): PylonDependencies & {
+  _bindPylonSend: (fn: (msg: unknown) => void) => void;
+  _beaconAdapter: ClaudeBeaconAdapter | null;
+} {
   // Persistence 생성
   const persistence = new FileSystemPersistence(dataDir, persistenceFileSystem);
 
   // WorkspaceStore 로드 또는 새로 생성
   const workspaceData = persistence.loadWorkspaceStore();
   const workspaceStore = workspaceData
-    ? WorkspaceStore.fromJSON(config.deviceId, workspaceData)
-    : new WorkspaceStore(config.deviceId);
+    ? WorkspaceStore.fromJSON(config.deviceId, workspaceData, envId)
+    : new WorkspaceStore(config.deviceId, undefined, envId);
 
   if (workspaceData) {
     logger.log(`[Persistence] Loaded ${workspaceData.workspaces?.length || 0} workspaces from ${dataDir}`);
@@ -242,12 +335,35 @@ function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: 
     reconnectInterval: 5000,
   });
 
-  // ClaudeSDKAdapter
-  const claudeAdapter = new ClaudeSDKAdapter();
+  // ClaudeAdapter - Beacon 또는 직접 SDK
+  let claudeAdapter: ClaudeSDKAdapter | ClaudeBeaconAdapter;
+  let beaconAdapter: ClaudeBeaconAdapter | null = null;
+
+  if (beaconEnabled) {
+    logger.log(`[Claude] Using ClaudeBeaconAdapter (${beaconHost}:${beaconPort}, env=${beaconEnv}, reconnect=${beaconReconnect})`);
+    beaconAdapter = new ClaudeBeaconAdapter({
+      host: beaconHost,
+      port: beaconPort,
+      pylonAddress: `${envId}:${config.deviceId}`,
+      env: beaconEnv,
+      reconnect: beaconReconnect,
+      reconnectInterval: beaconReconnectInterval,
+      onReconnect: () => {
+        logger.log(`[Beacon] Reconnected to ${beaconHost}:${beaconPort}`);
+      },
+      onDisconnect: () => {
+        logger.log(`[Beacon] Disconnected from ${beaconHost}:${beaconPort}`);
+      },
+    });
+    claudeAdapter = beaconAdapter;
+  } else {
+    logger.log('[Claude] Using ClaudeSDKAdapter (direct SDK)');
+    claudeAdapter = new ClaudeSDKAdapter();
+  }
 
   // ClaudeManager - 지연 바인딩으로 pylon 연결
   const claudeManager = new ClaudeManager({
-    adapter: claudeAdapter,
+    adapter: claudeAdapter as ClaudeSDKAdapter,
     getPermissionMode: (entityId: number) => {
       const conversation = workspaceStore.getConversation(entityId as EntityId);
       return conversation?.permissionMode ?? 'default';
@@ -265,6 +381,7 @@ function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: 
       // SDK raw 메시지 로깅
       logSdkRawMessage(String(entityId), message);
     },
+    claudeConfigDir,
   });
 
   // BlobHandler (sendFn은 pylon 생성 후 지연 바인딩)
@@ -310,6 +427,14 @@ function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: 
   // FolderManager
   const folderManager = new FolderManager(folderFileSystem);
 
+  // CredentialManager
+  const credentialManager = new CredentialManager({
+    configDir: claudeConfigDir,
+    backupDir: credentialsBackupDir,
+  });
+  logger.log(`[Credential] Config dir: ${claudeConfigDir}`);
+  logger.log(`[Credential] Backup dir: ${credentialsBackupDir}`);
+
   return {
     workspaceStore,
     messageStore,
@@ -320,6 +445,8 @@ function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: 
     _bindPylonSend: (sendFn: (msg: unknown) => void) => {
       pylonSendFn = sendFn;
     },
+    // Beacon 어댑터 (연결 관리용)
+    _beaconAdapter: beaconAdapter,
     taskManager,
     workerManager: workerManager as unknown as PylonDependencies['workerManager'],
     folderManager,
@@ -327,6 +454,7 @@ function createDependencies(): PylonDependencies & { _bindPylonSend: (fn: (msg: 
     packetLogger,
     persistence,
     bugReportWriter,
+    credentialManager,
   };
 }
 
@@ -340,6 +468,9 @@ async function main(): Promise<void> {
   logger.log(`  Relay URL: ${config.relayUrl}`);
   logger.log(`  Uploads Dir: ${config.uploadsDir}`);
   logger.log(`  Data Dir: ${dataDir}`);
+  logger.log(`  Claude Config Dir: ${claudeConfigDir}`);
+  logger.log(`  Credentials Backup Dir: ${credentialsBackupDir}`);
+  logger.log(`  Beacon: ${beaconEnabled ? `${beaconHost}:${beaconPort} (${beaconEnv})` : 'disabled'}`);
 
   // 업로드 디렉토리 생성
   if (!fs.existsSync(config.uploadsDir)) {
@@ -355,20 +486,52 @@ async function main(): Promise<void> {
   // 지연 바인딩: BlobHandler.sendFn이 relayClient.send를 사용하도록 설정
   deps._bindPylonSend((msg) => deps.relayClient.send(msg));
 
+  // PylonMcpServer 생성 (MCP 도구가 WorkspaceStore에 접근 가능하도록)
+  const mcpPort = envConfig?.pylon?.mcpPort || parseInt(process.env['ESTELLE_MCP_PORT'] || '9880', 10);
+  const pylonMcpServer = new PylonMcpServer(deps.workspaceStore, { port: mcpPort });
+
   // Graceful shutdown
   process.on('SIGINT', async () => {
     logger.log('Shutting down...');
+    await pylonMcpServer.close();
+    if (deps._beaconAdapter) {
+      await deps._beaconAdapter.disconnect();
+    }
     await pylon.stop();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
     logger.log('Shutting down...');
+    await pylonMcpServer.close();
+    if (deps._beaconAdapter) {
+      await deps._beaconAdapter.disconnect();
+    }
     await pylon.stop();
     process.exit(0);
   });
 
   await pylon.start();
+
+  // PylonMcpServer 시작
+  try {
+    await pylonMcpServer.listen();
+    logger.log(`[PylonMcpServer] Listening on port ${mcpPort}`);
+  } catch (err) {
+    logger.error(`[PylonMcpServer] Failed to start: ${err}`);
+  }
+
+  // Beacon 어댑터 연결 (Beacon 모드일 때)
+  if (beaconEnabled && deps._beaconAdapter) {
+    try {
+      await deps._beaconAdapter.connect();
+      logger.log(`[Beacon] Connected to ${beaconHost}:${beaconPort}`);
+    } catch (err) {
+      logger.error(`[Beacon] Failed to connect: ${err}`);
+      // Beacon 연결 실패 시에도 Pylon은 계속 실행 (SDK 직접 호출 불가 상태)
+    }
+  }
+
   logger.log(`[Estelle Pylon v2] Started`);
 }
 

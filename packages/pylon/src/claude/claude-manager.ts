@@ -179,6 +179,9 @@ export interface PendingQuestion {
 
   /** 질문 입력 */
   input: Record<string, unknown>;
+
+  /** 세션 ID */
+  sessionId: number;
 }
 
 /**
@@ -281,6 +284,9 @@ export interface ClaudeQueryOptions {
   /** 중단용 AbortController */
   abortController: AbortController;
 
+  /** Entity ID (세션 식별자, Beacon 어댑터용) */
+  entityId?: number;
+
   /** 부분 메시지 포함 여부 */
   includePartialMessages?: boolean;
 
@@ -292,6 +298,9 @@ export interface ClaudeQueryOptions {
 
   /** MCP 서버 설정 */
   mcpServers?: Record<string, unknown>;
+
+  /** 환경변수 (SDK에 전달) */
+  env?: Record<string, string>;
 
   /** 도구 사용 가능 여부 콜백 */
   canUseTool?: (
@@ -411,6 +420,9 @@ export interface ClaudeManagerOptions {
 
   /** SDK raw 메시지 로거 (선택) */
   onRawMessage?: RawMessageLogger;
+
+  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 선택) */
+  claudeConfigDir?: string;
 }
 
 // ============================================================================
@@ -494,7 +506,11 @@ export class ClaudeManager {
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
     this.onRawMessage = options.onRawMessage;
+    this.claudeConfigDir = options.claudeConfigDir;
   }
+
+  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR) */
+  private readonly claudeConfigDir?: string;
 
   // ============================================================================
   // Public 메서드 - 메시지 전송
@@ -611,14 +627,16 @@ export class ClaudeManager {
       }
     }
 
-    // 7. 대기 중인 질문 요청 모두 거부
+    // 7. 대기 중인 질문 요청 - 해당 sessionId만 거부
     for (const [id, pending] of this.pendingQuestions) {
-      try {
-        pending.resolve({ behavior: 'deny', message: 'Stopped' });
-      } catch {
-        // resolve 실패 무시
+      if (pending.sessionId === sessionId) {
+        try {
+          pending.resolve({ behavior: 'deny', message: 'Stopped' });
+        } catch {
+          // resolve 실패 무시
+        }
+        this.pendingQuestions.delete(id);
       }
-      this.pendingQuestions.delete(id);
     }
   }
 
@@ -695,11 +713,14 @@ export class ClaudeManager {
     let pending = this.pendingQuestions.get(toolUseId);
     let foundId = toolUseId;
 
-    // 못 찾으면 첫 번째 pending question 사용
-    if (!pending && this.pendingQuestions.size > 0) {
-      const firstEntry = this.pendingQuestions.entries().next();
-      if (!firstEntry.done) {
-        [foundId, pending] = firstEntry.value;
+    // 못 찾으면 해당 sessionId의 첫 번째 pending question 사용
+    if (!pending) {
+      for (const [id, q] of this.pendingQuestions) {
+        if (q.sessionId === sessionId) {
+          pending = q;
+          foundId = id;
+          break;
+        }
       }
     }
 
@@ -772,6 +793,15 @@ export class ClaudeManager {
     return Array.from(this.sessions.keys());
   }
 
+  /**
+   * 대기 중인 질문의 세션 ID 목록
+   *
+   * @returns 세션 ID 배열
+   */
+  getPendingQuestionSessionIds(): number[] {
+    return Array.from(this.pendingQuestions.values()).map((q) => q.sessionId);
+  }
+
   // ============================================================================
   // Public 메서드 - 정리
   // ============================================================================
@@ -786,6 +816,28 @@ export class ClaudeManager {
     for (const sessionId of this.sessions.keys()) {
       this.stop(sessionId);
     }
+  }
+
+  /**
+   * 모든 세션 강제 종료
+   *
+   * @description
+   * 계정 전환 시 호출됩니다.
+   * 모든 활성 세션의 AbortController를 abort하고 세션을 정리합니다.
+   * cleanup()과 동일하지만, 계정 전환 시 명시적인 의도를 나타내기 위해 별도 메서드로 분리합니다.
+   *
+   * @returns 중단된 세션 ID 목록
+   */
+  abortAllSessions(): number[] {
+    const abortedSessions: number[] = [];
+
+    for (const sessionId of this.sessions.keys()) {
+      this.stop(sessionId);
+      abortedSessions.push(sessionId);
+    }
+
+    console.log(`[ClaudeManager] Aborted ${abortedSessions.length} sessions for account switch`);
+    return abortedSessions;
   }
 
   // ============================================================================
@@ -835,6 +887,7 @@ export class ClaudeManager {
       prompt: message,
       cwd: sessionInfo.workingDir,
       abortController,
+      entityId: sessionId,
       includePartialMessages: true,
       settingSources: ['project'],
       canUseTool: async (toolName, input) => {
@@ -848,6 +901,14 @@ export class ClaudeManager {
       if (mcpServers) {
         queryOptions.mcpServers = mcpServers;
       }
+    }
+
+    // 환경변수 설정 (CLAUDE_CONFIG_DIR)
+    if (this.claudeConfigDir) {
+      queryOptions.env = {
+        ...process.env as Record<string, string>,
+        CLAUDE_CONFIG_DIR: this.claudeConfigDir,
+      };
     }
 
     // 세션 재개
@@ -938,6 +999,10 @@ export class ClaudeManager {
 
   /**
    * assistant 메시지 처리
+   *
+   * @description
+   * content 배열에서 모든 text 블록을 먼저 수집하여 합친 후 한 번만 textComplete를 emit합니다.
+   * 이렇게 하면 도구 사용 전후로 텍스트가 분리되어 있어도 중복 메시지가 저장되지 않습니다.
    */
   private handleAssistantMessage(
     sessionId: number,
@@ -947,14 +1012,27 @@ export class ClaudeManager {
     const content = msg.message?.content;
     if (!content) return;
 
+    // 1. text 블록들을 먼저 수집 (빈 문자열 제외)
+    const textBlocks: string[] = [];
     for (const block of content) {
       if (block.type === 'text' && block.text) {
-        this.emitEvent(sessionId, {
-          type: 'textComplete',
-          text: block.text,
-        });
-        session.partialText = '';
-      } else if (block.type === 'tool_use' && block.name && block.id) {
+        textBlocks.push(block.text);
+      }
+    }
+
+    // 2. 합쳐서 한 번만 textComplete emit
+    if (textBlocks.length > 0) {
+      const combinedText = textBlocks.join('\n\n');
+      this.emitEvent(sessionId, {
+        type: 'textComplete',
+        text: combinedText,
+      });
+      session.partialText = '';
+    }
+
+    // 3. tool_use 처리는 기존과 동일
+    for (const block of content) {
+      if (block.type === 'tool_use' && block.name && block.id) {
         session.pendingTools.set(block.id, block.name);
 
         // 도구 정보 이벤트 (모든 도구)
@@ -1016,6 +1094,7 @@ export class ClaudeManager {
           success: !isError,
           result: resultContent.substring(0, 1000),
           error: isError ? resultContent.substring(0, 200) : undefined,
+          parentToolUseId: msg.parent_tool_use_id || null,
         });
       }
     }
@@ -1192,7 +1271,8 @@ export class ClaudeManager {
     // AskUserQuestion 특별 처리
     if (toolName === 'AskUserQuestion') {
       return new Promise((resolve) => {
-        this.pendingQuestions.set(toolUseId, { resolve, input });
+        this.pendingQuestions.set(toolUseId, { resolve, input, sessionId });
+        this.emitEvent(sessionId, { type: 'state', state: 'waiting' });
       });
     }
 

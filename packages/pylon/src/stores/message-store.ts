@@ -160,8 +160,8 @@ export interface MessageStoreData {
 export interface GetMessagesOptions {
   /** 반환할 최대 메시지 수 */
   limit?: number;
-  /** 건너뛸 메시지 수 (끝에서부터) */
-  offset?: number;
+  /** 이 인덱스 이전의 메시지를 로드 (0이면 최신부터) */
+  loadBefore?: number;
   /** 반환할 최대 바이트 수 (개수보다 우선) */
   maxBytes?: number;
 }
@@ -650,7 +650,7 @@ export class MessageStore {
    * 최신 메시지가 배열 끝에 위치합니다.
    *
    * @param sessionId - 세션 ID
-   * @param options - 조회 옵션 (limit, offset, maxBytes)
+   * @param options - 조회 옵션 (limit, loadBefore, maxBytes)
    * @returns 메시지 배열
    *
    * @example
@@ -661,12 +661,12 @@ export class MessageStore {
    * // 최근 100KB 이내 메시지
    * const bySize = store.getMessages('session-1', { maxBytes: 100 * 1024 });
    *
-   * // 11~20번째 최신 메시지 (페이징)
-   * const page2 = store.getMessages('session-1', { limit: 10, offset: 10 });
+   * // 인덱스 80 이전 메시지 (60~79 반환)
+   * const page2 = store.getMessages('session-1', { loadBefore: 80, maxBytes: 100 * 1024 });
    * ```
    */
   getMessages(sessionId: number, options: GetMessagesOptions = {}): StoreMessage[] {
-    const { limit = MAX_MESSAGES_PER_SESSION, offset = 0, maxBytes } = options;
+    const { limit = MAX_MESSAGES_PER_SESSION, loadBefore = 0, maxBytes } = options;
 
     if (!this._cache.has(sessionId)) {
       return [];
@@ -674,8 +674,9 @@ export class MessageStore {
 
     const messages = this._cache.get(sessionId)!;
 
-    // offset 적용
-    const endIdx = messages.length - offset;
+    // loadBefore 적용: loadBefore 인덱스 이전의 메시지를 반환
+    // loadBefore=0이면 전체 (최신부터), loadBefore=80이면 0~79 범위에서 최신 것들
+    const endIdx = loadBefore > 0 ? Math.min(loadBefore, messages.length) : messages.length;
     if (endIdx <= 0) {
       return [];
     }
@@ -685,7 +686,7 @@ export class MessageStore {
       const result: StoreMessage[] = [];
       let totalBytes = 0;
 
-      // 최신 메시지부터 역순으로 누적
+      // endIdx 직전부터 역순으로 누적 (가장 최신 → 과거)
       for (let i = endIdx - 1; i >= 0; i--) {
         const msg = messages[i];
         const msgBytes = this._estimateMessageBytes(msg);
@@ -702,7 +703,7 @@ export class MessageStore {
     }
 
     // 개수 기준 (기존 로직)
-    if (offset === 0 && limit >= messages.length) {
+    if (loadBefore === 0 && limit >= messages.length) {
       return [...messages];
     }
 

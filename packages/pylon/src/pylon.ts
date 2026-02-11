@@ -84,6 +84,7 @@ export interface ClaudeManagerAdapter {
   stop(entityId: number): void;
   newSession(entityId: number): void;
   cleanup(): void;
+  abortAllSessions(): number[];
   respondPermission(entityId: number, toolUseId: string, decision: 'allow' | 'deny' | 'allowAll'): void;
   respondQuestion(entityId: number, toolUseId: string, answer: string): void;
   hasActiveSession(entityId: number): boolean;
@@ -149,6 +150,15 @@ export interface LoggerAdapter {
 }
 
 /**
+ * CredentialManager 인터페이스 (의존성 주입용)
+ */
+export interface CredentialManagerAdapter {
+  getCurrentAccount(): Promise<{ account: string; subscriptionType: string } | null>;
+  switchAccount(account: string): Promise<void>;
+  hasBackup(account: string): Promise<boolean>;
+}
+
+/**
  * PacketLogger 인터페이스 (의존성 주입용)
  */
 export interface PacketLoggerAdapter {
@@ -184,6 +194,9 @@ export interface PylonDependencies {
 
   /** 버그 리포트 작성기 (선택) */
   bugReportWriter?: BugReportWriter;
+
+  /** 인증 관리자 (선택, 계정 전환 기능에 필요) */
+  credentialManager?: CredentialManagerAdapter;
 }
 
 /**
@@ -237,6 +250,9 @@ export class Pylon {
   /** 디바이스 정보 */
   private deviceInfo: DeviceInfo | null = null;
 
+  /** 캐싱된 계정 정보 */
+  private cachedAccount: { current: string; subscriptionType: string } | null = null;
+
   /** 세션별 시청자: Map<entityId, Set<clientDeviceId>> */
   private readonly sessionViewers: Map<number, Set<string>> = new Map();
 
@@ -262,6 +278,12 @@ export class Pylon {
 
   /** 메시지 저장 debounce 시간 (ms) */
   private readonly MESSAGE_SAVE_DEBOUNCE_MS = 2000;
+
+  /** 워크스페이스 저장 debounce 타이머 */
+  private workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 워크스페이스 저장 debounce 시간 (ms) */
+  private readonly WORKSPACE_SAVE_DEBOUNCE_MS = 3000;
 
   // ==========================================================================
   // 생성자
@@ -299,6 +321,13 @@ export class Pylon {
     // 영속 데이터 로드
     await this.loadPersistedData();
 
+    // 계정 정보 캐싱
+    await this.refreshAccountCache();
+
+    // 모든 대화의 메시지 세션 로딩
+    // 로딩 없이 메시지 추가 시 _ensureCache가 빈 배열을 생성하여 히스토리가 덮어써짐
+    this.loadAllMessageSessions();
+
     // 워크스페이스 초기화: working/waiting 상태인 대화들을 idle로 리셋
     const resetEntityIds = this.deps.workspaceStore.resetActiveConversations();
     for (const entityId of resetEntityIds) {
@@ -313,6 +342,33 @@ export class Pylon {
 
     // Relay 연결
     this.deps.relayClient.connect();
+  }
+
+  /**
+   * 계정 정보 캐싱 갱신
+   */
+  private async refreshAccountCache(): Promise<void> {
+    if (!this.deps.credentialManager) {
+      this.cachedAccount = null;
+      return;
+    }
+
+    try {
+      const info = await this.deps.credentialManager.getCurrentAccount();
+      if (info) {
+        this.cachedAccount = {
+          current: info.account,
+          subscriptionType: info.subscriptionType,
+        };
+        this.log(`[Account] Cached: ${info.account} (${info.subscriptionType})`);
+      } else {
+        this.cachedAccount = null;
+        this.log(`[Account] No account info found`);
+      }
+    } catch (err) {
+      this.cachedAccount = null;
+      this.deps.logger.error(`[Account] Failed to cache account info: ${err}`);
+    }
   }
 
   /**
@@ -626,6 +682,12 @@ export class Pylon {
       return;
     }
 
+    // ===== 계정 전환 =====
+    if (type === 'account_switch') {
+      this.handleAccountSwitch(payload, from);
+      return;
+    }
+
     // 알 수 없는 메시지는 무시
   }
 
@@ -641,15 +703,6 @@ export class Pylon {
   sendClaudeEvent(entityId: number, event: ClaudeManagerEvent): void {
     // 이벤트 타입별 메시지 저장
     this.saveEventToHistory(entityId, event);
-
-    // send_file MCP 도구 결과 처리
-    if (event.type === 'toolComplete') {
-      const toolName = (event as Record<string, unknown>).toolName as string;
-      if (toolName === 'mcp__estelle-mcp__send_file') {
-        this.log(`[send_file] toolComplete detected: toolName=${toolName}`);
-        this.handleSendFileResult(entityId, event);
-      }
-    }
 
     // init 이벤트에서 claudeSessionId 저장
     if (event.type === 'init' && (event as Record<string, unknown>).session_id) {
@@ -685,6 +738,7 @@ export class Pylon {
     if (event.type === 'state') {
       const state = (event as Record<string, unknown>).state as ConversationStatusValue;
       this.deps.workspaceStore.updateConversationStatus(entityId as EntityId, state);
+      this.scheduleSaveWorkspaceStore();
 
       this.send({
         type: 'conversation_status',
@@ -739,6 +793,7 @@ export class Pylon {
       const device = payload.device as DeviceInfo;
       this.deviceInfo = device;
       this.log(`Authenticated as ${device?.name || this.config.deviceId}`);
+      // broadcastWorkspaceList()에서 계정 상태도 함께 전송
       this.broadcastWorkspaceList();
     } else {
       this.log(`Auth failed: ${payload?.error}`);
@@ -793,12 +848,14 @@ export class Pylon {
 
   /**
    * 히스토리 요청 처리 (페이징: 100KB 제한)
+   *
+   * @param loadBefore - 이 인덱스 이전의 메시지를 로드 (0이면 최신부터)
    */
   private handleHistoryRequest(
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { entityId, offset = 0 } = payload || {};
+    const { entityId, loadBefore = 0 } = payload || {};
     if (!entityId) return;
 
     const MAX_BYTES = 100 * 1024; // 100KB
@@ -806,10 +863,16 @@ export class Pylon {
     const totalCount = this.deps.messageStore.getCount(eid);
     const messages = this.deps.messageStore.getMessages(eid, {
       maxBytes: MAX_BYTES,
-      offset: offset as number,
+      loadBefore: loadBefore as number,
     });
-    const loadedCount = (offset as number) + messages.length;
-    const hasMore = loadedCount < totalCount;
+
+    // hasMore 계산:
+    // - 초기 로드 (loadBefore=0): 반환된 메시지 수 < totalCount
+    // - 페이징 (loadBefore>0): loadBefore - messages.length > 0 (더 과거 메시지 있음)
+    const lb = loadBefore as number;
+    const hasMore = lb > 0
+      ? (lb - messages.length) > 0
+      : messages.length < totalCount;
 
     // メッセージセッションをロード (lazy loading)
     this.loadMessageSession(eid);
@@ -821,7 +884,7 @@ export class Pylon {
         deviceId: this.config.deviceId,
         entityId: eid,
         messages,
-        offset,
+        loadBefore,
         totalCount,
         hasMore,
       },
@@ -846,6 +909,7 @@ export class Pylon {
         workspaces,
         activeWorkspaceId: activeState.activeWorkspaceId,
         activeConversationId: activeState.activeConversationId,
+        account: this.cachedAccount,  // 계정 정보 포함
       },
     });
   }
@@ -872,6 +936,9 @@ export class Pylon {
       },
     });
     this.broadcastWorkspaceList();
+    this.saveWorkspaceStore().catch((err) => {
+      this.deps.logger.error(`[Pylon] Failed to save after workspace create: ${err}`);
+    });
   }
 
   /**
@@ -884,6 +951,14 @@ export class Pylon {
     const { workspaceId } = payload || {};
     if (!workspaceId) return;
 
+    // 삭제 전에 모든 대화의 메시지 정리
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
+    if (workspace) {
+      for (const conv of workspace.conversations) {
+        this.clearMessagesForEntity(conv.entityId);
+      }
+    }
+
     const success = this.deps.workspaceStore.deleteWorkspace(workspaceId as number);
     this.send({
       type: 'workspace_delete_result',
@@ -892,6 +967,9 @@ export class Pylon {
     });
     if (success) {
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after workspace delete: ${err}`);
+      });
     }
   }
 
@@ -918,6 +996,9 @@ export class Pylon {
 
     if (success) {
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after workspace update: ${err}`);
+      });
     }
   }
 
@@ -966,6 +1047,9 @@ export class Pylon {
     const success = this.deps.workspaceStore.renameWorkspace(workspaceId as number, newName as string);
     if (success) {
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after workspace rename: ${err}`);
+      });
     }
   }
 
@@ -981,6 +1065,9 @@ export class Pylon {
       conversationId as EntityId | undefined
     );
     this.broadcastWorkspaceList();
+    this.saveWorkspaceStore().catch((err) => {
+      this.deps.logger.error(`[Pylon] Failed to save after workspace switch: ${err}`);
+    });
   }
 
   // ==========================================================================
@@ -1014,7 +1101,13 @@ export class Pylon {
     });
 
     if (conversation) {
+      // ID 재사용 대비: 기존 메시지 파일 삭제 및 캐시 클리어
+      this.clearMessagesForEntity(conversation.entityId);
+
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after conversation create: ${err}`);
+      });
 
       // 세션 뷰어 등록
       if (from?.deviceId) {
@@ -1030,9 +1123,17 @@ export class Pylon {
     const { entityId } = payload || {};
     if (!entityId) return;
 
-    const success = this.deps.workspaceStore.deleteConversation(entityId as EntityId);
+    const eid = entityId as EntityId;
+
+    // 삭제 전에 메시지 정리
+    this.clearMessagesForEntity(eid);
+
+    const success = this.deps.workspaceStore.deleteConversation(eid);
     if (success) {
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after conversation delete: ${err}`);
+      });
     }
   }
 
@@ -1049,6 +1150,9 @@ export class Pylon {
     );
     if (success) {
       this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after conversation rename: ${err}`);
+      });
     }
   }
 
@@ -1071,10 +1175,33 @@ export class Pylon {
     }
     this.deps.workspaceStore.setActiveConversation(eid as EntityId);
 
+    // unread 해제 및 클라이언트에 알림
+    const conversation = this.deps.workspaceStore.getConversation(eid as EntityId);
+    if (conversation?.unread) {
+      this.deps.workspaceStore.updateConversationUnread(eid as EntityId, false);
+
+      // 모든 클라이언트에게 unread 변경만 알림 (status는 현재 값 유지)
+      this.send({
+        type: 'conversation_status',
+        payload: {
+          deviceId: this.config.deviceId,
+          entityId: eid,
+          status: conversation.status,
+          unread: false,
+        },
+      });
+
+      // 해당 앱의 unread 전송 기록도 초기화
+      if (from?.deviceId) {
+        const unreadSent = this.appUnreadSent.get(from.deviceId);
+        if (unreadSent) {
+          unreadSent.delete(eid);
+        }
+      }
+    }
+
     // 저장
-    this.saveWorkspaceStore().catch((err) => {
-      this.deps.logger.error(`[Pylon] Failed to save after conversation select: ${err}`);
-    });
+    this.scheduleSaveWorkspaceStore();
 
     // 메시지 세션 로드 (lazy loading)
     this.loadMessageSession(eid);
@@ -1086,6 +1213,20 @@ export class Pylon {
       // 활성 세션 정보
       const hasActiveSession = this.deps.claudeManager.hasActiveSession(eid);
       const workStartTime = this.deps.claudeManager.getSessionStartTime(eid);
+
+      // 현재 상태 판단 (재연결 시 정확한 상태 동기화)
+      // idle: 활성 세션 없음
+      // permission: 활성 세션 있고 pending 이벤트 있음
+      // working: 활성 세션 있고 pending 이벤트 없음
+      let currentStatus: 'idle' | 'working' | 'permission' = 'idle';
+      if (hasActiveSession) {
+        const pendingEvent = this.deps.claudeManager.getPendingEvent(eid);
+        if (pendingEvent) {
+          currentStatus = 'permission';
+        } else {
+          currentStatus = 'working';
+        }
+      }
 
       // 메시지 히스토리 전송 (페이징: 100KB 제한)
       const MAX_BYTES = 100 * 1024; // 100KB
@@ -1100,11 +1241,11 @@ export class Pylon {
           deviceId: this.config.deviceId,
           entityId: eid,
           messages,
-          offset: 0,
           totalCount,
           hasMore,
           hasActiveSession,
           workStartTime,
+          currentStatus,
         },
       });
 
@@ -1725,7 +1866,10 @@ Message: ${message}
       workspaces: workspacesWithTasks,
       activeWorkspaceId: activeState.activeWorkspaceId,
       activeConversationId: activeState.activeConversationId,
+      account: this.cachedAccount,  // 캐싱된 계정 정보 사용
     };
+
+    this.log(`[Broadcast] workspace_list_result account: ${JSON.stringify(this.cachedAccount)}`);
 
     this.send({
       type: 'workspace_list_result',
@@ -1813,8 +1957,14 @@ Message: ${message}
         viewers.delete(clientId);
         if (viewers.size === 0) {
           this.sessionViewers.delete(existingEntityId);
-          this.deps.messageStore.unloadCache(existingEntityId);
-          this.log(`Unloaded message cache for session ${existingEntityId} (no viewers)`);
+          // 활성 Claude 세션이 있으면 캐시 유지
+          // (언로드 후 이벤트가 빈 캐시를 생성하여 히스토리가 유실되는 것 방지)
+          if (this.deps.claudeManager.hasActiveSession(existingEntityId)) {
+            this.log(`Keeping message cache for session ${existingEntityId} (active Claude session)`);
+          } else {
+            this.deps.messageStore.unloadCache(existingEntityId);
+            this.log(`Unloaded message cache for session ${existingEntityId} (no viewers)`);
+          }
         }
         break;
       }
@@ -1844,8 +1994,12 @@ Message: ${message}
         viewers.delete(clientId);
         if (viewers.size === 0) {
           this.sessionViewers.delete(entityId);
-          this.deps.messageStore.unloadCache(entityId);
-          this.log(`Unloaded message cache for session ${entityId} (no viewers)`);
+          if (this.deps.claudeManager.hasActiveSession(entityId)) {
+            this.log(`Keeping message cache for session ${entityId} (active Claude session)`);
+          } else {
+            this.deps.messageStore.unloadCache(entityId);
+            this.log(`Unloaded message cache for session ${entityId} (no viewers)`);
+          }
         }
         this.log(`Client ${clientId} removed from session ${entityId} viewers`);
         break;
@@ -1871,13 +2025,18 @@ Message: ${message}
 
     if (unreadTargets.length > 0) {
       this.deps.workspaceStore.updateConversationUnread(entityId as EntityId, true);
+      this.scheduleSaveWorkspaceStore();
 
+      // unread 알림은 status를 변경하지 않고 unread 플래그만 전달
+      // (status: 'unread'를 보내면 클라이언트가 status를 'unread'로 변경해버림)
+      const conversation = this.deps.workspaceStore.getConversation(entityId as EntityId);
       this.send({
         type: 'conversation_status',
         payload: {
           deviceId: this.config.deviceId,
           entityId,
-          status: 'unread',
+          status: conversation?.status ?? 'idle',
+          unread: true,
         },
         to: unreadTargets,
       });
@@ -1955,42 +2114,6 @@ Message: ${message}
   }
 
   /**
-   * send_file MCP 도구 결과 처리
-   */
-  private handleSendFileResult(entityId: number, event: ClaudeManagerEvent): void {
-    const e = event as Record<string, unknown>;
-    if (!e.success || !e.result) return;
-
-    try {
-      const result = JSON.parse(e.result as string);
-      if (!result.success || !result.file) return;
-
-      const { path: filePath, filename, mimeType, fileType, size, description } = result.file;
-
-      this.log(`[send_file] Sending file attachment: ${filename} (${fileType})`);
-
-      const fileEvent = {
-        type: 'file_attachment',
-        file: { path: filePath, filename, mimeType, fileType, size, description },
-      };
-
-      const message = {
-        type: 'claude_event',
-        payload: { entityId, event: fileEvent },
-      };
-
-      const viewers = this.getSessionViewers(entityId);
-      if (viewers.size > 0) {
-        this.send({ ...message, to: Array.from(viewers) });
-      }
-
-      this.deps.messageStore.addFileAttachment(entityId, result.file);
-    } catch (err) {
-      this.log(`[send_file] Failed to parse result: ${(err as Error).message}`);
-    }
-  }
-
-  /**
    * 사용량 누적
    */
   private accumulateUsage(event: ClaudeManagerEvent): void {
@@ -2009,6 +2132,27 @@ Message: ${message}
     this.claudeUsage.lastUpdated = new Date().toISOString();
 
     this.broadcastPylonStatus();
+  }
+
+  // ==========================================================================
+  // Private 메서드 - 메시지 정리
+  // ==========================================================================
+
+  /**
+   * 엔티티(대화)의 메시지 캐시 및 영속 파일 정리
+   *
+   * @description
+   * 대화 삭제, 워크스페이스 삭제, ID 재사용 시 호출합니다.
+   * 메모리 캐시와 영속 파일을 모두 삭제합니다.
+   */
+  private clearMessagesForEntity(entityId: EntityId): void {
+    // 메모리 캐시 클리어
+    this.deps.messageStore.clear(entityId);
+
+    // 영속성 파일 삭제
+    if (this.deps.persistence) {
+      this.deps.persistence.deleteMessageSession(String(entityId));
+    }
   }
 
   // ==========================================================================
@@ -2049,6 +2193,26 @@ Message: ${message}
     } catch (err) {
       this.deps.logger.error(`[Persistence] Failed to save workspace store: ${err}`);
     }
+  }
+
+  /**
+   * WorkspaceStore 저장 예약 (debounce)
+   * status/unread 같이 자주 변경되는 항목에 사용
+   */
+  private scheduleSaveWorkspaceStore(): void {
+    const persistence = this.deps.persistence;
+    if (!persistence) return;
+
+    // 기존 타이머 취소
+    if (this.workspaceSaveTimer) {
+      clearTimeout(this.workspaceSaveTimer);
+    }
+
+    // 새 타이머 설정
+    this.workspaceSaveTimer = setTimeout(async () => {
+      this.workspaceSaveTimer = null;
+      await this.saveWorkspaceStore();
+    }, this.WORKSPACE_SAVE_DEBOUNCE_MS);
   }
 
   /**
@@ -2096,7 +2260,14 @@ Message: ${message}
    * 모든 pending 저장 즉시 실행
    */
   private async flushPendingSaves(): Promise<void> {
-    // 모든 타이머 취소
+    // 워크스페이스 타이머 취소 및 저장
+    if (this.workspaceSaveTimer) {
+      clearTimeout(this.workspaceSaveTimer);
+      this.workspaceSaveTimer = null;
+      await this.saveWorkspaceStore();
+    }
+
+    // 메시지 타이머 취소
     for (const [entityId, timer] of this.messageSaveTimers) {
       clearTimeout(timer);
       this.messageSaveTimers.delete(entityId);
@@ -2108,6 +2279,23 @@ Message: ${message}
       for (const entityId of dirtySessions) {
         await this.saveMessageSession(entityId);
       }
+    }
+  }
+
+  /**
+   * 모든 대화의 메시지 세션 로드 (시작 시 호출)
+   */
+  private loadAllMessageSessions(): void {
+    const workspaces = this.deps.workspaceStore.getAllWorkspaces();
+    let count = 0;
+    for (const workspace of workspaces) {
+      for (const conv of workspace.conversations) {
+        this.loadMessageSession(conv.entityId);
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.log(`[Startup] Loaded ${count} message sessions`);
     }
   }
 
@@ -2192,5 +2380,129 @@ Message: ${message}
         this.deps.logger.error(`[Usage] Failed to fetch usage: ${err}`);
       }
     })();
+  }
+
+  // ==========================================================================
+  // Private 메서드 - 계정 전환
+  // ==========================================================================
+
+  /**
+   * account_switch 처리
+   *
+   * @description
+   * 계정 전환 요청을 처리합니다.
+   * 1. 모든 활성 Claude 세션 중단
+   * 2. 인증 파일 스왑
+   * 3. 새 계정 정보를 클라이언트에 전송
+   */
+  private handleAccountSwitch(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    const { account } = payload || {};
+    if (!account || typeof account !== 'string') {
+      this.send({
+        type: 'account_status',
+        to: from?.deviceId,
+        payload: {
+          error: 'Invalid account type',
+        },
+      });
+      return;
+    }
+
+    // credentialManager가 없으면 에러
+    if (!this.deps.credentialManager) {
+      this.send({
+        type: 'account_status',
+        to: from?.deviceId,
+        payload: {
+          error: 'Credential manager not configured',
+        },
+      });
+      return;
+    }
+
+    // 비동기 처리
+    (async () => {
+      try {
+        this.log(`[Account] Switching to account: ${account}`);
+
+        // 1. 모든 세션 중단
+        const abortedSessions = this.deps.claudeManager.abortAllSessions();
+        if (abortedSessions.length > 0) {
+          this.log(`[Account] Aborted ${abortedSessions.length} active sessions`);
+        }
+
+        // 2. 인증 파일 스왑
+        await this.deps.credentialManager!.switchAccount(account);
+
+        // 3. 새 계정 정보 조회
+        const accountInfo = await this.deps.credentialManager!.getCurrentAccount();
+
+        // 4. 클라이언트에 상태 알림 (broadcast)
+        this.send({
+          type: 'account_status',
+          broadcast: 'clients',
+          payload: {
+            current: accountInfo?.account || account,
+            subscriptionType: accountInfo?.subscriptionType,
+          },
+        });
+
+        this.log(`[Account] Switched to: ${accountInfo?.account || account} (${accountInfo?.subscriptionType || 'unknown'})`);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        this.deps.logger.error(`[Account] Failed to switch account: ${errorMessage}`);
+
+        this.send({
+          type: 'account_status',
+          to: from?.deviceId,
+          payload: {
+            error: errorMessage,
+          },
+        });
+      }
+    })();
+  }
+
+  /**
+   * 현재 계정 정보를 클라이언트에 전송
+   *
+   * @description
+   * 클라이언트 연결 시 또는 요청 시 현재 계정 정보를 전송합니다.
+   */
+  private async sendAccountStatus(to?: string): Promise<void> {
+    if (!this.deps.credentialManager) {
+      this.log('[Account] No credential manager');
+      return;
+    }
+
+    try {
+      const accountInfo = await this.deps.credentialManager.getCurrentAccount();
+      this.log(`[Account] Got account info: ${JSON.stringify(accountInfo)}`);
+
+      if (accountInfo) {
+        const msg: Record<string, unknown> = {
+          type: 'account_status',
+          payload: {
+            current: accountInfo.account,
+            subscriptionType: accountInfo.subscriptionType,
+          },
+        };
+        // 특정 대상이 있으면 to, 없으면 broadcast
+        if (to) {
+          msg.to = to;
+        } else {
+          msg.broadcast = 'clients';
+        }
+        this.send(msg);
+        this.log(`[Account] Sent account_status: ${accountInfo.account}`);
+      } else {
+        this.log('[Account] No account info found');
+      }
+    } catch (err) {
+      this.deps.logger.error(`[Account] Failed to get account status: ${err}`);
+    }
   }
 }
