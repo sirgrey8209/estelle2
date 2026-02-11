@@ -5,6 +5,10 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "build:mcp": "tsx scripts/build-mcp.ts",
+    "build:mcp:dev": "tsx scripts/build-mcp.ts dev",
+    "build:mcp:stage": "tsx scripts/build-mcp.ts stage",
+    "build:mcp:release": "tsx scripts/build-mcp.ts release",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -13,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@estelle/claude-beacon": "workspace:*",
     "@estelle/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "sharp": "^0.34.5",
@@ -21,6 +26,8 @@
   "devDependencies": {
     "@types/sharp": "^0.32.0",
     "@types/ws": "^8.5.13",
-    "cross-env": "^10.1.0"
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0"
   }
 }
