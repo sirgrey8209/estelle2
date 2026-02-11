@@ -19,6 +19,9 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ConfigPath = Join-Path $RepoRoot "config\environments.json"
 $CounterPath = Join-Path $RepoRoot "config\build-counter.json"
 
+# 공통 함수 로드
+. (Join-Path $PSScriptRoot "deploy-common.ps1")
+
 # 환경 설정 로드
 $EnvConfig = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $TargetConfig = $EnvConfig.$Target
@@ -28,64 +31,6 @@ $TargetDirName = if ($Target -eq 'release') { 'release' } else { 'release-stage'
 $TargetDir = Join-Path $RepoRoot $TargetDirName
 $DataDirName = if ($Target -eq 'release') { 'release-data' } else { 'stage-data' }
 $DataDir = Join-Path $RepoRoot $DataDirName
-
-# ============================================================
-# Helper Functions
-# ============================================================
-
-function Write-Utf8File {
-    param([string]$Path, [string]$Content)
-    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
-}
-
-function Remove-Junction {
-    param([string]$Path)
-    if (Test-Path $Path) {
-        $item = Get-Item $Path -Force
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-            cmd /c rmdir $Path 2>&1 | Out-Null
-            return $true
-        }
-    }
-    return $false
-}
-
-function Remove-DirectorySafe {
-    param([string]$Path)
-    if (-not (Test-Path $Path)) { return }
-
-    # junction을 먼저 찾아서 제거 (하위 포함)
-    Get-ChildItem -Path $Path -Recurse -Force -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
-        Sort-Object { $_.FullName.Length } -Descending |
-        ForEach-Object {
-            cmd /c rmdir $_.FullName 2>&1 | Out-Null
-        }
-
-    # 최상위가 junction인 경우
-    Remove-Junction -Path $Path | Out-Null
-
-    # 남은 폴더 삭제
-    if (Test-Path $Path) {
-        Remove-Item -Recurse -Force $Path
-    }
-}
-
-function Write-Phase {
-    param([string]$Phase, [string]$Message)
-    Write-Host "`n[$Phase] $Message" -ForegroundColor Yellow
-}
-
-function Write-Detail {
-    param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Gray
-}
-
-function Write-Ok {
-    param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Green
-}
 
 # ============================================================
 # Phase 0: Prerequisites
@@ -109,11 +54,7 @@ function Test-Prerequisites {
     Write-Detail "pm2: $(pm2 -v)"
 
     # fly.exe
-    $script:FlyExe = Join-Path $env:USERPROFILE ".fly\bin\fly.exe"
-    if (-not (Test-Path $script:FlyExe)) {
-        throw "Fly CLI not found at $script:FlyExe"
-    }
-    Write-Detail "fly: $script:FlyExe"
+    $script:FlyExe = Find-FlyExe
 
     # config
     if (-not (Test-Path $ConfigPath)) {
@@ -134,10 +75,19 @@ function Get-BuildVersion {
 
     $today = (Get-Date).ToString("MMdd")
 
-    # build-counter.json 읽기
+    # build-counter.json 읽기 (에러 핸들링 포함)
+    $counter = $null
     if (Test-Path $CounterPath) {
-        $counter = Get-Content $CounterPath -Raw | ConvertFrom-Json
-    } else {
+        try {
+            $raw = Get-Content $CounterPath -Raw -ErrorAction Stop
+            if ($raw -and $raw.Trim()) {
+                $counter = $raw | ConvertFrom-Json
+            }
+        } catch {
+            Write-Detail "Warning: build-counter.json corrupted, resetting."
+        }
+    }
+    if (-not $counter) {
         $counter = @{ date = ""; counter = 0 }
     }
 
@@ -276,52 +226,12 @@ function Build-TargetFolder {
     Write-Utf8File -Path $pylonPkgPath -Content $pylonPkgContent
     Write-Detail "  Fixed workspace:* -> file:../core (pylon)"
 
-    # ecosystem.config.cjs (환경별 pm2Name, relayUrl)
-    $pm2Name = $TargetConfig.pylon.pm2Name
-    $relayUrl = $TargetConfig.pylon.relayUrl
-    $deviceId = $TargetConfig.pylon.deviceId
-    $ecosystemConfig = @"
-module.exports = {
-  apps: [
-    {
-      name: '$pm2Name',
-      script: 'dist/bin.js',
-      cwd: __dirname,
-      watch: false,
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 5000,
-      env: {
-        NODE_ENV: 'production',
-        RELAY_URL: '$relayUrl',
-        DEVICE_ID: '$deviceId'
-      },
-      log_date_format: 'YYYY-MM-DD HH:mm:ss',
-      error_file: './logs/pm2-error.log',
-      out_file: './logs/pm2-out.log',
-      merge_logs: true
-    }
-  ]
-};
-"@
+    # ecosystem.config.cjs (공통 함수 사용)
+    $ecosystemConfig = New-EcosystemConfig -PylonConfig $TargetConfig.pylon -BeaconConfig $TargetConfig.beacon -EnvId $TargetConfig.envId
     Write-Utf8File -Path (Join-Path $PylonDst "ecosystem.config.cjs") -Content $ecosystemConfig
 
-    # Data/Uploads junction -> data dir
-    Write-Detail "Creating data junction -> $DataDirName/data..."
-    $dataTarget = Join-Path $DataDir "data"
-    $dataLink = Join-Path $PylonDst "data"
-    cmd /c mklink /J $dataLink $dataTarget 2>&1 | Out-Null
-    if (-not (Test-Path $dataLink)) {
-        throw "Failed to create data junction: $dataLink -> $dataTarget"
-    }
-
-    Write-Detail "Creating uploads junction -> $DataDirName/uploads..."
-    $uploadsTarget = Join-Path $DataDir "uploads"
-    $uploadsLink = Join-Path $PylonDst "uploads"
-    cmd /c mklink /J $uploadsLink $uploadsTarget 2>&1 | Out-Null
-    if (-not (Test-Path $uploadsLink)) {
-        throw "Failed to create uploads junction: $uploadsLink -> $uploadsTarget"
-    }
+    # Data/Uploads junction
+    New-DataJunctions -PylonDir $PylonDst -DataDir $DataDir
 
     # --- Relay ---
     Write-Detail "Copying relay package..."
@@ -349,67 +259,9 @@ module.exports = {
         Write-Host "  Warning: Client public folder not found" -ForegroundColor Yellow
     }
 
-    # Dockerfile
-    $dockerfile = @'
-FROM node:20-alpine
-
-WORKDIR /app
-
-# Core
-COPY core/package.json ./core/
-COPY core/dist ./core/dist
-
-# Relay
-COPY relay/package.json ./relay/
-COPY relay/dist ./relay/dist
-COPY relay/public ./relay/public
-
-# Dependencies
-WORKDIR /app/core
-RUN npm install --omit=dev
-
-WORKDIR /app/relay
-RUN npm install --omit=dev
-
-ENV STATIC_DIR=/app/relay/public
-EXPOSE 8080
-
-CMD ["node", "dist/bin.js"]
-'@
-    Write-Utf8File -Path (Join-Path $RelayDst "Dockerfile") -Content $dockerfile
-
-    # fly.toml (환경별 flyApp)
-    $flyApp = $TargetConfig.relay.flyApp
-    $flyToml = @"
-app = "$flyApp"
-primary_region = "nrt"
-
-[build]
-  dockerfile = "Dockerfile"
-
-[env]
-  STATIC_DIR = "/app/relay/public"
-
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = true
-  auto_start_machines = true
-  min_machines_running = 0
-
-[[services]]
-  protocol = "tcp"
-  internal_port = 8080
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-"@
-    Write-Utf8File -Path (Join-Path $RelayDst "fly.toml") -Content $flyToml
+    # Dockerfile & fly.toml (공통 함수 사용)
+    Write-Utf8File -Path (Join-Path $RelayDst "Dockerfile") -Content (New-Dockerfile)
+    Write-Utf8File -Path (Join-Path $RelayDst "fly.toml") -Content (New-FlyToml -FlyApp $TargetConfig.relay.flyApp)
 
     Write-Ok "Target folder built: $TargetDirName/"
 }
@@ -444,99 +296,14 @@ function Test-TargetIntegrity {
     }
 
     # Verify junctions
-    $dataLink = Join-Path $TargetDir "pylon\data"
-    $uploadsLink = Join-Path $TargetDir "pylon\uploads"
-
-    $dataItem = Get-Item $dataLink -Force
-    if (-not ($dataItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        Write-Host "  INVALID: pylon/data is not a junction" -ForegroundColor Red
-        $allOk = $false
-    } else {
-        Write-Detail "pylon/data -> junction OK"
-    }
-
-    $uploadsItem = Get-Item $uploadsLink -Force
-    if (-not ($uploadsItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        Write-Host "  INVALID: pylon/uploads is not a junction" -ForegroundColor Red
-        $allOk = $false
-    } else {
-        Write-Detail "pylon/uploads -> junction OK"
-    }
+    $junctionOk = Test-DataJunctions -PylonDir (Join-Path $TargetDir "pylon")
+    if (-not $junctionOk) { $allOk = $false }
 
     if (-not $allOk) {
         throw "Target integrity check failed."
     }
 
     Write-Ok "Integrity OK"
-}
-
-# ============================================================
-# Phase 4: Deploy Relay to Fly.io
-# ============================================================
-
-function Deploy-Relay {
-    Write-Phase "Phase 4" "Deploying Relay to Fly.io ($($TargetConfig.relay.flyApp))..."
-
-    $relayDir = Join-Path $TargetDir "relay"
-    $flyToml = Join-Path $relayDir "fly.toml"
-    $dockerfile = Join-Path $relayDir "Dockerfile"
-
-    Push-Location $TargetDir
-    try {
-        # fly.exe는 config 파일의 디렉토리를 빌드 컨텍스트로 사용하므로 상대경로 필요
-        $flyOutput = & $script:FlyExe deploy --config "relay/fly.toml" --dockerfile "relay/Dockerfile" 2>&1
-        $flyOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
-        if ($LASTEXITCODE -ne 0) {
-            throw "Fly.io deploy failed (exit code: $LASTEXITCODE)"
-        }
-        Write-Ok "Relay deployed: $($TargetConfig.relay.url)"
-    } finally {
-        Pop-Location
-    }
-}
-
-# ============================================================
-# Phase 5: PM2 Restart
-# ============================================================
-
-function Restart-Pylon {
-    Write-Phase "Phase 5" "Restarting PM2 pylon ($($TargetConfig.pylon.pm2Name))..."
-
-    $pm2Name = $TargetConfig.pylon.pm2Name
-    $pylonConfig = Join-Path $TargetDir "pylon\ecosystem.config.cjs"
-    $pylonCwd = Join-Path $TargetDir "pylon"
-
-    # 해당 환경의 pylon만 재시작 (다른 환경에 영향 없음)
-    try { pm2 delete $pm2Name 2>&1 | Out-Null } catch { }
-
-    Write-Detail "Starting $pm2Name..."
-    & pm2 start $pylonConfig --cwd $pylonCwd
-    if ($LASTEXITCODE -ne 0) {
-        throw "PM2 start failed (exit code: $LASTEXITCODE)"
-    }
-    try { pm2 save 2>&1 | Out-Null } catch { }
-
-    # Health check: wait for Relay connection (max 15 seconds)
-    Write-Detail "Waiting for Relay connection (max 15s)..."
-    $connected = $false
-    for ($i = 0; $i -lt 5; $i++) {
-        Start-Sleep -Seconds 3
-        $pylonLog = pm2 logs $pm2Name --lines 30 --nostream 2>&1 | Out-String
-        if ($pylonLog -match "Connected to Relay") {
-            $connected = $true
-            break
-        }
-        Write-Detail "  Attempt $($i + 1)/5..."
-    }
-
-    if ($connected) {
-        Write-Ok "$pm2Name connected to Relay"
-    } else {
-        Write-Host "  Warning: $pm2Name did not confirm Relay connection within 15s" -ForegroundColor Yellow
-        Write-Host "  Check: pm2 logs $pm2Name" -ForegroundColor Gray
-    }
-
-    pm2 status
 }
 
 # ============================================================
@@ -559,6 +326,11 @@ try {
     # Phase 1: TypeScript build
     Build-TypeScript -Version $version
 
+    # PM2 중지 (Phase 2에서 타겟 폴더를 삭제하므로 먼저 중지해야 함)
+    $pm2Name = $TargetConfig.pylon.pm2Name
+    Write-Detail "Stopping PM2 $pm2Name before target folder cleanup..."
+    Stop-PylonPM2 -PM2Name $pm2Name
+
     # Phase 2: Build target folder
     Build-TargetFolder
 
@@ -566,10 +338,13 @@ try {
     Test-TargetIntegrity
 
     # Phase 4: Deploy Relay to Fly.io
-    Deploy-Relay
+    Write-Phase "Phase 4" "Deploying Relay to Fly.io ($($TargetConfig.relay.flyApp))..."
+    Deploy-FlyRelay -FlyExe $script:FlyExe -WorkingDir $TargetDir -FlyApp $TargetConfig.relay.flyApp
+    Write-Ok "Relay deployed: $($TargetConfig.relay.url)"
 
     # Phase 5: PM2 restart (해당 환경만)
-    Restart-Pylon
+    Write-Phase "Phase 5" "Restarting PM2 pylon ($pm2Name)..."
+    Start-PylonPM2 -PM2Name $pm2Name -PylonDir (Join-Path $TargetDir "pylon")
 
     # Done
     $elapsed = ((Get-Date) - $startTime).TotalSeconds
@@ -580,7 +355,7 @@ try {
   Folder:   $TargetDirName/
   Data:     $DataDirName/
   Relay:    $($TargetConfig.relay.url)
-  PM2:      $($TargetConfig.pylon.pm2Name)
+  PM2:      $pm2Name
 
 "@ -ForegroundColor Gray
 

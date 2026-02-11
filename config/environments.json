@@ -1,22 +1,42 @@
 {
+  "beacon": {
+    "port": 9875,
+    "pm2Name": "estelle-beacon"
+  },
   "dev": {
     "name": "Development",
+    "envId": 2,
     "relay": {
       "port": 3000,
-      "url": "ws://localhost:3000"
+      "url": "ws://localhost:3000",
+      "pm2Name": "estelle-relay-dev"
     },
     "pylon": {
       "deviceId": "1",
-      "relayUrl": "ws://localhost:3000"
+      "relayUrl": "ws://localhost:3000",
+      "pm2Name": "estelle-pylon-dev",
+      "configDir": "~/.claude-dev",
+      "credentialsBackupDir": "~/.claude-credentials/dev",
+      "mcpPort": 9878,
+      "dataDir": "./dev-data"
+    },
+    "beacon": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 9875,
+      "env": "dev",
+      "reconnect": true,
+      "reconnectInterval": 3000
     },
     "client": {
       "port": 5173,
-      "relayUrl": "ws://localhost:3000",
+      "pm2Name": "estelle-client-dev",
       "title": "Estelle (dev)"
     }
   },
   "stage": {
     "name": "Staging",
+    "envId": 1,
     "relay": {
       "port": 8080,
       "url": "wss://estelle-relay-v2-stage.fly.dev",
@@ -25,15 +45,26 @@
     "pylon": {
       "deviceId": "1",
       "relayUrl": "wss://estelle-relay-v2-stage.fly.dev",
-      "pm2Name": "estelle-pylon-stage"
+      "pm2Name": "estelle-pylon-stage",
+      "configDir": "~/.claude-stage",
+      "credentialsBackupDir": "~/.claude-credentials/stage",
+      "mcpPort": 9877
+    },
+    "beacon": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 9875,
+      "env": "stage",
+      "reconnect": true,
+      "reconnectInterval": 3000
     },
     "client": {
-      "relayUrl": "wss://estelle-relay-v2-stage.fly.dev",
       "title": "Estelle"
     }
   },
   "release": {
     "name": "Production",
+    "envId": 0,
     "relay": {
       "port": 8080,
       "url": "wss://estelle-relay-v2.fly.dev",
@@ -42,11 +73,12 @@
     "pylon": {
       "deviceId": "1",
       "relayUrl": "wss://estelle-relay-v2.fly.dev",
-      "pm2Name": "estelle-pylon"
+      "pm2Name": "estelle-pylon",
+      "configDir": "~/.claude-release",
+      "credentialsBackupDir": "~/.claude-credentials/release",
+      "mcpPort": 9876
     },
     "client": {
-      "webPort": 8080,
-      "relayUrl": "wss://estelle-relay-v2.fly.dev",
       "title": "Estelle"
     }
   }

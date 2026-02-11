@@ -50,16 +50,28 @@ Claude Code를 여러 PC와 모바일에서 원격 제어하는 시스템 (estel
 
 ```
 packages/
-├── core/         # 공유 타입, 메시지 스키마
-├── relay/        # Relay 서버 (순수 라우터 + 정적 파일 서빙)
-├── pylon/        # Pylon 서비스 (상태 관리, Claude SDK)
-└── client/       # React 웹 클라이언트 (Vite + shadcn/ui)
+├── core/           # 공유 타입, 메시지 스키마
+├── relay/          # Relay 서버 (순수 라우터 + 정적 파일 서빙)
+├── pylon/          # Pylon 서비스 (상태 관리, Claude SDK)
+├── claude-beacon/  # ClaudeBeacon (단일 SDK로 다중 Pylon 서비스)
+└── client/         # React 웹 클라이언트 (Vite + shadcn/ui)
 ```
 
 - `@estelle/core`: 다른 패키지에서 공유하는 타입 (Pylon ↔ App 타입 공유)
 - `@estelle/relay`: 상태 없음, 순수 함수로 구성, 정적 파일 서빙 포함
 - `@estelle/pylon`: PylonState 순수 데이터 클래스 중심
+- `@estelle/claude-beacon`: 단일 Claude SDK 인스턴스로 여러 Pylon 서비스
 - `packages/client`: Vite 웹 클라이언트 (TypeScript, Zustand, Tailwind, shadcn/ui)
+
+### 포트 할당
+
+| 포트 | 용도 | 환경 |
+|------|------|------|
+| 9875 | ClaudeBeacon TCP | 공용 |
+| 9876 | MCP TCP 서버 | release |
+| 9877 | MCP TCP 서버 | stage |
+| 9878 | MCP TCP 서버 | dev |
+| 9879 | MCP TCP 서버 | test (수동 테스트용) |
 
 ## TDD 개발 원칙
 
@@ -170,11 +182,17 @@ function routeMessage(msg, connections): RouteResult { ... }
 
 ```json
 {
-  "dev": { "relay": { "url": "ws://localhost:3000" }, "client": { "title": "Estelle (dev)" } },
+  "dev": { "relay": { "url": "ws://localhost:3000" }, "client": { "title": "Estelle (dev)", "port": 5173 } },
   "stage": { "relay": { "url": "wss://estelle-relay-v2-stage.fly.dev", "flyApp": "estelle-relay-v2-stage" }, "pylon": { "pm2Name": "estelle-pylon-stage" } },
   "release": { "relay": { "url": "wss://estelle-relay-v2.fly.dev", "flyApp": "estelle-relay-v2" }, "pylon": { "pm2Name": "estelle-pylon" } }
 }
 ```
+
+> **Client Relay URL**: 클라이언트는 빌드 시 환경변수가 아닌 **런타임에 `window.location`으로 relay URL을 결정**한다.
+> - `localhost` → `ws://localhost:3000` (dev)
+> - 그 외 → `wss://${window.location.host}` (stage/release 자동 구분)
+>
+> 클라이언트는 항상 relay에서 서빙되므로 별도 URL 설정이 불필요하다.
 
 ## 빌드 환경 (Dev → Stage → Release)
 
@@ -194,10 +212,26 @@ function routeMessage(msg, connections): RouteResult { ... }
 - dev 환경: `(dev)` (빌드 번호 없음)
 - 카운터: `config/build-counter.json`에 저장, 날짜 바뀌면 리셋
 
+### Beacon 서버 (공용)
+
+ClaudeBeacon은 **dev/stage 공용**으로 PM2로 별도 관리된다. 단일 Claude SDK 인스턴스로 여러 Pylon을 서비스한다.
+
+```bash
+pnpm beacon          # 시작 (PM2)
+pnpm beacon:stop     # 종료
+pnpm beacon:status   # 상태 확인
+pnpm beacon:restart  # 재시작
+pnpm beacon:logs     # 로그 보기
+```
+
+> **아키텍처**: Pylon → Beacon(9875) → Claude SDK. MCP 도구는 Beacon의 ToolContextMap을 통해 toolUseId → entityId 매핑을 조회한다.
+>
+> **현재 상태**: release는 Beacon 미사용 (패치 미적용)
+
 ### Dev 빌드 (개발 서버)
 
 ```bash
-pnpm dev          # 시작 (Relay + Pylon + Vite)
+pnpm dev          # 시작 (Relay + Pylon + Vite) - Beacon은 별도
 pnpm dev:stop     # 종료
 pnpm dev:status   # 상태 확인
 pnpm dev:restart  # 재시작
@@ -209,28 +243,41 @@ pnpm dev:restart  # 재시작
 # Stage 배포 (release pylon에 영향 없음 — 안전)
 .\scripts\build-deploy.ps1 -Target stage
 
-# Release 배포
+# Release 배포 (소스에서 직접 빌드)
 .\scripts\build-deploy.ps1 -Target release
+
+# Stage → Release 프로모트 (클라이언트 재빌드 없이 stage 빌드를 release로 승격)
+.\scripts\promote-stage.ps1
 ```
 
-> **주의: Pylon(Claude) 세션에서 release 빌드 실행 시**
+> **Promote 시 클라이언트 재빌드 불필요**: relay URL이 런타임 결정이므로, stage 빌드 번들을 그대로 release에 사용 가능.
+
+> **주의: Pylon(Claude) 세션에서 release 빌드/프로모트 실행 시**
 > PM2 재시작이 Pylon을 종료하면 Claude SDK 세션이 끊긴다.
 > 반드시 **detached 프로세스**로 실행할 것:
 > ```powershell
 > Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','.\scripts\build-deploy.ps1','-Target','release' -WindowStyle Hidden
+> Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','.\scripts\promote-stage.ps1' -WindowStyle Hidden
 > ```
 > **stage 빌드는 안전** — release pylon에 영향 없음.
 
 **MCP deploy 도구**: Claude가 대화 중 직접 배포 가능 (detached로 실행됨)
 
-**빌드 파이프라인:**
+**빌드 파이프라인** (`build-deploy.ps1`):
 1. Phase 0: 사전 검증 (pnpm, pm2, fly.exe, config)
 2. Version: 빌드 버전 생성 (build-counter.json)
-3. Phase 1: TypeScript 빌드 (VITE_BUILD_ENV, VITE_BUILD_VERSION 주입)
+3. Phase 1: TypeScript 빌드 (VITE_BUILD_ENV, VITE_BUILD_VERSION 주입, relay URL은 런타임 결정)
 4. Phase 2: 타겟 폴더 구축 (core, pylon, relay + junction)
 5. Phase 3: 무결성 검증
-6. Phase 4: Fly.io Relay 배포
+6. Phase 4: Fly.io Relay 배포 (Start-Process 방식)
 7. Phase 5: PM2 재시작 + 헬스체크
+
+**프로모트 파이프라인** (`promote-stage.ps1`):
+1. Phase 0: 사전 검증 (stage 빌드 존재 확인)
+2. Phase 1: stage 빌드를 release 폴더로 복사
+3. Phase 2: ecosystem.config.cjs 재생성 (release 환경변수)
+4. Phase 3: Fly.io Relay 배포
+5. Phase 4: PM2 재시작 + 헬스체크
 
 ### 데이터 관리
 
@@ -250,6 +297,27 @@ pnpm dev:restart  # 재시작
 .\scripts\sync-data.ps1 -From stage -To dev       # stage → dev
 .\scripts\sync-data.ps1 -Force                    # 확인 없이 실행
 ```
+
+### 배포 스크립트 구조
+
+```
+scripts/
+├── deploy-common.ps1      ← 공통 함수 모듈 (dot-source로 로드)
+├── build-deploy.ps1       ← 소스에서 빌드 + 배포
+├── promote-stage.ps1      ← stage → release 프로모트
+├── dev-server.js          ← dev 서버 (Relay + Pylon + Vite)
+├── sync-data.ps1          ← 환경 간 데이터 동기화
+└── ...
+```
+
+**`deploy-common.ps1` 공통 함수:**
+- `Write-Utf8File` — UTF-8 (BOM 없음) 파일 쓰기
+- `Remove-Junction`, `Remove-DirectorySafe` — junction 안전 제거
+- `New-EcosystemConfig` — PM2 ecosystem.config.cjs 생성 (전체 환경변수 포함)
+- `New-Dockerfile`, `New-FlyToml` — Fly.io 설정 파일 생성
+- `Deploy-FlyRelay` — Fly.io 배포 (Start-Process 방식)
+- `Start-PylonPM2`, `Stop-PylonPM2` — PM2 라이프사이클 + 헬스체크
+- `New-DataJunctions`, `Test-DataJunctions` — 데이터 junction 생성/검증
 
 ### 폴더 구조
 

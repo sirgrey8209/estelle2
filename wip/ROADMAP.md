@@ -102,9 +102,42 @@
 |----------|------|----------|---------|
 | Relay v2 | ✅ 동작 | 3000 | Fly.io prod / stage |
 | Pylon v2 | ✅ 동작 | - | PM2 (estelle-pylon / estelle-pylon-stage) |
+| ClaudeBeacon | ✅ 동작 | 9875 | PM2 (claude-beacon) |
 | Client (Vite) | ✅ 동작 | 5173 | Relay 내장 |
 
 환경 설정: `config/environments.json`
+
+### ClaudeBeacon 아키텍처 (2026-02-10 도입)
+
+단일 ClaudeBeacon이 Claude SDK를 실행하고, 다중 Pylon(dev/stage/release)에 서비스.
+
+```
+                    ┌─────────────────────────────┐
+                    │      ClaudeBeacon           │
+                    │  - Claude SDK 단일 실행      │
+                    │  - ToolContextMap           │
+                    │  - TCP Server (:9875)       │
+                    └─────────────────────────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            ▼              ▼              ▼
+       Dev Pylon     Stage Pylon    Release Pylon
+```
+
+**핵심 변경사항**:
+- Pylon의 `ToolContextMap`, `McpTcpServer` 삭제 → ClaudeBeacon으로 이전
+- Pylon은 `ClaudeBeaconAdapter`를 통해 SDK 호출
+- MCP 도구는 ClaudeBeacon(:9875)에서 toolUseId 조회
+
+**포트 할당**:
+| 포트 | 용도 |
+|------|------|
+| 9875 | ClaudeBeacon (Pylon 연결 + lookup) |
+| 9876 | MCP TCP (release) |
+| 9877 | MCP TCP (stage) |
+| 9878 | MCP TCP (dev) |
+
+상세: `log/2026-02-11-claude-beacon-architecture.md`
 
 ### v1 → v2 마이그레이션 완료 (2026-02-02)
 
@@ -135,10 +168,37 @@
 - [x] GitHub Release 업로드 ✅
 - [ ] v1 제거
 
+**Linked Document (진행 중)**
+- [x] Store 구현 (linkDocument, unlinkDocument, getLinkedDocuments)
+- [x] Core 타입 추가 (Conversation.linkedDocuments)
+- [ ] 메시지 타입 추가 — 현재는 workspace_sync로 동기화, 향후 경량화 필요
+- [x] Client UI (칩 표시 + 클릭 시 뷰어)
+- [ ] Claude 주입 (세션 시작 시 문서 경로 전달)
+- [ ] 변경 동기화 (Claude 수정 감지 → Client)
+
 ---
 
 ## 작업 로그
 
+- [260211 12:55] ClaudeBeacon + BeaconServer 통합 (BeaconServer 제거, lookup 액션 ClaudeBeacon에 통합, 포트 9877 제거 → 9875 단일 포트)
+- [260211 12:30] ClaudeBeaconAdapter 자동 재연결 로직 추가 (reconnect, reconnectInterval, maxReconnectAttempts 옵션, onReconnect/onReconnectFailed 콜백, 88개 테스트 통과)
+- [260211 21:00] send_file MCP 마이그레이션 (toolComplete 훅 → PylonClient 기반, PylonMcpServer send_file 액션, 22개 테스트 추가, 748개 전체 통과)
+- [260210 20:17] entityId 재사용 시 대화 캐시 정리 버그 수정 (CONVERSATION_CREATE_RESULT 핸들러 추가, WORKSPACE_LIST_RESULT 삭제 감지, TDD 8개 테스트)
+- [260210 21:10] 재연결 시 상태 동기화 버그 수정 (CONVERSATION_STATUS에서 convState 없어도 상태 설정, history_result에 currentStatus 추가)
+- [260211 18:20] conversation_status 버그 수정 (대화 선택 시 unread 해제, status: 'unread' → status 유지 + unread: true 분리, 클라이언트 방어 로직 추가)
+- [260211 17:25] Pylon ToolContextMap/McpTcpServer 삭제 (ClaudeBeacon으로 이전 완료, 633개 테스트 통과)
+- [260210 21:40] textComplete 중복 emit 버그 수정 (handleAssistantMessage에서 text 블록 합쳐서 단일 emit, TDD 7개 테스트)
+- [260210 17:15] PendingQuestion sessionId 버그 수정 (다중 대화 질문 응답이 잘못된 채널로 라우팅되던 문제 해결, TDD 6개 테스트)
+- [260210 17:00] Pylon-Beacon 연동 완료 (ClaudeBeaconAdapter 인터페이스 호환, bin.ts 환경변수 분기, 통합 테스트 성공)
+- [260210 16:15] ClaudeBeacon PM2 등록 (bin.ts 진입점, ecosystem.config.cjs, 포트 9875, pm2 save 완료)
+- [260210 15:30] ClaudeBeaconAdapter TDD 완료 (beacon-adapter.ts + beacon.ts 구현, 101개 테스트 통과 + 1개 스킵)
+- [260210 12:35] ClaudeBeacon 패키지 구현 완료 (TDD, ToolContextMap + BeaconServer + MockSDK, 51개 테스트, 전체 1,682개 테스트 통과)
+- [260209 07:20] ChatPanel 가로 스크롤 버그 수정 (MessageBubble에 break-words 클래스 추가)
+- [260209 06:45] useCurrentConversationState hook 추가 (Zustand selector 구독 문제 해결, 5개 컴포넌트 마이그레이션, 14개 테스트)
+- [260208 23:10] LinkedDocument Store 구현 완료 (linkDocument/unlinkDocument/getLinkedDocuments, 26개 테스트, TDD)
+- [260208 21:50] Client-Driven Sync 구현 완료 (syncStore + syncOrchestrator 신설, isSynced/desksLoaded/isFirstSync 레거시 제거, 292+554 테스트 통과)
+- [260208 15:10] Client EntityId 대화선택 버그 수정 (workspaceStore 4개 메서드 entityId 전환, 구형 UUID 데이터 삭제, 구형 Pylon 프로세스 정리)
+- [260208 09:10] workspaceStore entityId 매칭 마이그레이션 (selectConversation/updateConversationStatus/updatePermissionMode/getConversation → entityId 기반, 1483 테스트 통과)
 - [260207 22:10] EntityId 마이그레이션 완료 (Pylon 패키지: UUID→숫자 비트패킹, 142개 테스트 통과)
 - [260207 14:30] Dev→Stage→Release 배포 시스템 구축 (3환경 분리, 빌드 버저닝, MCP deploy, Fly.io stage 앱 생성, 양방향 sync-data)
 - [260207 09:35] Phase 5 완료: conversation_status에 workspaceId 추가 (Pylon 2곳 수정, 테스트 2개 추가)
@@ -157,6 +217,8 @@
 - [260204 11:15] 환경 설정 중앙화 (config/environments.json), 웹 타이틀 (dev) 표시, 커스텀 스크롤바 컴포넌트
 - [260203 23:55] APK 빌드 성공 + GitHub Release v2.0.0 배포
 - [260203 22:xx] 릴리즈 배포 시스템 구축 (Relay→Fly.io, Pylon/Client→PM2)
+- [260208 08:30] Client EntityId 마이그레이션 완료 (conversationId:string → entityId:number, 929+ 테스트 통과)
+- [260208 08:30] mock-e2e.test.ts 임시 삭제 (fake timer + queueMicrotask hang 이슈, 정리 필요)
 - [260203 16:20] AutoResizeTextInput 구현 및 InputBar 통합 (TDD, 24개 테스트)
 - [260203 10:50] Material Design 3 마이그레이션 완료 (NativeWind → React Native Paper, 40+개 컴포넌트)
 - [260203 09:20] Jest 컴포넌트 테스트 환경 구축 (61개 테스트 추가)
@@ -170,4 +232,4 @@
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-07*
+*갱신일: 2026-02-11*
