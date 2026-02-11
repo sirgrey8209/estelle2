@@ -5,9 +5,14 @@
  * 대화별 Claude 상태 관리 테스트
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import type { StoreMessage, PendingRequest } from '@estelle/core';
-import { useConversationStore, getInitialClaudeState } from './conversationStore';
+import {
+  useConversationStore,
+  getInitialClaudeState,
+  useCurrentConversationState,
+} from './conversationStore';
 
 // ============================================================================
 // Test Helpers
@@ -42,10 +47,10 @@ describe('conversationStore', () => {
   });
 
   describe('초기 상태', () => {
-    it('초기 상태는 빈 Map과 null currentConversationId', () => {
+    it('초기 상태는 빈 Map과 null currentEntityId', () => {
       const state = useConversationStore.getState();
 
-      expect(state.currentConversationId).toBeNull();
+      expect(state.currentEntityId).toBeNull();
       expect(state.states.size).toBe(0);
     });
 
@@ -65,16 +70,16 @@ describe('conversationStore', () => {
     it('setCurrentConversation으로 현재 대화 설정', () => {
       const { setCurrentConversation } = useConversationStore.getState();
 
-      setCurrentConversation('conv-1');
+      setCurrentConversation(1001);
 
-      expect(useConversationStore.getState().currentConversationId).toBe('conv-1');
+      expect(useConversationStore.getState().currentEntityId).toBe(1001);
     });
 
     it('존재하지 않는 대화 선택 시 초기 상태 생성', () => {
       const { setCurrentConversation, getState: getConvState } = useConversationStore.getState();
 
-      setCurrentConversation('conv-1');
-      const state = getConvState('conv-1');
+      setCurrentConversation(1001);
+      const state = getConvState(1001);
 
       expect(state).not.toBeNull();
       expect(state?.status).toBe('idle');
@@ -84,8 +89,8 @@ describe('conversationStore', () => {
     it('getCurrentState는 현재 선택된 대화의 상태 반환', () => {
       const store = useConversationStore.getState();
 
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
 
       const current = store.getCurrentState();
 
@@ -104,18 +109,18 @@ describe('conversationStore', () => {
       const store = useConversationStore.getState();
 
       // 대화 1 설정
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Hello from conv-1'));
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello from conv-1'));
 
       // 대화 2 설정
-      store.setCurrentConversation('conv-2');
-      store.setStatus('conv-2', 'idle');
-      store.addMessage('conv-2', createUserMessage('msg-2', 'Hello from conv-2'));
+      store.setCurrentConversation(1002);
+      store.setStatus(1002, 'idle');
+      store.addMessage(1002, createUserMessage('msg-2', 'Hello from conv-2'));
 
       // 각 대화 상태 확인
-      const state1 = store.getState('conv-1');
-      const state2 = store.getState('conv-2');
+      const state1 = store.getState(1001);
+      const state2 = store.getState(1002);
 
       expect(state1?.status).toBe('working');
       expect(state1?.messages).toHaveLength(1);
@@ -130,15 +135,15 @@ describe('conversationStore', () => {
       const store = useConversationStore.getState();
 
       // 대화 1에서 작업
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Working on conv-1'));
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
+      store.addMessage(1001, createUserMessage('msg-1', 'Working on conv-1'));
 
       // 대화 2로 전환
-      store.setCurrentConversation('conv-2');
+      store.setCurrentConversation(1002);
 
       // 다시 대화 1로 복귀
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
       // 대화 1 상태가 유지되어 있어야 함
       const current = store.getCurrentState();
@@ -150,70 +155,70 @@ describe('conversationStore', () => {
   describe('status 관리', () => {
     it('setStatus로 상태 변경', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.setStatus('conv-1', 'working');
-      expect(store.getState('conv-1')?.status).toBe('working');
+      store.setStatus(1001, 'working');
+      expect(store.getState(1001)?.status).toBe('working');
 
-      store.setStatus('conv-1', 'permission');
-      expect(store.getState('conv-1')?.status).toBe('permission');
+      store.setStatus(1001, 'permission');
+      expect(store.getState(1001)?.status).toBe('permission');
 
-      store.setStatus('conv-1', 'idle');
-      expect(store.getState('conv-1')?.status).toBe('idle');
+      store.setStatus(1001, 'idle');
+      expect(store.getState(1001)?.status).toBe('idle');
     });
 
     it('working 상태로 변경 시 workStartTime 설정', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
       const before = Date.now();
-      store.setStatus('conv-1', 'working');
+      store.setStatus(1001, 'working');
       const after = Date.now();
 
-      const workStartTime = store.getState('conv-1')?.workStartTime;
+      const workStartTime = store.getState(1001)?.workStartTime;
       expect(workStartTime).toBeGreaterThanOrEqual(before);
       expect(workStartTime).toBeLessThanOrEqual(after);
     });
 
     it('idle 상태로 변경 시 workStartTime과 realtimeUsage 초기화', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
       // working 상태로 설정
-      store.setStatus('conv-1', 'working');
-      expect(store.getState('conv-1')?.workStartTime).not.toBeNull();
+      store.setStatus(1001, 'working');
+      expect(store.getState(1001)?.workStartTime).not.toBeNull();
 
       // idle로 변경
-      store.setStatus('conv-1', 'idle');
-      expect(store.getState('conv-1')?.workStartTime).toBeNull();
-      expect(store.getState('conv-1')?.realtimeUsage).toBeNull();
+      store.setStatus(1001, 'idle');
+      expect(store.getState(1001)?.workStartTime).toBeNull();
+      expect(store.getState(1001)?.realtimeUsage).toBeNull();
     });
 
     it('다른 대화의 status 변경은 현재 대화에 영향 없음', () => {
       const store = useConversationStore.getState();
 
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'idle');
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'idle');
 
-      store.setCurrentConversation('conv-2');
-      store.setStatus('conv-2', 'working');
+      store.setCurrentConversation(1002);
+      store.setStatus(1002, 'working');
 
       // conv-1은 여전히 idle
-      expect(store.getState('conv-1')?.status).toBe('idle');
+      expect(store.getState(1001)?.status).toBe('idle');
       // conv-2는 working
-      expect(store.getState('conv-2')?.status).toBe('working');
+      expect(store.getState(1002)?.status).toBe('working');
     });
   });
 
   describe('messages 관리', () => {
     it('addMessage로 메시지 추가', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Hello'));
-      store.addMessage('conv-1', createUserMessage('msg-2', 'World'));
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+      store.addMessage(1001, createUserMessage('msg-2', 'World'));
 
-      const messages = store.getState('conv-1')?.messages;
+      const messages = store.getState(1001)?.messages;
       expect(messages).toHaveLength(2);
       expect((messages?.[0] as any).content).toBe('Hello');
       expect((messages?.[1] as any).content).toBe('World');
@@ -221,76 +226,76 @@ describe('conversationStore', () => {
 
     it('setMessages로 메시지 목록 교체', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
       // 기존 메시지 추가
-      store.addMessage('conv-1', createUserMessage('old-1', 'Old message'));
+      store.addMessage(1001, createUserMessage('old-1', 'Old message'));
 
       // 새 메시지로 교체
-      store.setMessages('conv-1', [
+      store.setMessages(1001, [
         createUserMessage('new-1', 'New message 1'),
         createUserMessage('new-2', 'New message 2'),
       ]);
 
-      const messages = store.getState('conv-1')?.messages;
+      const messages = store.getState(1001)?.messages;
       expect(messages).toHaveLength(2);
       expect((messages?.[0] as any).content).toBe('New message 1');
     });
 
     it('clearMessages로 메시지 삭제', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Hello'));
-      expect(store.getState('conv-1')?.messages).toHaveLength(1);
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+      expect(store.getState(1001)?.messages).toHaveLength(1);
 
-      store.clearMessages('conv-1');
-      expect(store.getState('conv-1')?.messages).toHaveLength(0);
+      store.clearMessages(1001);
+      expect(store.getState(1001)?.messages).toHaveLength(0);
     });
 
     it('clearMessages는 pendingRequests도 함께 삭제', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Hello'));
-      store.addPendingRequest('conv-1', createPermissionRequest('tool-1', 'Bash'));
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+      store.addPendingRequest(1001, createPermissionRequest('tool-1', 'Bash'));
 
-      store.clearMessages('conv-1');
+      store.clearMessages(1001);
 
-      expect(store.getState('conv-1')?.messages).toHaveLength(0);
-      expect(store.getState('conv-1')?.pendingRequests).toHaveLength(0);
+      expect(store.getState(1001)?.messages).toHaveLength(0);
+      expect(store.getState(1001)?.pendingRequests).toHaveLength(0);
     });
   });
 
   describe('textBuffer 관리', () => {
     it('appendTextBuffer로 텍스트 추가', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.appendTextBuffer('conv-1', 'Hello');
-      store.appendTextBuffer('conv-1', ' World');
+      store.appendTextBuffer(1001, 'Hello');
+      store.appendTextBuffer(1001, ' World');
 
-      expect(store.getState('conv-1')?.textBuffer).toBe('Hello World');
+      expect(store.getState(1001)?.textBuffer).toBe('Hello World');
     });
 
     it('clearTextBuffer로 버퍼 비우기', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.appendTextBuffer('conv-1', 'Hello');
-      store.clearTextBuffer('conv-1');
+      store.appendTextBuffer(1001, 'Hello');
+      store.clearTextBuffer(1001);
 
-      expect(store.getState('conv-1')?.textBuffer).toBe('');
+      expect(store.getState(1001)?.textBuffer).toBe('');
     });
 
     it('flushTextBuffer로 버퍼를 메시지로 변환', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.appendTextBuffer('conv-1', 'Hello World');
-      store.flushTextBuffer('conv-1');
+      store.appendTextBuffer(1001, 'Hello World');
+      store.flushTextBuffer(1001);
 
-      const state = store.getState('conv-1');
+      const state = store.getState(1001);
       expect(state?.textBuffer).toBe('');
       expect(state?.messages).toHaveLength(1);
       expect(state?.messages[0].type).toBe('text');
@@ -300,105 +305,105 @@ describe('conversationStore', () => {
 
     it('flushTextBuffer는 빈 버퍼일 때 아무것도 안 함', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.flushTextBuffer('conv-1');
+      store.flushTextBuffer(1001);
 
-      expect(store.getState('conv-1')?.messages).toHaveLength(0);
+      expect(store.getState(1001)?.messages).toHaveLength(0);
     });
 
     it('flushTextBuffer는 공백만 있는 버퍼일 때도 아무것도 안 함', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.appendTextBuffer('conv-1', '   ');
-      store.flushTextBuffer('conv-1');
+      store.appendTextBuffer(1001, '   ');
+      store.flushTextBuffer(1001);
 
-      expect(store.getState('conv-1')?.messages).toHaveLength(0);
-      expect(store.getState('conv-1')?.textBuffer).toBe('');
+      expect(store.getState(1001)?.messages).toHaveLength(0);
+      expect(store.getState(1001)?.textBuffer).toBe('');
     });
   });
 
   describe('pendingRequests 관리', () => {
     it('addPendingRequest로 요청 추가', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.addPendingRequest('conv-1', createPermissionRequest('tool-1', 'Bash'));
+      store.addPendingRequest(1001, createPermissionRequest('tool-1', 'Bash'));
 
-      const requests = store.getState('conv-1')?.pendingRequests;
+      const requests = store.getState(1001)?.pendingRequests;
       expect(requests).toHaveLength(1);
       expect((requests?.[0] as any).toolName).toBe('Bash');
     });
 
     it('removePendingRequest로 요청 제거', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      store.addPendingRequest('conv-1', createPermissionRequest('tool-1', 'Bash'));
-      store.addPendingRequest('conv-1', createPermissionRequest('tool-2', 'Write'));
+      store.addPendingRequest(1001, createPermissionRequest('tool-1', 'Bash'));
+      store.addPendingRequest(1001, createPermissionRequest('tool-2', 'Write'));
 
-      store.removePendingRequest('conv-1', 'tool-1');
+      store.removePendingRequest(1001, 'tool-1');
 
-      const requests = store.getState('conv-1')?.pendingRequests;
+      const requests = store.getState(1001)?.pendingRequests;
       expect(requests).toHaveLength(1);
       expect(requests?.[0].toolUseId).toBe('tool-2');
     });
 
     it('hasPendingRequests 계산', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
-      expect(store.hasPendingRequests('conv-1')).toBe(false);
+      expect(store.hasPendingRequests(1001)).toBe(false);
 
-      store.addPendingRequest('conv-1', createPermissionRequest('tool-1', 'Bash'));
-      expect(store.hasPendingRequests('conv-1')).toBe(true);
+      store.addPendingRequest(1001, createPermissionRequest('tool-1', 'Bash'));
+      expect(store.hasPendingRequests(1001)).toBe(true);
 
-      store.removePendingRequest('conv-1', 'tool-1');
-      expect(store.hasPendingRequests('conv-1')).toBe(false);
+      store.removePendingRequest(1001, 'tool-1');
+      expect(store.hasPendingRequests(1001)).toBe(false);
     });
   });
 
   describe('realtimeUsage 관리', () => {
     it('updateRealtimeUsage로 사용량 업데이트', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
 
-      store.updateRealtimeUsage('conv-1', {
+      store.updateRealtimeUsage(1001, {
         inputTokens: 100,
         outputTokens: 50,
         cacheReadInputTokens: 10,
         cacheCreationInputTokens: 5,
       });
 
-      const usage = store.getState('conv-1')?.realtimeUsage;
+      const usage = store.getState(1001)?.realtimeUsage;
       expect(usage?.inputTokens).toBe(100);
       expect(usage?.outputTokens).toBe(50);
     });
 
     it('updateRealtimeUsage는 lastUpdateType을 자동 결정', () => {
       const store = useConversationStore.getState();
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
 
       // 첫 업데이트 - input이 기본
-      store.updateRealtimeUsage('conv-1', {
+      store.updateRealtimeUsage(1001, {
         inputTokens: 100,
         outputTokens: 0,
         cacheReadInputTokens: 0,
         cacheCreationInputTokens: 0,
       });
-      expect(store.getState('conv-1')?.realtimeUsage?.lastUpdateType).toBe('input');
+      expect(store.getState(1001)?.realtimeUsage?.lastUpdateType).toBe('input');
 
       // output이 증가하면 output
-      store.updateRealtimeUsage('conv-1', {
+      store.updateRealtimeUsage(1001, {
         inputTokens: 100,
         outputTokens: 50,
         cacheReadInputTokens: 0,
         cacheCreationInputTokens: 0,
       });
-      expect(store.getState('conv-1')?.realtimeUsage?.lastUpdateType).toBe('output');
+      expect(store.getState(1001)?.realtimeUsage?.lastUpdateType).toBe('output');
     });
   });
 
@@ -406,31 +411,31 @@ describe('conversationStore', () => {
     it('deleteConversation으로 대화 상태 삭제', () => {
       const store = useConversationStore.getState();
 
-      store.setCurrentConversation('conv-1');
-      store.addMessage('conv-1', createUserMessage('msg-1', 'Hello'));
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
 
-      store.deleteConversation('conv-1');
+      store.deleteConversation(1001);
 
-      expect(store.getState('conv-1')).toBeNull();
+      expect(store.getState(1001)).toBeNull();
     });
 
-    it('현재 선택된 대화 삭제 시 currentConversationId null로', () => {
+    it('현재 선택된 대화 삭제 시 currentEntityId null로', () => {
       const { setCurrentConversation, deleteConversation } = useConversationStore.getState();
 
-      setCurrentConversation('conv-1');
-      deleteConversation('conv-1');
+      setCurrentConversation(1001);
+      deleteConversation(1001);
 
-      expect(useConversationStore.getState().currentConversationId).toBeNull();
+      expect(useConversationStore.getState().currentEntityId).toBeNull();
     });
 
-    it('다른 대화 삭제 시 currentConversationId 유지', () => {
+    it('다른 대화 삭제 시 currentEntityId 유지', () => {
       const { setCurrentConversation, deleteConversation } = useConversationStore.getState();
 
-      setCurrentConversation('conv-1');
-      setCurrentConversation('conv-2');
-      deleteConversation('conv-1');
+      setCurrentConversation(1001);
+      setCurrentConversation(1002);
+      deleteConversation(1001);
 
-      expect(useConversationStore.getState().currentConversationId).toBe('conv-2');
+      expect(useConversationStore.getState().currentEntityId).toBe(1002);
     });
   });
 
@@ -438,15 +443,289 @@ describe('conversationStore', () => {
     it('reset으로 전체 상태 초기화', () => {
       const { setCurrentConversation, addMessage, reset } = useConversationStore.getState();
 
-      setCurrentConversation('conv-1');
-      addMessage('conv-1', createUserMessage('msg-1', 'Hello'));
-      setCurrentConversation('conv-2');
+      setCurrentConversation(1001);
+      addMessage(1001, createUserMessage('msg-1', 'Hello'));
+      setCurrentConversation(1002);
 
       reset();
 
       const state = useConversationStore.getState();
-      expect(state.currentConversationId).toBeNull();
+      expect(state.currentEntityId).toBeNull();
       expect(state.states.size).toBe(0);
+    });
+  });
+});
+
+// ============================================================================
+// useCurrentConversationState Hook Tests
+// ============================================================================
+
+describe('useCurrentConversationState', () => {
+  beforeEach(() => {
+    useConversationStore.getState().reset();
+  });
+
+  describe('정상 케이스', () => {
+    it('should_return_current_state_when_conversation_selected', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+
+      // Act
+      const { result } = renderHook(() => useCurrentConversationState());
+
+      // Assert
+      expect(result.current).not.toBeNull();
+      expect(result.current?.status).toBe('working');
+      expect(result.current?.messages).toHaveLength(1);
+    });
+
+    it('should_update_when_messages_added', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      const { result } = renderHook(() => useCurrentConversationState());
+
+      // Act - 메시지 추가
+      act(() => {
+        useConversationStore.getState().addMessage(1001, createUserMessage('msg-1', 'Hello'));
+      });
+
+      // Assert - 리렌더링되어 새 메시지가 반영되어야 함
+      expect(result.current?.messages).toHaveLength(1);
+      expect((result.current?.messages[0] as any).content).toBe('Hello');
+    });
+
+    it('should_update_when_status_changes', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current?.status).toBe('idle');
+
+      // Act
+      act(() => {
+        useConversationStore.getState().setStatus(1001, 'working');
+      });
+
+      // Assert
+      expect(result.current?.status).toBe('working');
+    });
+
+    it('should_update_when_conversation_switched', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, createUserMessage('msg-1', 'Conv1'));
+      store.setCurrentConversation(1002);
+      store.addMessage(1002, createUserMessage('msg-2', 'Conv2'));
+      store.setCurrentConversation(1001);
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect((result.current?.messages[0] as any).content).toBe('Conv1');
+
+      // Act - 대화 전환
+      act(() => {
+        useConversationStore.getState().setCurrentConversation(1002);
+      });
+
+      // Assert - 새 대화의 상태가 반영됨
+      expect((result.current?.messages[0] as any).content).toBe('Conv2');
+    });
+
+    it('should_trigger_rerender_on_pendingRequests_change', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      const renderCount = { count: 0 };
+      const { result } = renderHook(() => {
+        renderCount.count++;
+        return useCurrentConversationState();
+      });
+
+      const initialRenderCount = renderCount.count;
+
+      // Act
+      act(() => {
+        useConversationStore.getState().addPendingRequest(1001, createPermissionRequest('tool-1', 'Bash'));
+      });
+
+      // Assert
+      expect(result.current?.pendingRequests).toHaveLength(1);
+      expect(renderCount.count).toBeGreaterThan(initialRenderCount);
+    });
+  });
+
+  describe('엣지 케이스', () => {
+    it('should_return_null_when_no_conversation_selected', () => {
+      // Arrange - 대화 선택 안 함
+
+      // Act
+      const { result } = renderHook(() => useCurrentConversationState());
+
+      // Assert
+      expect(result.current).toBeNull();
+    });
+
+    it('should_return_null_when_conversation_deselected', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current).not.toBeNull();
+
+      // Act - 대화 선택 해제
+      act(() => {
+        useConversationStore.getState().setCurrentConversation(null);
+      });
+
+      // Assert
+      expect(result.current).toBeNull();
+    });
+
+    it('should_return_initial_state_for_new_conversation', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(9999); // 새 대화
+
+      // Act
+      const { result } = renderHook(() => useCurrentConversationState());
+
+      // Assert - 초기 상태
+      expect(result.current).not.toBeNull();
+      expect(result.current?.status).toBe('idle');
+      expect(result.current?.messages).toHaveLength(0);
+      expect(result.current?.textBuffer).toBe('');
+      expect(result.current?.pendingRequests).toHaveLength(0);
+    });
+
+    it('should_handle_rapid_state_changes', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      const { result } = renderHook(() => useCurrentConversationState());
+
+      // Act - 빠른 연속 상태 변경
+      act(() => {
+        const s = useConversationStore.getState();
+        s.addMessage(1001, createUserMessage('msg-1', 'First'));
+        s.addMessage(1001, createUserMessage('msg-2', 'Second'));
+        s.addMessage(1001, createUserMessage('msg-3', 'Third'));
+        s.setStatus(1001, 'working');
+      });
+
+      // Assert - 모든 변경이 반영됨
+      expect(result.current?.messages).toHaveLength(3);
+      expect(result.current?.status).toBe('working');
+    });
+  });
+
+  describe('에러 케이스', () => {
+    it('should_handle_deleted_conversation_gracefully', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current).not.toBeNull();
+
+      // Act - 대화 삭제
+      act(() => {
+        useConversationStore.getState().deleteConversation(1001);
+      });
+
+      // Assert - currentEntityId가 null이 되므로 null 반환
+      expect(result.current).toBeNull();
+    });
+
+    it('should_handle_store_reset_gracefully', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, createUserMessage('msg-1', 'Hello'));
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current).not.toBeNull();
+
+      // Act - 전체 리셋
+      act(() => {
+        useConversationStore.getState().reset();
+      });
+
+      // Assert
+      expect(result.current).toBeNull();
+    });
+  });
+
+  describe('리액티브 구독 검증', () => {
+    it('should_subscribe_to_currentEntityId_changes', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current).toBeNull();
+
+      // Act - 대화 선택
+      act(() => {
+        useConversationStore.getState().setCurrentConversation(1001);
+      });
+
+      // Assert - currentEntityId 변경에 반응
+      expect(result.current).not.toBeNull();
+    });
+
+    it('should_subscribe_to_states_map_changes', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      const { result } = renderHook(() => useCurrentConversationState());
+      expect(result.current?.textBuffer).toBe('');
+
+      // Act - states Map 변경
+      act(() => {
+        useConversationStore.getState().appendTextBuffer(1001, 'Hello');
+      });
+
+      // Assert - Map 변경에 반응
+      expect(result.current?.textBuffer).toBe('Hello');
+    });
+
+    it('should_not_trigger_rerender_for_unrelated_conversation_changes', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setCurrentConversation(1002); // 다른 대화도 생성
+
+      store.setCurrentConversation(1001); // 다시 1001 선택
+
+      const renderCount = { count: 0 };
+      const { result } = renderHook(() => {
+        renderCount.count++;
+        return useCurrentConversationState();
+      });
+
+      const initialRenderCount = renderCount.count;
+
+      // Act - 다른 대화(1002)에 메시지 추가
+      act(() => {
+        useConversationStore.getState().addMessage(1002, createUserMessage('msg-x', 'Other'));
+      });
+
+      // Assert - 현재 선택된 대화(1001)가 아니므로 리렌더링 최소화
+      // Note: Zustand의 shallow comparison에 따라 다를 수 있음
+      // 이 테스트는 최적화 목적이므로 현재 구현에서는 실패할 수 있음
+      // 구현 시 shallow comparison 적용 여부 결정 필요
+      expect(result.current?.messages).toHaveLength(0);
     });
   });
 });

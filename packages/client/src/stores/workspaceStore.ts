@@ -5,6 +5,7 @@ import type {
   Conversation,
   ConversationStatusValue,
   PermissionModeValue,
+  LinkedDocument,
 } from '@estelle/core';
 
 /**
@@ -23,11 +24,15 @@ export interface SelectedConversation {
   workspaceId: string;
   workspaceName: string;
   workingDir: string;
+  /** 엔티티 고유 식별자 (숫자) - Pylon과 통신 시 사용 */
+  entityId: number;
   conversationId: string;
   conversationName: string;
   status: ConversationStatusValue;
   unread: boolean;
   permissionMode: PermissionModeValue;
+  /** 연결된 문서 목록 */
+  linkedDocuments: LinkedDocument[];
 }
 
 /**
@@ -43,9 +48,6 @@ export interface WorkspaceState {
   /** 선택된 대화 정보 */
   selectedConversation: SelectedConversation | null;
 
-  /** 워크스페이스 목록 동기화 완료 여부 */
-  isSynced: boolean;
-
   // Actions
   setWorkspaces: (
     pylonId: number,
@@ -57,19 +59,17 @@ export interface WorkspaceState {
   removeConnectedPylon: (deviceId: number) => void;
   updateConversationStatus: (
     pylonId: number,
-    workspaceId: string,
-    conversationId: string,
-    status: ConversationStatusValue,
+    entityId: number,
+    status?: ConversationStatusValue,
     unread?: boolean
   ) => void;
   updatePermissionMode: (
-    conversationId: string,
+    entityId: number,
     mode: PermissionModeValue
   ) => void;
   selectConversation: (
     pylonId: number,
-    workspaceId: string,
-    conversationId: string
+    entityId: number
   ) => void;
   clearSelection: () => void;
   reorderWorkspaces: (pylonId: number, workspaceIds: string[]) => void;
@@ -80,8 +80,7 @@ export interface WorkspaceState {
   getAllWorkspaces: () => { pylonId: number; workspaces: WorkspaceWithActive[] }[];
   getConversation: (
     pylonId: number,
-    workspaceId: string,
-    conversationId: string
+    entityId: number
   ) => Conversation | null;
 
   reset: () => void;
@@ -94,7 +93,6 @@ const initialState = {
   workspacesByPylon: new Map<number, WorkspaceWithActive[]>(),
   connectedPylons: [] as ConnectedPylon[],
   selectedConversation: null as SelectedConversation | null,
-  isSynced: false,
 };
 
 /**
@@ -114,13 +112,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     let updatedSelected = selected;
 
     if (selected) {
-      // 선택된 대화가 여전히 유효한지 확인
-      const workspace = workspaces.find(
-        (w) => w.workspaceId === selected.workspaceId
-      );
-      if (workspace) {
+      // 선택된 대화가 여전히 유효한지 확인 (entityId로 매칭)
+      for (const workspace of workspaces) {
         const conversation = workspace.conversations.find(
-          (c) => c.conversationId === selected.conversationId
+          (c) => c.entityId === selected.entityId
         );
         if (conversation) {
           // 상태 업데이트
@@ -131,6 +126,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             unread: conversation.unread,
             permissionMode: conversation.permissionMode,
           };
+          break;
         }
       }
     }
@@ -162,14 +158,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (targetWorkspace && targetConversation) {
         updatedSelected = {
           pylonId,
-          workspaceId: targetWorkspace.workspaceId,
+          workspaceId: String(targetWorkspace.workspaceId),
           workspaceName: targetWorkspace.name,
           workingDir: targetWorkspace.workingDir,
-          conversationId: targetConversation.conversationId,
+          entityId: targetConversation.entityId,
+          conversationId: String(targetConversation.entityId),
           conversationName: targetConversation.name,
           status: targetConversation.status,
           unread: targetConversation.unread,
           permissionMode: targetConversation.permissionMode,
+          linkedDocuments: targetConversation.linkedDocuments ?? [],
         };
       }
     }
@@ -177,7 +175,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({
       workspacesByPylon: newMap,
       selectedConversation: updatedSelected,
-      isSynced: true,
     });
   },
 
@@ -218,25 +215,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  updateConversationStatus: (pylonId, workspaceId, conversationId, status, unread) => {
+  updateConversationStatus: (pylonId, entityId, status, unread) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return;
 
-    const updatedWorkspaces = workspaces.map((workspace) => {
-      if (workspace.workspaceId !== workspaceId) return workspace;
+    // status와 unread 모두 undefined면 업데이트할 게 없음
+    if (status === undefined && unread === undefined) return;
 
-      return {
-        ...workspace,
-        conversations: workspace.conversations.map((conv) => {
-          if (conv.conversationId !== conversationId) return conv;
-          return {
-            ...conv,
-            status,
-            unread: unread !== undefined ? unread : conv.unread,
-          };
-        }),
-      };
-    });
+    const updatedWorkspaces = workspaces.map((workspace) => ({
+      ...workspace,
+      conversations: workspace.conversations.map((conv) => {
+        if (conv.entityId !== entityId) return conv;
+        return {
+          ...conv,
+          status: status !== undefined ? status : conv.status,
+          unread: unread !== undefined ? unread : conv.unread,
+        };
+      }),
+    }));
 
     const newMap = new Map(get().workspacesByPylon);
     newMap.set(pylonId, updatedWorkspaces);
@@ -244,10 +240,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // 선택된 대화 상태도 업데이트
     const selected = get().selectedConversation;
     const updatedSelected =
-      selected?.conversationId === conversationId
+      selected?.entityId === entityId
         ? {
             ...selected,
-            status,
+            status: status !== undefined ? status : selected.status,
             unread: unread !== undefined ? unread : selected.unread,
           }
         : selected;
@@ -258,10 +254,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  updatePermissionMode: (conversationId, mode) => {
+  updatePermissionMode: (entityId, mode) => {
     // 선택된 대화의 permissionMode 즉시 업데이트
     const selected = get().selectedConversation;
-    if (selected?.conversationId === conversationId) {
+    if (selected?.entityId === entityId) {
       set({
         selectedConversation: {
           ...selected,
@@ -271,31 +267,33 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  selectConversation: (pylonId, workspaceId, conversationId) => {
+  selectConversation: (pylonId, entityId) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return;
 
-    const workspace = workspaces.find((w) => w.workspaceId === workspaceId);
-    if (!workspace) return;
-
-    const conversation = workspace.conversations.find(
-      (c) => c.conversationId === conversationId
-    );
-    if (!conversation) return;
-
-    set({
-      selectedConversation: {
-        pylonId,
-        workspaceId: workspace.workspaceId,
-        workspaceName: workspace.name,
-        workingDir: workspace.workingDir,
-        conversationId: conversation.conversationId,
-        conversationName: conversation.name,
-        status: conversation.status,
-        unread: conversation.unread,
-        permissionMode: conversation.permissionMode,
-      },
-    });
+    for (const workspace of workspaces) {
+      const conversation = workspace.conversations.find(
+        (c) => c.entityId === entityId
+      );
+      if (conversation) {
+        set({
+          selectedConversation: {
+            pylonId,
+            workspaceId: String(workspace.workspaceId),
+            workspaceName: workspace.name,
+            workingDir: workspace.workingDir,
+            entityId: conversation.entityId,
+            conversationId: String(conversation.entityId),
+            conversationName: conversation.name,
+            status: conversation.status,
+            unread: conversation.unread,
+            permissionMode: conversation.permissionMode,
+            linkedDocuments: conversation.linkedDocuments ?? [],
+          },
+        });
+        return;
+      }
+    }
   },
 
   clearSelection: () => {
@@ -356,18 +354,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return result;
   },
 
-  getConversation: (pylonId, workspaceId, conversationId) => {
+  getConversation: (pylonId, entityId) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return null;
 
-    const workspace = workspaces.find((w) => w.workspaceId === workspaceId);
-    if (!workspace) return null;
-
-    return (
-      workspace.conversations.find(
-        (c) => c.conversationId === conversationId
-      ) || null
-    );
+    for (const workspace of workspaces) {
+      const conversation = workspace.conversations.find(
+        (c) => c.entityId === entityId
+      );
+      if (conversation) return conversation;
+    }
+    return null;
   },
 
   reset: () => {
@@ -375,7 +372,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       workspacesByPylon: new Map(),
       connectedPylons: [],
       selectedConversation: null,
-      isSynced: false,
     });
   },
 }));

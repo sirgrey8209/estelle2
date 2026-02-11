@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useContext, useCallback } from 'react';
-import { ArrowLeft, Check, X } from 'lucide-react';
+import { ArrowLeft, Check, X, FileText } from 'lucide-react';
 import { useWorkspaceStore, useDeviceConfigStore, useConversationStore } from '../../stores';
 import { useResponsive } from '../../hooks/useResponsive';
 import { SessionMenuButton } from '../common/SessionMenuButton';
 import { BugReportDialog } from '../common/BugReportDialog';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
 import { getDeviceIcon } from '../../utils/device-icons';
-import { setPermissionMode, renameConversation, deleteConversation, sendBugReport } from '../../services';
+import { setPermissionMode, renameConversation, deleteConversation, sendBugReport, blobService } from '../../services';
 import { Button } from '../ui/button';
+import { FileViewer } from '../viewers/FileViewer';
 
 interface ChatHeaderProps {
   showSessionMenu?: boolean;
@@ -24,11 +25,43 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   const [showBugReport, setShowBugReport] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [viewingDocument, setViewingDocument] = useState<{ path: string; content: string | null } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { selectedConversation, updatePermissionMode, selectConversation: selectInStore } = useWorkspaceStore();
+  const { selectedConversation, updatePermissionMode } = useWorkspaceStore();
   const { getIcon } = useDeviceConfigStore();
   const { isDesktop } = useResponsive();
   const { openSidebar } = useContext(MobileLayoutContext);
+
+  // 문서 클릭 핸들러
+  const handleDocumentClick = useCallback((path: string) => {
+    if (!selectedConversation) return;
+
+    // 뷰어 열기 (로딩 상태)
+    setViewingDocument({ path, content: null });
+
+    // 파일 요청
+    const unsubscribe = blobService.onDownloadComplete((event) => {
+      if (event.filename === path || event.filename.endsWith(path.replace(/\\/g, '/'))) {
+        const decoder = new TextDecoder('utf-8');
+        const content = decoder.decode(event.bytes);
+        setViewingDocument({ path, content });
+        unsubscribe();
+      }
+    });
+
+    blobService.requestFile({
+      targetDeviceId: selectedConversation.pylonId,
+      entityId: selectedConversation.entityId,
+      filename: path,
+      filePath: `${selectedConversation.workingDir}\\${path}`,
+    });
+  }, [selectedConversation]);
+
+  // 파일명 추출 헬퍼
+  const getFilename = (path: string) => {
+    const parts = path.split(/[/\\]/);
+    return parts[parts.length - 1];
+  };
 
   useEffect(() => {
     if (isRenaming) {
@@ -40,7 +73,7 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   // 대화가 바뀌면 편집 모드 해제
   useEffect(() => {
     setIsRenaming(false);
-  }, [selectedConversation?.conversationId]);
+  }, [selectedConversation?.entityId]);
 
   const startRename = useCallback(() => {
     if (!selectedConversation) return;
@@ -53,8 +86,7 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== selectedConversation.conversationName) {
       renameConversation(
-        selectedConversation.workspaceId,
-        selectedConversation.conversationId,
+        selectedConversation.entityId,
         trimmed
       );
     }
@@ -75,15 +107,12 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
 
   const handleDelete = useCallback(() => {
     if (!selectedConversation) return;
-    deleteConversation(
-      selectedConversation.workspaceId,
-      selectedConversation.conversationId
-    );
+    deleteConversation(selectedConversation.entityId);
     // 선택 해제
-    selectInStore(selectedConversation.pylonId, selectedConversation.workspaceId, '');
+    useWorkspaceStore.getState().clearSelection();
     // conversationStore에서 대화 상태 삭제
-    useConversationStore.getState().deleteConversation(selectedConversation.conversationId);
-  }, [selectedConversation, selectInStore]);
+    useConversationStore.getState().deleteConversation(selectedConversation.entityId);
+  }, [selectedConversation]);
 
   if (!selectedConversation) {
     return (
@@ -170,8 +199,8 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
           <SessionMenuButton
             permissionMode={selectedConversation.permissionMode}
             onPermissionModeChange={(mode) => {
-              setPermissionMode(selectedConversation.conversationId, mode);
-              updatePermissionMode(selectedConversation.conversationId, mode);
+              setPermissionMode(selectedConversation.entityId, mode);
+              updatePermissionMode(selectedConversation.entityId, mode);
             }}
             onBugReport={() => setShowBugReport(true)}
             onRename={startRename}
@@ -181,6 +210,23 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
         )}
       </div>
 
+      {/* 연결된 문서 칩 */}
+      {selectedConversation.linkedDocuments.length > 0 && (
+        <div className="px-3 py-1 bg-secondary/20 border-t border-border/30 flex items-center gap-1.5 overflow-x-auto">
+          {selectedConversation.linkedDocuments.map((doc) => (
+            <button
+              key={doc.path}
+              onClick={() => handleDocumentClick(doc.path)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-secondary/50 hover:bg-secondary/80 rounded text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title={doc.path}
+            >
+              <FileText className="h-3 w-3" />
+              <span className="truncate max-w-[120px]">{getFilename(doc.path)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 버그 리포트 다이얼로그 */}
       <BugReportDialog
         open={showBugReport}
@@ -188,12 +234,26 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
         onSubmit={async (message) => {
           const sent = sendBugReport(
             message,
-            selectedConversation?.conversationId,
+            selectedConversation?.entityId,
             selectedConversation?.workspaceId
           );
           if (!sent) throw new Error('WebSocket 연결 안 됨');
         }}
       />
+
+      {/* 문서 뷰어 */}
+      {viewingDocument && (
+        <FileViewer
+          open={true}
+          onClose={() => setViewingDocument(null)}
+          file={{
+            filename: getFilename(viewingDocument.path),
+            size: viewingDocument.content?.length ?? 0,
+            description: viewingDocument.path,
+          }}
+          content={viewingDocument.content}
+        />
+      )}
     </>
   );
 }

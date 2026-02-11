@@ -61,7 +61,7 @@ export function MessageBubble({ message, onImagePress, childTools }: MessageBubb
       <div
         className="my-0.5 ml-2 pl-1.5 pr-2 py-1 rounded border-l-2 border-destructive bg-card max-w-[90%]"
       >
-        <p className="text-destructive select-text">
+        <p className="text-sm text-destructive select-text">
           {errorMsg.content}
         </p>
       </div>
@@ -82,7 +82,7 @@ export function MessageBubble({ message, onImagePress, childTools }: MessageBubb
           <span className="text-xs text-green-500 mr-1">{icon}</span>
           <span className="text-xs text-muted-foreground">{label}</span>
         </div>
-        <p className="select-text">
+        <p className="text-sm select-text">
           {responseMsg.response}
         </p>
       </div>
@@ -110,7 +110,7 @@ export function MessageBubble({ message, onImagePress, childTools }: MessageBubb
       <div
         className="my-0.5 ml-2 pl-1.5 pr-2 border-l-2 border-transparent max-w-[90%]"
       >
-        <p className="opacity-85 leading-relaxed select-text whitespace-pre-wrap">
+        <p className="text-sm opacity-85 leading-relaxed select-text whitespace-pre-wrap break-words">
           {assistantMsg.content}
         </p>
       </div>
@@ -152,7 +152,7 @@ function UserContent({ content, attachments, onImagePress }: UserContentProps) {
       {hasAttachments && hasText && <div className="h-1" />}
 
       {hasText && (
-        <p className="select-text whitespace-pre-wrap">
+        <p className="text-sm select-text whitespace-pre-wrap break-words">
           {content}
         </p>
       )}

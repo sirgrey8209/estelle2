@@ -3,7 +3,7 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { RequestBar } from '../requests/RequestBar';
 import { ChatHeader } from './ChatHeader';
-import { useWorkspaceStore, useUploadStore, useConversationStore } from '../../stores';
+import { useWorkspaceStore, useUploadStore, useConversationStore, useCurrentConversationState, useSyncStore } from '../../stores';
 import { useImageUploadStore } from '../../stores/imageUploadStore';
 import { sendClaudeMessage, sendClaudeControl, requestMoreHistory } from '../../services/relaySender';
 import { blobService } from '../../services/blobService';
@@ -17,8 +17,8 @@ import type { UserTextMessage } from '@estelle/core';
  */
 export function ChatArea() {
   // conversationStore에서 현재 대화의 상태 가져오기
-  const currentConversationId = useConversationStore((s) => s.currentConversationId);
-  const currentState = useConversationStore((s) => s.getCurrentState());
+  const currentEntityId = useConversationStore((s) => s.currentEntityId);
+  const currentState = useCurrentConversationState();
   const status = currentState?.status ?? 'idle';
   const hasPendingRequests = (currentState?.pendingRequests?.length ?? 0) > 0;
 
@@ -29,8 +29,8 @@ export function ChatArea() {
   // 업로드 완료 후 메시지 전송을 위한 ref
   const pendingMessageRef = useRef<{
     text: string;
+    entityId: number;
     workspaceId: string;
-    conversationId: string;
     pylonPaths: string[];
     thumbnails: (string | undefined)[];
     attachments: AttachedImage[];
@@ -86,14 +86,13 @@ export function ChatArea() {
           })),
         };
         // conversationStore에 메시지 추가
-        if (pending.conversationId) {
-          useConversationStore.getState().addMessage(pending.conversationId, userMessage);
+        if (pending.entityId) {
+          useConversationStore.getState().addMessage(pending.entityId, userMessage);
         }
 
-        // Relay로 메시지 전송 (pylonPath 사용)
+        // Relay로 메시지 전송 (entityId + pylonPath 사용)
         sendClaudeMessage(
-          pending.workspaceId,
-          pending.conversationId,
+          pending.entityId,
           pending.text,
           pending.pylonPaths
         );
@@ -111,8 +110,8 @@ export function ChatArea() {
   const handleSend = useCallback(async (text: string, attachments?: AttachedImage[]) => {
     if (!selectedConversation) return;
 
+    const entityId = selectedConversation.entityId;
     const workspaceId = selectedConversation.workspaceId;
-    const conversationId = selectedConversation.conversationId;
 
     // 첨부파일이 있고 File 객체가 있으면 업로드 플로우 실행
     const attachmentsWithFile = attachments?.filter((a) => a.file);
@@ -130,8 +129,8 @@ export function ChatArea() {
       // pending 상태 설정
       pendingMessageRef.current = {
         text,
+        entityId,
         workspaceId,
-        conversationId,
         pylonPaths: [],
         thumbnails: [],
         attachments: attachmentsWithFile,
@@ -148,7 +147,7 @@ export function ChatArea() {
             filename: attachment.fileName,
             targetDeviceId: targetPylon.deviceId,
             workspaceId,
-            conversationId,
+            entityId,
             message: text,
             mimeType: attachment.mimeType,
           });
@@ -177,40 +176,41 @@ export function ChatArea() {
       })),
     };
     // conversationStore에 메시지 추가
-    useConversationStore.getState().addMessage(conversationId, userMessage);
+    useConversationStore.getState().addMessage(entityId, userMessage);
 
     // Relay로 메시지 전송
-    sendClaudeMessage(workspaceId, conversationId, text, attachments?.map(a => a.uri));
+    sendClaudeMessage(entityId, text, attachments?.map(a => a.uri));
   }, [selectedConversation, connectedPylons, queueMessage, dequeueMessage]);
 
   // 중지 핸들러
   const handleStop = useCallback(() => {
     if (!selectedConversation) return;
 
-    const conversationId = selectedConversation.conversationId;
-    sendClaudeControl(conversationId, 'stop');
+    sendClaudeControl(selectedConversation.entityId, 'stop');
   }, [selectedConversation]);
 
   const isWorking = status === 'working';
   const showRequestBar = hasPendingRequests;
 
-  // 페이징 상태
-  const hasMore = currentState?.hasMore ?? false;
-  const isLoadingMore = currentState?.isLoadingMore ?? false;
-  const messagesCount = currentState?.messages?.length ?? 0;
+  // 페이징 상태 (syncStore에서 가져옴)
+  const syncInfo = useSyncStore((s) => currentEntityId ? s.getConversationSync(currentEntityId) : null);
+  const hasMoreBefore = useSyncStore((s) => currentEntityId ? s.hasMoreBefore(currentEntityId) : false);
+  const isLoadingMore = useSyncStore((s) => currentEntityId ? s.isLoadingMore(currentEntityId) : false);
 
   // 추가 히스토리 로드 핸들러
   const handleLoadMoreHistory = useCallback(() => {
-    if (!selectedConversation || isLoadingMore || !hasMore) return;
+    if (!selectedConversation || isLoadingMore || !hasMoreBefore) return;
 
-    const { workspaceId, conversationId } = selectedConversation;
+    const entityId = selectedConversation.entityId;
 
     // 로딩 상태 설정
-    useConversationStore.getState().setLoadingMore(conversationId, true);
+    useSyncStore.getState().setLoadingMore(entityId, true);
 
-    // 현재 로드된 메시지 수를 offset으로 사용
-    requestMoreHistory(workspaceId, conversationId, messagesCount);
-  }, [selectedConversation, isLoadingMore, hasMore, messagesCount]);
+    // loadBefore = syncedFrom (이 인덱스 이전의 메시지를 로드)
+    const currentSyncInfo = useSyncStore.getState().getConversationSync(entityId);
+    const loadBefore = currentSyncInfo?.syncedFrom ?? 0;
+    requestMoreHistory(entityId, loadBefore);
+  }, [selectedConversation, isLoadingMore, hasMoreBefore]);
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
@@ -219,7 +219,7 @@ export function ChatArea() {
 
       {/* 메시지 목록 (WorkingIndicator 포함) */}
       <MessageList
-        hasMoreHistory={hasMore}
+        hasMoreHistory={hasMoreBefore}
         isLoadingHistory={isLoadingMore}
         onLoadMoreHistory={handleLoadMoreHistory}
       />

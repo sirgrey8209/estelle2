@@ -226,7 +226,7 @@ export function ToolCard({
           className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
         >
           <span className={statusColor}>{statusIcon}</span>
-          <span className="ml-1.5 font-medium">TodoWrite</span>
+          <span className="ml-1.5 text-sm font-medium">TodoWrite</span>
           <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
             {count} items
           </span>
@@ -291,7 +291,7 @@ export function ToolCard({
         className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
       >
         <span className={statusColor}>{statusIcon}</span>
-        <span className="ml-1.5 font-medium">{name}</span>
+        <span className="ml-1.5 text-sm font-medium">{name}</span>
         <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
           {summary}
         </span>
@@ -442,7 +442,7 @@ export function ToolCard({
           className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
         >
           <span className={statusColor}>{statusIcon}</span>
-          <span className="ml-1.5 font-medium">Task</span>
+          <span className="ml-1.5 text-sm font-medium">Task</span>
           <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
             {description}
           </span>
@@ -530,7 +530,7 @@ export function ToolCard({
           className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
         >
           <span className={statusColor}>{statusIcon}</span>
-          <span className="ml-1.5 font-medium">Write</span>
+          <span className="ml-1.5 text-sm font-medium">Write</span>
           <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
             {fileName}
           </span>
@@ -578,7 +578,7 @@ export function ToolCard({
           className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
         >
           <span className={statusColor}>{statusIcon}</span>
-          <span className="ml-1.5 font-medium">Edit</span>
+          <span className="ml-1.5 text-sm font-medium">Edit</span>
           <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
             {fileName}
           </span>
@@ -658,7 +658,7 @@ export function ToolCard({
         className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
       >
         <span className={statusColor}>{statusIcon}</span>
-        <span className="ml-1.5 font-medium">{toolName}</span>
+        <span className="ml-1.5 text-sm font-medium">{toolName}</span>
         <span className="flex-1 ml-2 text-xs text-muted-foreground truncate text-left">
           {desc}
         </span>

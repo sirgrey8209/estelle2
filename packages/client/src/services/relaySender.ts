@@ -3,9 +3,11 @@
  * @description Relay 메시지 전송 헬퍼 함수
  *
  * UI 컴포넌트에서 Pylon으로 메시지를 보낼 때 사용합니다.
+ * entityId(number)를 사용하여 대화를 식별합니다.
  */
 
 import { MessageType } from '@estelle/core';
+import type { AccountType } from '@estelle/core';
 import type { RelayMessage } from './relayService';
 
 // 전역 WebSocket 참조 (app/_layout.tsx에서 설정)
@@ -122,45 +124,48 @@ export function createConversation(workspaceId: string, name?: string): boolean 
 /**
  * 대화 선택 (히스토리 로드)
  */
-export function selectConversation(workspaceId: string, conversationId: string): boolean {
+export function selectConversation(entityId: number): boolean {
   return sendMessage({
     type: MessageType.CONVERSATION_SELECT,
-    payload: { workspaceId, conversationId },
+    payload: { entityId },
   });
 }
 
 /**
  * 추가 히스토리 요청 (페이징)
+ *
+ * @param entityId - 대화 ID
+ * @param loadBefore - 이 인덱스 이전의 메시지를 로드 (현재 syncedFrom 값)
+ * @param limit - 로드할 최대 메시지 수
  */
 export function requestMoreHistory(
-  workspaceId: string,
-  conversationId: string,
-  offset: number,
+  entityId: number,
+  loadBefore: number,
   limit: number = 50
 ): boolean {
   return sendMessage({
     type: MessageType.HISTORY_REQUEST,
-    payload: { workspaceId, conversationId, offset, limit },
+    payload: { entityId, loadBefore, limit },
   });
 }
 
 /**
  * 대화 삭제 요청
  */
-export function deleteConversation(workspaceId: string, conversationId: string): boolean {
+export function deleteConversation(entityId: number): boolean {
   return sendMessage({
     type: MessageType.CONVERSATION_DELETE,
-    payload: { workspaceId, conversationId },
+    payload: { entityId },
   });
 }
 
 /**
  * 대화 이름 변경 요청
  */
-export function renameConversation(workspaceId: string, conversationId: string, newName: string): boolean {
+export function renameConversation(entityId: number, newName: string): boolean {
   return sendMessage({
     type: MessageType.CONVERSATION_RENAME,
-    payload: { workspaceId, conversationId, newName },
+    payload: { entityId, newName },
   });
 }
 
@@ -172,16 +177,14 @@ export function renameConversation(workspaceId: string, conversationId: string, 
  * Claude에 메시지 전송
  */
 export function sendClaudeMessage(
-  workspaceId: string,
-  conversationId: string,
+  entityId: number,
   message: string,
   attachments?: string[]
 ): boolean {
   return sendMessage({
     type: MessageType.CLAUDE_SEND,
     payload: {
-      workspaceId,
-      conversationId,
+      entityId,
       message,
       attachments,
     },
@@ -192,14 +195,14 @@ export function sendClaudeMessage(
  * Claude 권한 응답
  */
 export function sendPermissionResponse(
-  conversationId: string,
+  entityId: number,
   toolUseId: string,
   decision: 'allow' | 'deny'
 ): boolean {
   return sendMessage({
     type: MessageType.CLAUDE_PERMISSION,
     payload: {
-      conversationId,
+      entityId,
       toolUseId,
       decision,
     },
@@ -210,14 +213,14 @@ export function sendPermissionResponse(
  * Claude 질문 응답
  */
 export function sendQuestionResponse(
-  conversationId: string,
+  entityId: number,
   toolUseId: string,
   answer: string
 ): boolean {
   return sendMessage({
     type: MessageType.CLAUDE_ANSWER,
     payload: {
-      conversationId,
+      entityId,
       toolUseId,
       answer,
     },
@@ -228,13 +231,13 @@ export function sendQuestionResponse(
  * Claude 제어 (중단/재시작)
  */
 export function sendClaudeControl(
-  conversationId: string,
+  entityId: number,
   action: 'stop' | 'new_session'
 ): boolean {
   return sendMessage({
     type: MessageType.CLAUDE_CONTROL,
     payload: {
-      conversationId,
+      entityId,
       action,
     },
   });
@@ -244,13 +247,13 @@ export function sendClaudeControl(
  * Claude 권한 모드 설정
  */
 export function setPermissionMode(
-  conversationId: string,
+  entityId: number,
   mode: 'default' | 'acceptEdits' | 'bypassPermissions'
 ): boolean {
   return sendMessage({
     type: MessageType.CLAUDE_SET_PERMISSION_MODE,
     payload: {
-      conversationId,
+      entityId,
       mode,
     },
   });
@@ -326,16 +329,34 @@ export function requestUsage(): boolean {
  */
 export function sendBugReport(
   message: string,
-  conversationId?: string,
+  entityId?: number,
   workspaceId?: string
 ): boolean {
   return sendMessage({
     type: MessageType.BUG_REPORT,
     payload: {
       message,
-      conversationId,
+      entityId,
       workspaceId,
       timestamp: new Date().toISOString(),
     },
+  });
+}
+
+// ============================================================================
+// 계정 관련
+// ============================================================================
+
+/**
+ * 계정 전환 요청
+ *
+ * @description
+ * Pylon에 계정 전환을 요청합니다.
+ * 모든 Claude SDK 세션이 종료되고 인증 파일이 교체됩니다.
+ */
+export function requestAccountSwitch(account: AccountType): boolean {
+  return sendMessage({
+    type: MessageType.ACCOUNT_SWITCH,
+    payload: { account },
   });
 }

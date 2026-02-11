@@ -162,11 +162,11 @@ describe('RelayService', () => {
       service.connect();
       await new Promise((r) => setTimeout(r, 10));
 
-      service.sendClaude('conv-1', 'Hello Claude');
+      service.sendClaude(1001, 'Hello Claude');
 
       const lastMessage = JSON.parse(mockAdapter.sentMessages[1]);
       expect(lastMessage.type).toBe('claude_send');
-      expect(lastMessage.payload.conversationId).toBe('conv-1');
+      expect(lastMessage.payload.entityId).toBe(1001);
       expect(lastMessage.payload.content).toBe('Hello Claude');
     });
 
@@ -174,7 +174,7 @@ describe('RelayService', () => {
       service.connect();
       await new Promise((r) => setTimeout(r, 10));
 
-      service.sendClaudeControl('conv-1', 'stop');
+      service.sendClaudeControl(1001, 'stop');
 
       const lastMessage = JSON.parse(mockAdapter.sentMessages[1]);
       expect(lastMessage.type).toBe('claude_control');

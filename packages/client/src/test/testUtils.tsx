@@ -72,9 +72,7 @@ export const createMockImageUploadStore = (overrides: Record<string, unknown> = 
 });
 
 export const createMockRelayStore = (overrides: Record<string, unknown> = {}) => ({
-  desksLoaded: false,
   connectionStatus: 'disconnected' as const,
-  setDesksLoaded: vi.fn(),
   setConnectionStatus: vi.fn(),
   reset: vi.fn(),
   ...overrides,

@@ -3,7 +3,7 @@
  * @description Zustand 스토어 모듈 진입점
  */
 
-export { useRelayStore, type RelayState, type LoadingState } from './relayStore';
+export { useRelayStore, type RelayState } from './relayStore';
 
 // 워크스페이스 스토어
 export {
@@ -38,10 +38,6 @@ export type { StoreMessage as ClaudeMessage } from '@estelle/core';
 export {
   useSettingsStore,
   type SettingsState,
-  type DeployPhase,
-  type BuildTaskStatus,
-  type ClaudeUsage,
-  type VersionInfo,
 } from './settingsStore';
 export {
   useUploadStore,
@@ -69,6 +65,15 @@ export {
 // 대화별 Claude 상태 스토어
 export {
   useConversationStore,
+  useCurrentConversationState,
   type ConversationStoreState,
   getInitialClaudeState,
 } from './conversationStore';
+
+// 동기화 상태 스토어
+export {
+  useSyncStore,
+  type SyncState,
+  type SyncPhase,
+  type ConversationSyncInfo,
+} from './syncStore';

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useUploadStore, useWorkspaceStore, useConversationStore } from '../../stores';
+import { useUploadStore, useWorkspaceStore, useCurrentConversationState } from '../../stores';
 import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
 import { UploadingBubble } from './UploadingBubble';
@@ -29,7 +29,7 @@ export function MessageList({
   onLoadMoreHistory,
 }: MessageListProps) {
   // conversationStore에서 현재 대화의 상태 가져오기
-  const currentState = useConversationStore((s) => s.getCurrentState());
+  const currentState = useCurrentConversationState();
   const messages = currentState?.messages ?? [];
   const textBuffer = currentState?.textBuffer ?? '';
   const workStartTime = currentState?.workStartTime ?? null;
@@ -98,8 +98,8 @@ export function MessageList({
   const handleAttachmentPress = useCallback((attachment: Attachment) => {
     const { filename, path: filePath } = attachment;
     const pylonId = selectedConversation?.pylonId;
-    const conversationId = selectedConversation?.conversationId;
-    if (!pylonId || !conversationId) return;
+    const entityId = selectedConversation?.entityId;
+    if (!pylonId || !entityId) return;
 
     // 캐시에 있으면 바로 표시
     const cached = blobService.getCachedImage(filename);
@@ -127,7 +127,7 @@ export function MessageList({
 
     blobService.requestFile({
       targetDeviceId: pylonId,
-      conversationId,
+      entityId,
       filename,
       filePath,
     });
@@ -366,6 +366,17 @@ export function MessageList({
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="mt-4 text-muted-foreground">
             대화를 시작하는 중...
+          </span>
+        </div>
+      );
+    }
+
+    if (isLoadingHistory) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="mt-4 text-muted-foreground">
+            대화 내역을 불러오는 중...
           </span>
         </div>
       );

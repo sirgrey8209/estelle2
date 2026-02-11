@@ -38,7 +38,7 @@ export interface BlobUploadCompleteEvent {
   fileId: string;
   filename: string;
   pylonPath: string;
-  conversationId: string;
+  entityId: number;
   thumbnailBase64?: string;
 }
 
@@ -212,11 +212,11 @@ export class BlobTransferService {
     filename: string;
     targetDeviceId: number;
     workspaceId: string;
-    conversationId: string;
+    entityId: number;
     message?: string;
     mimeType?: string;
   }): Promise<string | null> {
-    const { bytes, filename, targetDeviceId, workspaceId, conversationId, message, mimeType } =
+    const { bytes, filename, targetDeviceId, workspaceId, entityId, message, mimeType } =
       params;
 
     if (!this.sender) {
@@ -247,7 +247,7 @@ export class BlobTransferService {
         context: {
           type: 'image_upload',
           workspaceId,
-          conversationId,
+          entityId,
           message,
         },
         isUpload: true,
@@ -341,11 +341,11 @@ export class BlobTransferService {
    */
   requestFile(params: {
     targetDeviceId: number;
-    conversationId: string;
+    entityId: number;
     filename: string;
     filePath?: string;
   }): void {
-    const { targetDeviceId, conversationId, filename, filePath } = params;
+    const { targetDeviceId, entityId, filename, filePath } = params;
 
     // 캐시에 있으면 바로 반환
     const cached = imageCache.get(filename);
@@ -373,7 +373,7 @@ export class BlobTransferService {
       to: { deviceId: targetDeviceId, deviceType: 'pylon' },
       payload: {
         blobId,
-        conversationId,
+        entityId,
         filename,
         ...(filePath && { localPath: filePath }),
       },
@@ -498,7 +498,7 @@ export class BlobTransferService {
     const blobId = payload.blobId as string;
     const fileId = (payload.fileId as string) ?? blobId;
     const pylonPath = payload.path as string;
-    const conversationId = (payload.conversationId as string) ?? '';
+    const entityId = (payload.entityId as number) ?? 0;
     const thumbnailBase64 = payload.thumbnail as string | undefined;
 
     const transfer = this.transfers.get(blobId);
@@ -518,7 +518,7 @@ export class BlobTransferService {
         fileId,
         filename: transfer.filename,
         pylonPath,
-        conversationId,
+        entityId,
         thumbnailBase64,
       };
       this.uploadCompleteListeners.forEach((cb) => cb(event));

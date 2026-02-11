@@ -16,8 +16,8 @@ import { MessageType } from '@estelle/core';
 
 // Mock stores
 const mockConversationStore = {
-  states: new Map<string, unknown>(),
-  currentConversationId: 'conv-1' as string | null,
+  states: new Map<number, unknown>(),
+  currentEntityId: 1001 as number | null,
   addMessage: vi.fn(),
   getState: vi.fn(() => ({ messages: [], status: 'idle' })),
   getCurrentState: vi.fn(() => ({ messages: [], status: 'idle' })),
@@ -28,6 +28,7 @@ const mockWorkspaceStore = {
   selectedConversation: {
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
+    entityId: 1001,
     conversationId: 'conv-1',
     conversationName: 'Main',
   },

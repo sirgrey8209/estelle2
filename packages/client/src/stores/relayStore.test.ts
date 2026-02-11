@@ -62,33 +62,6 @@ describe('relayStore', () => {
     });
   });
 
-  describe('로딩 상태', () => {
-    it('should be "connecting" when not connected', () => {
-      const state = useRelayStore.getState();
-
-      expect(state.loadingState).toBe('connecting');
-    });
-
-    it('should be "loadingDesks" when connected but no desks loaded', () => {
-      const { setConnected, setAuthenticated } = useRelayStore.getState();
-
-      setConnected(true);
-      setAuthenticated(true);
-
-      expect(useRelayStore.getState().loadingState).toBe('loadingDesks');
-    });
-
-    it('should be "ready" when connected and desks loaded', () => {
-      const { setConnected, setAuthenticated, setDesksLoaded } = useRelayStore.getState();
-
-      setConnected(true);
-      setAuthenticated(true);
-      setDesksLoaded(true);
-
-      expect(useRelayStore.getState().loadingState).toBe('ready');
-    });
-  });
-
   describe('reset', () => {
     it('should reset all state to initial values', () => {
       const store = useRelayStore.getState();
@@ -97,7 +70,6 @@ describe('relayStore', () => {
       store.setConnected(true);
       store.setAuthenticated(true);
       store.setDeviceId('device-789');
-      store.setDesksLoaded(true);
 
       // 리셋
       store.reset();
@@ -106,7 +78,6 @@ describe('relayStore', () => {
       expect(state.isConnected).toBe(false);
       expect(state.isAuthenticated).toBe(false);
       expect(state.deviceId).toBeNull();
-      expect(state.desksLoaded).toBe(false);
     });
   });
 });

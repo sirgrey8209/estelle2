@@ -30,12 +30,17 @@ vi.mock('../services/relaySender', () => ({
   selectConversation: vi.fn(),
 }));
 
-// relayStore mock (setDesksLoaded)
+// relayStore mock
 vi.mock('../stores/relayStore', () => ({
   useRelayStore: {
-    getState: () => ({
-      setDesksLoaded: vi.fn(),
-    }),
+    getState: () => ({}),
+  },
+}));
+
+// syncOrchestrator mock
+vi.mock('../services/syncOrchestrator', () => ({
+  syncOrchestrator: {
+    onWorkspaceListReceived: vi.fn(),
   },
 }));
 
@@ -52,7 +57,7 @@ vi.mock('../stores/settingsStore', () => ({
 // 테스트 유틸
 // =========================================
 
-function createMockWorkspace(id: string, convs: Array<{ id: string; name: string; status?: string }>) {
+function createMockWorkspace(id: string, convs: Array<{ id: string; entityId: number; name: string; status?: string }>) {
   return {
     workspaceId: id,
     name: `Workspace ${id}`,
@@ -62,6 +67,7 @@ function createMockWorkspace(id: string, convs: Array<{ id: string; name: string
     createdAt: Date.now(),
     lastUsed: Date.now(),
     conversations: convs.map((c) => ({
+      entityId: c.entityId,
       conversationId: c.id,
       name: c.name,
       status: (c.status || 'idle') as 'idle' | 'working' | 'waiting' | 'error',
@@ -96,51 +102,46 @@ describe('상태 동기화 문제', () => {
      * 아래 테스트는 workspaceId가 없을 때의 방어적 동작을 검증함
      * (실제로 Pylon은 항상 workspaceId를 포함하지만, 방어적 처리 확인용)
      */
-    it('conversation_status 메시지에 workspaceId가 없으면 상태 업데이트 안됨 (방어적 동작)', () => {
+    it('conversation_status 메시지에 entityId가 없으면 상태 업데이트 안됨 (방어적 동작)', () => {
       const pylonId = 1;
 
       // 워크스페이스 설정
       useWorkspaceStore.getState().setWorkspaces(pylonId, [
-        createMockWorkspace('ws-1', [{ id: 'conv-1', name: 'Conversation 1' }]),
+        createMockWorkspace('ws-1', [{ id: 'conv-1', entityId: 1001, name: 'Conversation 1' }]),
       ]);
 
-      // conversation_status 메시지 수신 (workspaceId 없음 - 비정상 케이스)
+      // conversation_status 메시지 수신 (entityId 없음 - 비정상 케이스)
       routeMessage({
         type: MessageType.CONVERSATION_STATUS,
         payload: {
           deviceId: pylonId,
-          conversationId: 'conv-1',
           status: 'working',
-          // workspaceId 누락! - 이 경우 업데이트 실패가 예상됨
+          // entityId 누락!
         },
       });
 
-      // 상태 확인 - workspaceId 없이는 정확한 업데이트가 안됨
+      // 상태 확인 - entityId 없이는 업데이트가 안됨
       const conversation = useWorkspaceStore
         .getState()
-        .getConversation(pylonId, 'ws-1', 'conv-1');
+        .getConversation(pylonId, 1001);
 
-      // workspaceId가 없으면 상태가 변경되지 않음 (idle 유지)
-      // Pylon이 workspaceId를 항상 포함하므로 이 상황은 발생하지 않지만,
-      // 방어적으로 처리됨을 확인
       expect(conversation?.status).toBe('idle');
     });
 
-    it('conversation_status 메시지에 workspaceId가 있으면 상태 업데이트 성공', () => {
+    it('conversation_status 메시지에 entityId가 있으면 상태 업데이트 성공', () => {
       const pylonId = 1;
 
       // 워크스페이스 설정
       useWorkspaceStore.getState().setWorkspaces(pylonId, [
-        createMockWorkspace('ws-1', [{ id: 'conv-1', name: 'Conversation 1' }]),
+        createMockWorkspace('ws-1', [{ id: 'conv-1', entityId: 1001, name: 'Conversation 1' }]),
       ]);
 
-      // conversation_status 메시지 수신 (workspaceId 포함)
+      // conversation_status 메시지 수신 (entityId 포함)
       routeMessage({
         type: MessageType.CONVERSATION_STATUS,
         payload: {
           deviceId: pylonId,
-          workspaceId: 'ws-1',  // ✅ 포함
-          conversationId: 'conv-1',
+          entityId: 1001,
           status: 'working',
         },
       });
@@ -148,7 +149,7 @@ describe('상태 동기화 문제', () => {
       // 상태 확인
       const conversation = useWorkspaceStore
         .getState()
-        .getConversation(pylonId, 'ws-1', 'conv-1');
+        .getConversation(pylonId, 1001);
 
       expect(conversation?.status).toBe('working');
     });
@@ -159,8 +160,8 @@ describe('상태 동기화 문제', () => {
       const store = useConversationStore.getState();
 
       // 대화 1에서 메시지 추가
-      store.setCurrentConversation('conv-1');
-      store.addMessage('conv-1', {
+      store.setCurrentConversation(1001);
+      store.addMessage(1001, {
         id: 'msg-1',
         role: 'user',
         type: 'text',
@@ -168,11 +169,11 @@ describe('상태 동기화 문제', () => {
         timestamp: Date.now(),
       });
 
-      expect(store.getState('conv-1')?.messages).toHaveLength(1);
+      expect(store.getState(1001)?.messages).toHaveLength(1);
 
       // 대화 2로 전환
-      store.setCurrentConversation('conv-2');
-      store.addMessage('conv-2', {
+      store.setCurrentConversation(1002);
+      store.addMessage(1002, {
         id: 'msg-2',
         role: 'user',
         type: 'text',
@@ -180,15 +181,15 @@ describe('상태 동기화 문제', () => {
         timestamp: Date.now(),
       });
 
-      expect(store.getState('conv-2')?.messages).toHaveLength(1);
+      expect(store.getState(1002)?.messages).toHaveLength(1);
 
       // 대화 1로 다시 전환
-      store.setCurrentConversation('conv-1');
+      store.setCurrentConversation(1001);
 
       // ✅ 캐시된 메시지 복원됨
       const state = useConversationStore.getState();
-      expect(state.getState('conv-1')?.messages).toHaveLength(1);
-      expect((state.getState('conv-1')?.messages[0] as any).content).toBe('Hello');
+      expect(state.getState(1001)?.messages).toHaveLength(1);
+      expect((state.getState(1001)?.messages[0] as any).content).toBe('Hello');
     });
   });
 
@@ -197,17 +198,17 @@ describe('상태 동기화 문제', () => {
       const store = useConversationStore.getState();
 
       // 대화 1: working 상태
-      store.setCurrentConversation('conv-1');
-      store.setStatus('conv-1', 'working');
+      store.setCurrentConversation(1001);
+      store.setStatus(1001, 'working');
 
       // 대화 2: idle 상태
-      store.setCurrentConversation('conv-2');
-      store.setStatus('conv-2', 'idle');
+      store.setCurrentConversation(1002);
+      store.setStatus(1002, 'idle');
 
       // 각 대화의 상태가 독립적으로 유지됨
       const state = useConversationStore.getState();
-      expect(state.getState('conv-1')?.status).toBe('working');
-      expect(state.getState('conv-2')?.status).toBe('idle');
+      expect(state.getState(1001)?.status).toBe('working');
+      expect(state.getState(1002)?.status).toBe('idle');
 
       // ✅ 대화별로 격리됨 - 다른 대화의 Stop 버튼이 표시되지 않음
     });
@@ -218,13 +219,13 @@ describe('상태 동기화 문제', () => {
       // 워크스페이스 설정 - 두 대화의 상태가 다름
       useWorkspaceStore.getState().setWorkspaces(pylonId, [
         createMockWorkspace('ws-1', [
-          { id: 'conv-1', name: 'Conv 1', status: 'working' },
-          { id: 'conv-2', name: 'Conv 2', status: 'idle' },
+          { id: 'conv-1', entityId: 1001, name: 'Conv 1', status: 'working' },
+          { id: 'conv-2', entityId: 1002, name: 'Conv 2', status: 'idle' },
         ]),
       ]);
 
-      const conv1 = useWorkspaceStore.getState().getConversation(pylonId, 'ws-1', 'conv-1');
-      const conv2 = useWorkspaceStore.getState().getConversation(pylonId, 'ws-1', 'conv-2');
+      const conv1 = useWorkspaceStore.getState().getConversation(pylonId, 1001);
+      const conv2 = useWorkspaceStore.getState().getConversation(pylonId, 1002);
 
       expect(conv1?.status).toBe('working');
       expect(conv2?.status).toBe('idle');
@@ -232,14 +233,20 @@ describe('상태 동기화 문제', () => {
   });
 
   describe('문제 5: 히스토리 로드 문제 (해결됨)', () => {
-    it('HISTORY_RESULT가 conversationId 기반으로 적용됨', () => {
+    it('HISTORY_RESULT가 entityId 기반으로 적용됨', () => {
+      // 워크스페이스 설정 (selectConversation이 동작하려면 워크스페이스 데이터가 필요)
+      useWorkspaceStore.getState().setWorkspaces(1, [
+        createMockWorkspace('ws-1', [{ id: 'conv-1', entityId: 1001, name: 'Conv 1' }]),
+      ]);
+
       // 대화 1 선택 중
-      useWorkspaceStore.getState().selectConversation(1, 'ws-1', 'conv-1');
+      useWorkspaceStore.getState().selectConversation(1, 1001);
 
       // 대화 1의 히스토리 도착
       routeMessage({
         type: MessageType.HISTORY_RESULT,
         payload: {
+          entityId: 1001,
           conversationId: 'conv-1',
           messages: [
             {
@@ -253,10 +260,10 @@ describe('상태 동기화 문제', () => {
         },
       });
 
-      // 대화 1에 히스토리가 설정됨
+      // 대화 1에 히스토리가 설정됨 (entityId 기반)
       const state = useConversationStore.getState();
-      expect(state.getState('conv-1')?.messages).toHaveLength(1);
-      expect((state.getState('conv-1')?.messages[0] as any).content).toBe('History message');
+      expect(state.getState(1001)?.messages).toHaveLength(1);
+      expect((state.getState(1001)?.messages[0] as any).content).toBe('History message');
     });
   });
 });
@@ -272,11 +279,11 @@ describe('conversationStore.status와 conversation.status 동기화', () => {
 
     // 워크스페이스 설정
     useWorkspaceStore.getState().setWorkspaces(pylonId, [
-      createMockWorkspace('ws-1', [{ id: 'conv-1', name: 'Conv 1', status: 'idle' }]),
+      createMockWorkspace('ws-1', [{ id: 'conv-1', entityId: 1001, name: 'Conv 1', status: 'idle' }]),
     ]);
 
     // 현재 대화 선택 (selectConversation은 workspaces에 있는 대화만 선택 가능)
-    useWorkspaceStore.getState().selectConversation(pylonId, 'ws-1', 'conv-1');
+    useWorkspaceStore.getState().selectConversation(pylonId, 1001);
 
     // CLAUDE_EVENT 수신
     routeMessage({
@@ -290,7 +297,7 @@ describe('conversationStore.status와 conversation.status 동기화', () => {
     });
 
     const state = useConversationStore.getState();
-    expect(state.getState('conv-1')?.status).toBe('working');
+    expect(state.getState(1001)?.status).toBe('working');
   });
 
   it('CLAUDE_EVENT text 이벤트가 textBuffer에 추가됨', () => {
@@ -298,11 +305,11 @@ describe('conversationStore.status와 conversation.status 동기화', () => {
 
     // 워크스페이스 설정
     useWorkspaceStore.getState().setWorkspaces(pylonId, [
-      createMockWorkspace('ws-1', [{ id: 'conv-1', name: 'Conv 1', status: 'idle' }]),
+      createMockWorkspace('ws-1', [{ id: 'conv-1', entityId: 1001, name: 'Conv 1', status: 'idle' }]),
     ]);
 
     // 현재 대화 선택
-    useWorkspaceStore.getState().selectConversation(pylonId, 'ws-1', 'conv-1');
+    useWorkspaceStore.getState().selectConversation(pylonId, 1001);
 
     // CLAUDE_EVENT 수신
     routeMessage({
@@ -326,6 +333,6 @@ describe('conversationStore.status와 conversation.status 동기화', () => {
     });
 
     const state = useConversationStore.getState();
-    expect(state.getState('conv-1')?.textBuffer).toBe('Hello World');
+    expect(state.getState(1001)?.textBuffer).toBe('Hello World');
   });
 });

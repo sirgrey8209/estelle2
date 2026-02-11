@@ -7,13 +7,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { useWorkspaceStore, useConversationStore } from '../../stores';
+import { useWorkspaceStore, useCurrentConversationState } from '../../stores';
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
 import { useResponsive } from '../../hooks/useResponsive';
 
-// 대화별 입력 텍스트 저장소
-const draftTexts = new Map<string, string>();
+// 대화별 입력 텍스트 저장소 (entityId → draft text)
+const draftTexts = new Map<number, string>();
 
 interface InputBarProps {
   disabled?: boolean;
@@ -29,23 +29,23 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generalFileInputRef = useRef<HTMLInputElement>(null);
-  const prevConversationIdRef = useRef<string | null>(null);
+  const prevEntityIdRef = useRef<number | null>(null);
 
   const { selectedConversation } = useWorkspaceStore();
   // conversationStore에서 현재 대화의 status 가져오기
-  const currentState = useConversationStore((s) => s.getCurrentState());
+  const currentState = useCurrentConversationState();
   const status = currentState?.status ?? 'idle';
   const { attachedImage, setAttachedImage, hasActiveUpload } = useImageUploadStore();
-  const { isDesktop } = useResponsive();
+  const { isDesktop, isTablet } = useResponsive();
 
-  const conversationId = selectedConversation?.conversationId || null;
+  const entityId = selectedConversation?.entityId || null;
 
   // 대화 변경 시 텍스트 저장/복원
   useEffect(() => {
-    const prevId = prevConversationIdRef.current;
+    const prevId = prevEntityIdRef.current;
 
     // 이전 대화의 텍스트 저장
-    if (prevId && prevId !== conversationId) {
+    if (prevId && prevId !== entityId) {
       if (text.trim()) {
         draftTexts.set(prevId, text);
       } else {
@@ -54,15 +54,15 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     }
 
     // 새 대화의 텍스트 복원
-    if (conversationId) {
-      const savedText = draftTexts.get(conversationId) || '';
+    if (entityId) {
+      const savedText = draftTexts.get(entityId) || '';
       setText(savedText);
     } else {
       setText('');
     }
 
-    prevConversationIdRef.current = conversationId;
-  }, [conversationId]); // text는 의존성에서 제외 (무한 루프 방지)
+    prevEntityIdRef.current = entityId;
+  }, [entityId]); // text는 의존성에서 제외 (무한 루프 방지)
 
   const isWorking = status === 'working';
   const canSend = (text.trim() || attachedImage) && !disabled && !isWorking;
@@ -79,10 +79,10 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     setText('');
     setAttachedImage(null);
     // 전송 후 draft 삭제
-    if (conversationId) {
-      draftTexts.delete(conversationId);
+    if (entityId) {
+      draftTexts.delete(entityId);
     }
-  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, conversationId]);
+  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, entityId]);
 
   const handleStop = () => {
     onStop?.();
@@ -90,8 +90,8 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
-      if (isDesktop) {
-        // 데스크탑: Enter = 전송, Shift+Enter / Ctrl+Enter = 줄바꿈
+      if (isDesktop || isTablet) {
+        // 데스크탑/태블릿: Enter = 전송, Shift+Enter / Ctrl+Enter = 줄바꿈
         if (!e.shiftKey && !e.ctrlKey) {
           e.preventDefault();
           handleSend();

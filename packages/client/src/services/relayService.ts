@@ -201,11 +201,11 @@ export class RelayService {
   /**
    * Claude에 메시지 전송
    */
-  sendClaude(conversationId: string, content: string, attachments?: string[]): void {
+  sendClaude(entityId: number, content: string, attachments?: string[]): void {
     this.send({
       type: MessageType.CLAUDE_SEND,
       payload: {
-        conversationId,
+        entityId,
         content,
         attachments,
       },
@@ -215,11 +215,11 @@ export class RelayService {
   /**
    * Claude 제어 (중단/재시작)
    */
-  sendClaudeControl(conversationId: string, action: 'stop' | 'restart'): void {
+  sendClaudeControl(entityId: number, action: 'stop' | 'restart'): void {
     this.send({
       type: MessageType.CLAUDE_CONTROL,
       payload: {
-        conversationId,
+        entityId,
         action,
       },
     });
@@ -229,14 +229,14 @@ export class RelayService {
    * Claude 권한 응답
    */
   sendPermissionResponse(
-    conversationId: string,
+    entityId: number,
     toolUseId: string,
     allowed: boolean
   ): void {
     this.send({
       type: MessageType.CLAUDE_PERMISSION,
       payload: {
-        conversationId,
+        entityId,
         toolUseId,
         allowed,
       },
@@ -247,14 +247,14 @@ export class RelayService {
    * Claude 질문 응답
    */
   sendQuestionResponse(
-    conversationId: string,
+    entityId: number,
     toolUseId: string,
     answer: string
   ): void {
     this.send({
       type: MessageType.CLAUDE_ANSWER,
       payload: {
-        conversationId,
+        entityId,
         toolUseId,
         answer,
       },

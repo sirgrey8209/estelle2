@@ -3,7 +3,8 @@ import { Routes, Route } from 'react-router-dom';
 import { useRelayStore } from './stores';
 import { RelayConfig, AppConfig } from './utils/config';
 import { routeMessage } from './hooks/useMessageRouter';
-import { setWebSocket, requestWorkspaceList } from './services/relaySender';
+import { setWebSocket } from './services/relaySender';
+import { syncOrchestrator } from './services/syncOrchestrator';
 import { blobService } from './services/blobService';
 import type { RelayMessage } from './services/relayService';
 import { HomePage } from './pages/HomePage';
@@ -39,8 +40,8 @@ function useRelayConnection() {
           setAuthenticated(true);
           setDeviceId(String(payload.device.deviceId));
 
-          // 워크스페이스 목록 요청
-          requestWorkspaceList();
+          // 워크스페이스 목록 요청 (syncOrchestrator 경유)
+          syncOrchestrator.startInitialSync();
         }
         return;
       }
@@ -58,8 +59,7 @@ function useRelayConnection() {
   );
 
   useEffect(() => {
-    // 개발 환경에서는 localUrl 사용
-    const wsUrl = AppConfig.debug ? RelayConfig.localUrl : RelayConfig.url;
+    const wsUrl = RelayConfig.url;
 
     console.log('[Relay] Connecting to:', wsUrl);
 
@@ -94,6 +94,7 @@ function useRelayConnection() {
 
         ws.onclose = () => {
           console.log('[Relay] Disconnected');
+          syncOrchestrator.cleanup();
           setConnected(false);
           setWebSocket(null);
 

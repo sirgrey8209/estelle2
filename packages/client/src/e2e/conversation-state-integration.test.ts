@@ -24,9 +24,13 @@ vi.mock('../services/relaySender', () => ({
 
 vi.mock('../stores/relayStore', () => ({
   useRelayStore: {
-    getState: () => ({
-      setDesksLoaded: vi.fn(),
-    }),
+    getState: () => ({}),
+  },
+}));
+
+vi.mock('../services/syncOrchestrator', () => ({
+  syncOrchestrator: {
+    onWorkspaceListReceived: vi.fn(),
   },
 }));
 
@@ -39,10 +43,19 @@ vi.mock('../stores/settingsStore', () => ({
 }));
 
 // ============================================================================
+// Constants - entityId 기반 식별자
+// ============================================================================
+
+/** conv-1 대응 entityId */
+const ENTITY_ID_1 = 1001;
+/** conv-2 대응 entityId */
+const ENTITY_ID_2 = 1002;
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
-function createMockWorkspace(id: string, convs: Array<{ id: string; name: string; status?: string }>) {
+function createMockWorkspace(id: string, convs: Array<{ id: string; entityId: number; name: string; status?: string }>) {
   return {
     workspaceId: id,
     name: `Workspace ${id}`,
@@ -52,6 +65,7 @@ function createMockWorkspace(id: string, convs: Array<{ id: string; name: string
     createdAt: Date.now(),
     lastUsed: Date.now(),
     conversations: convs.map((c) => ({
+      entityId: c.entityId,
       conversationId: c.id,
       name: c.name,
       status: (c.status || 'idle') as 'idle' | 'working' | 'waiting' | 'error',
@@ -67,17 +81,17 @@ function setupWorkspaceWithConversations() {
   const pylonId = 1;
   useWorkspaceStore.getState().setWorkspaces(pylonId, [
     createMockWorkspace('ws-1', [
-      { id: 'conv-1', name: 'Conversation 1' },
-      { id: 'conv-2', name: 'Conversation 2' },
+      { id: 'conv-1', entityId: ENTITY_ID_1, name: 'Conversation 1' },
+      { id: 'conv-2', entityId: ENTITY_ID_2, name: 'Conversation 2' },
     ]),
   ]);
   return pylonId;
 }
 
-function selectConversation(convId: string) {
+function selectConversation(_convId: string, entityId: number) {
   const pylonId = 1;
-  useWorkspaceStore.getState().selectConversation(pylonId, 'ws-1', convId);
-  useConversationStore.getState().setCurrentConversation(convId);
+  useWorkspaceStore.getState().selectConversation(pylonId, entityId);
+  useConversationStore.getState().setCurrentConversation(entityId);
 }
 
 // ============================================================================
@@ -94,7 +108,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('대화 전환 시 이전 대화의 status가 유지됨', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act: conv-1에서 working 상태로 변경
       routeMessage({
@@ -105,21 +119,21 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // conv-2로 전환
-      selectConversation('conv-2');
+      selectConversation('conv-2', ENTITY_ID_2);
 
       // Assert: conv-1은 여전히 working
-      const conv1State = useConversationStore.getState().getState('conv-1');
+      const conv1State = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(conv1State?.status).toBe('working');
 
       // conv-2는 idle
-      const conv2State = useConversationStore.getState().getState('conv-2');
+      const conv2State = useConversationStore.getState().getState(ENTITY_ID_2);
       expect(conv2State?.status).toBe('idle');
     });
 
     it('대화 전환 시 이전 대화의 messages가 유지됨', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act: conv-1에 메시지 추가
       routeMessage({
@@ -136,7 +150,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // conv-2로 전환 후 메시지 추가
-      selectConversation('conv-2');
+      selectConversation('conv-2', ENTITY_ID_2);
       routeMessage({
         type: MessageType.CLAUDE_EVENT,
         payload: {
@@ -151,8 +165,8 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert: 각 대화에 올바른 메시지가 있음
-      const conv1State = useConversationStore.getState().getState('conv-1');
-      const conv2State = useConversationStore.getState().getState('conv-2');
+      const conv1State = useConversationStore.getState().getState(ENTITY_ID_1);
+      const conv2State = useConversationStore.getState().getState(ENTITY_ID_2);
 
       expect(conv1State?.messages).toHaveLength(1);
       expect((conv1State?.messages[0] as any).content).toBe('Hello from conv-1');
@@ -164,7 +178,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('대화 전환 시 pendingRequests가 격리됨', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act: conv-1에서 권한 요청
       routeMessage({
@@ -180,11 +194,11 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // conv-2로 전환
-      selectConversation('conv-2');
+      selectConversation('conv-2', ENTITY_ID_2);
 
       // Assert: conv-1에는 pendingRequest가 있고, conv-2에는 없음
-      expect(useConversationStore.getState().hasPendingRequests('conv-1')).toBe(true);
-      expect(useConversationStore.getState().hasPendingRequests('conv-2')).toBe(false);
+      expect(useConversationStore.getState().hasPendingRequests(ENTITY_ID_1)).toBe(true);
+      expect(useConversationStore.getState().hasPendingRequests(ENTITY_ID_2)).toBe(false);
     });
   });
 
@@ -192,10 +206,10 @@ describe('대화별 상태 통합 테스트', () => {
     it('getCurrentState는 현재 선택된 대화의 상태 반환', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act
-      useConversationStore.getState().setStatus('conv-1', 'working');
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
 
       // Assert
       const current = useConversationStore.getState().getCurrentState();
@@ -205,12 +219,12 @@ describe('대화별 상태 통합 테스트', () => {
     it('대화 전환 후 getCurrentState는 새 대화의 상태 반환', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
-      useConversationStore.getState().setStatus('conv-1', 'working');
+      selectConversation('conv-1', ENTITY_ID_1);
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
 
       // Act
-      selectConversation('conv-2');
-      useConversationStore.getState().setStatus('conv-2', 'permission');
+      selectConversation('conv-2', ENTITY_ID_2);
+      useConversationStore.getState().setStatus(ENTITY_ID_2, 'permission');
 
       // Assert
       const current = useConversationStore.getState().getCurrentState();
@@ -222,7 +236,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('HISTORY_RESULT는 현재 대화에 메시지 설정', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       const historyMessages: StoreMessage[] = [
         {
@@ -248,7 +262,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.messages).toHaveLength(2);
       expect((state?.messages[0] as any).content).toBe('History message 1');
     });
@@ -258,8 +272,8 @@ describe('대화별 상태 통합 테스트', () => {
       setupWorkspaceWithConversations();
 
       // conv-1에 메시지 추가
-      selectConversation('conv-1');
-      useConversationStore.getState().addMessage('conv-1', {
+      selectConversation('conv-1', ENTITY_ID_1);
+      useConversationStore.getState().addMessage(ENTITY_ID_1, {
         id: 'msg-1',
         role: 'user',
         type: 'text',
@@ -268,7 +282,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // conv-2 선택 후 히스토리 로드
-      selectConversation('conv-2');
+      selectConversation('conv-2', ENTITY_ID_2);
       routeMessage({
         type: MessageType.HISTORY_RESULT,
         payload: {
@@ -283,12 +297,12 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert: conv-1의 메시지는 그대로
-      const conv1State = useConversationStore.getState().getState('conv-1');
+      const conv1State = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(conv1State?.messages).toHaveLength(1);
       expect((conv1State?.messages[0] as any).content).toBe('Original message');
 
       // conv-2에는 히스토리 메시지
-      const conv2State = useConversationStore.getState().getState('conv-2');
+      const conv2State = useConversationStore.getState().getState(ENTITY_ID_2);
       expect(conv2State?.messages).toHaveLength(1);
       expect((conv2State?.messages[0] as any).content).toBe('Conv-2 history');
     });
@@ -298,10 +312,10 @@ describe('대화별 상태 통합 테스트', () => {
     it('현재 대화가 working이면 isWorking = true', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act
-      useConversationStore.getState().setStatus('conv-1', 'working');
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
 
       // Assert: InputBar가 사용할 로직
       const currentState = useConversationStore.getState().getCurrentState();
@@ -314,11 +328,11 @@ describe('대화별 상태 통합 테스트', () => {
       setupWorkspaceWithConversations();
 
       // conv-1을 working으로 설정
-      selectConversation('conv-1');
-      useConversationStore.getState().setStatus('conv-1', 'working');
+      selectConversation('conv-1', ENTITY_ID_1);
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
 
       // Act: conv-2로 전환 (idle 상태)
-      selectConversation('conv-2');
+      selectConversation('conv-2', ENTITY_ID_2);
 
       // Assert
       const currentState = useConversationStore.getState().getCurrentState();
@@ -338,7 +352,7 @@ describe('대화별 상태 통합 테스트', () => {
           deviceName: 'Test Pylon',
           workspaces: [
             createMockWorkspace('ws-1', [
-              { id: 'conv-1', name: 'Conv 1', status: 'working' },
+              { id: 'conv-1', entityId: ENTITY_ID_1, name: 'Conv 1', status: 'working' },
             ]),
           ],
           activeWorkspaceId: 'ws-1',
@@ -347,10 +361,10 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Act: 대화 선택
-      useConversationStore.getState().setCurrentConversation('conv-1');
+      useConversationStore.getState().setCurrentConversation(ENTITY_ID_1);
 
       // Assert: 초기 상태는 idle (히스토리 로드 전)
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.status).toBe('idle');
       expect(state?.messages).toEqual([]);
     });
@@ -358,7 +372,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('CLAUDE_EVENT state로 실제 상태 동기화', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act: Pylon에서 현재 상태 전송
       routeMessage({
@@ -369,7 +383,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.status).toBe('working');
     });
   });
@@ -378,7 +392,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('text 이벤트가 현재 대화의 textBuffer에 추가됨', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act
       routeMessage({
@@ -391,14 +405,14 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.textBuffer).toBe('Hello World');
     });
 
     it('textComplete 이벤트가 textBuffer를 메시지로 변환', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       routeMessage({
         type: MessageType.CLAUDE_EVENT,
@@ -412,7 +426,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.textBuffer).toBe('');
       expect(state?.messages).toHaveLength(1);
       expect((state?.messages[0] as any).content).toBe('Complete message');
@@ -423,7 +437,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('toolInfo 이벤트가 tool_start 메시지 추가', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // Act
       routeMessage({
@@ -439,7 +453,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.messages).toHaveLength(1);
       expect(state?.messages[0].type).toBe('tool_start');
       expect((state?.messages[0] as any).toolName).toBe('Bash');
@@ -448,7 +462,7 @@ describe('대화별 상태 통합 테스트', () => {
     it('toolComplete 이벤트가 tool_start를 tool_complete로 교체', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
+      selectConversation('conv-1', ENTITY_ID_1);
 
       // tool_start 추가
       routeMessage({
@@ -478,7 +492,7 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.messages).toHaveLength(1);
       expect(state?.messages[0].type).toBe('tool_complete');
       expect((state?.messages[0] as any).success).toBe(true);
@@ -489,8 +503,8 @@ describe('대화별 상태 통합 테스트', () => {
     it('result 이벤트가 상태를 idle로 변경하고 result 메시지 추가', () => {
       // Arrange
       setupWorkspaceWithConversations();
-      selectConversation('conv-1');
-      useConversationStore.getState().setStatus('conv-1', 'working');
+      selectConversation('conv-1', ENTITY_ID_1);
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
 
       // Act
       routeMessage({
@@ -509,10 +523,110 @@ describe('대화별 상태 통합 테스트', () => {
       });
 
       // Assert
-      const state = useConversationStore.getState().getState('conv-1');
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
       expect(state?.status).toBe('idle');
       expect(state?.messages).toHaveLength(1);
       expect(state?.messages[0].type).toBe('result');
+    });
+  });
+
+  // ==========================================================================
+  // reconnect-state-sync: 재연결 시 상태 동기화 테스트
+  // ==========================================================================
+
+  describe('재연결 시 상태 동기화', () => {
+    it('재연결 후 CONVERSATION_STATUS가 convState 없이도 상태를 설정함', () => {
+      // Arrange: 워크스페이스만 설정하고 대화 상태는 초기화하지 않음
+      const pylonId = 1;
+      useWorkspaceStore.getState().setWorkspaces(pylonId, [
+        createMockWorkspace('ws-1', [
+          { id: 'conv-1', entityId: ENTITY_ID_1, name: 'Conv 1' },
+        ]),
+      ]);
+      // 주의: selectConversation을 호출하지 않아 convState가 없는 상태
+
+      // Act: CONVERSATION_STATUS 수신 (재연결 시나리오)
+      routeMessage({
+        type: MessageType.CONVERSATION_STATUS,
+        payload: {
+          entityId: ENTITY_ID_1,
+          status: 'idle',
+        },
+      });
+
+      // Assert: convState가 없어도 상태가 설정되어야 함
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
+      expect(state).toBeDefined();
+      expect(state?.status).toBe('idle');
+    });
+
+    it('HISTORY_RESULT의 currentStatus로 정확한 상태 동기화', () => {
+      // Arrange
+      setupWorkspaceWithConversations();
+      selectConversation('conv-1', ENTITY_ID_1);
+
+      // 로컬에서 working으로 설정 (stale 상태 시뮬레이션)
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'working');
+
+      // Act: Pylon에서 실제 상태(idle)가 포함된 HISTORY_RESULT 수신
+      routeMessage({
+        type: MessageType.HISTORY_RESULT,
+        payload: {
+          entityId: ENTITY_ID_1,
+          messages: [],
+          totalCount: 0,
+          currentStatus: 'idle',
+        },
+      });
+
+      // Assert: Pylon의 currentStatus로 동기화되어야 함
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
+      expect(state?.status).toBe('idle');
+    });
+
+    it('HISTORY_RESULT의 currentStatus가 working이면 working으로 설정', () => {
+      // Arrange
+      setupWorkspaceWithConversations();
+      selectConversation('conv-1', ENTITY_ID_1);
+
+      // 로컬은 idle (실제로는 Pylon에서 working 중)
+      useConversationStore.getState().setStatus(ENTITY_ID_1, 'idle');
+
+      // Act
+      routeMessage({
+        type: MessageType.HISTORY_RESULT,
+        payload: {
+          entityId: ENTITY_ID_1,
+          messages: [],
+          totalCount: 0,
+          currentStatus: 'working',
+        },
+      });
+
+      // Assert
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
+      expect(state?.status).toBe('working');
+    });
+
+    it('HISTORY_RESULT의 currentStatus가 permission이면 permission으로 설정', () => {
+      // Arrange
+      setupWorkspaceWithConversations();
+      selectConversation('conv-1', ENTITY_ID_1);
+
+      // Act
+      routeMessage({
+        type: MessageType.HISTORY_RESULT,
+        payload: {
+          entityId: ENTITY_ID_1,
+          messages: [],
+          totalCount: 0,
+          currentStatus: 'permission',
+        },
+      });
+
+      // Assert
+      const state = useConversationStore.getState().getState(ENTITY_ID_1);
+      expect(state?.status).toBe('permission');
     });
   });
 });

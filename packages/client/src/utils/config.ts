@@ -9,14 +9,24 @@
 const isDev = import.meta.env?.DEV ?? false;
 
 /**
+ * Relay URL을 런타임에 결정
+ * - localhost → ws://localhost:3000 (dev)
+ * - 그 외 → wss://{host} (stage/release 자동 구분)
+ */
+function deriveRelayUrl(): string {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'ws://localhost:3000';
+  }
+  return `wss://${typeof window !== 'undefined' ? window.location.host : 'estelle-relay-v2.fly.dev'}`;
+}
+
+/**
  * Relay 서버 설정
  */
 export const RelayConfig = {
   /** Relay 서버 URL */
-  url: import.meta.env?.VITE_RELAY_URL ?? 'wss://estelle-relay-v2.fly.dev',
-
-  /** 로컬 개발 URL */
-  localUrl: 'ws://localhost:3000',
+  url: deriveRelayUrl(),
 
   /** 재연결 시도 횟수 */
   maxReconnectAttempts: 5,

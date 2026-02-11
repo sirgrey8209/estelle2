@@ -1,6 +1,4 @@
-import { ClaudeUsageCard } from './ClaudeUsageCard';
-import { DeploySection } from './DeploySection';
-import { AppUpdateSection } from './AppUpdateSection';
+import { AccountSection } from './AccountSection';
 
 /**
  * 설정 화면 메인
@@ -9,9 +7,7 @@ export function SettingsScreen() {
   return (
     <div className="flex-1 bg-background">
       <div className="h-full overflow-y-auto p-4">
-        <ClaudeUsageCard />
-        <DeploySection />
-        <AppUpdateSection />
+        <AccountSection />
       </div>
     </div>
   );
@@ -23,9 +19,7 @@ export function SettingsScreen() {
 export function SettingsContent() {
   return (
     <div className="space-y-4">
-      <ClaudeUsageCard />
-      <DeploySection />
-      <AppUpdateSection />
+      <AccountSection />
     </div>
   );
 }

@@ -39,28 +39,28 @@ const mockConversationState = {
 };
 
 const mockConversationStore = {
-  states: new Map<string, typeof mockConversationState>(),
-  currentConversationId: 'conv-1' as string | null,
-  getState: vi.fn((convId: string) => mockConversationState),
+  states: new Map<number, typeof mockConversationState>(),
+  currentEntityId: 1001 as number | null,
+  getState: vi.fn((entityId: number) => mockConversationState),
   getCurrentState: vi.fn(() => mockConversationState),
-  hasPendingRequests: vi.fn((_convId?: string) => mockConversationState.pendingRequests.length > 0),
-  setStatus: vi.fn((convId: string, status: string) => {
+  hasPendingRequests: vi.fn((_entityId?: number) => mockConversationState.pendingRequests.length > 0),
+  setStatus: vi.fn((entityId: number, status: string) => {
     mockConversationState.status = status as any;
   }),
-  addMessage: vi.fn((convId: string, msg: unknown) => {
+  addMessage: vi.fn((entityId: number, msg: unknown) => {
     mockConversationState.messages.push(msg);
   }),
-  setMessages: vi.fn((convId: string, msgs: unknown[]) => {
+  setMessages: vi.fn((entityId: number, msgs: unknown[]) => {
     mockConversationState.messages = [...msgs];
   }),
-  clearMessages: vi.fn((convId: string) => {
+  clearMessages: vi.fn((entityId: number) => {
     mockConversationState.messages = [];
     mockConversationState.pendingRequests = [];
   }),
-  appendTextBuffer: vi.fn((convId: string, text: string) => {
+  appendTextBuffer: vi.fn((entityId: number, text: string) => {
     mockConversationState.textBuffer += text;
   }),
-  flushTextBuffer: vi.fn((convId: string) => {
+  flushTextBuffer: vi.fn((entityId: number) => {
     if (mockConversationState.textBuffer) {
       mockConversationState.messages.push({
         role: 'assistant',
@@ -70,10 +70,10 @@ const mockConversationStore = {
       mockConversationState.textBuffer = '';
     }
   }),
-  addPendingRequest: vi.fn((convId: string, req: unknown) => {
+  addPendingRequest: vi.fn((entityId: number, req: unknown) => {
     mockConversationState.pendingRequests.push(req);
   }),
-  removePendingRequest: vi.fn((convId: string, id: string) => {
+  removePendingRequest: vi.fn((entityId: number, id: string) => {
     mockConversationState.pendingRequests = mockConversationState.pendingRequests.filter(
       (r: any) => r.toolUseId !== id
     );
@@ -88,6 +88,7 @@ const mockWorkspaceStore = {
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
     workingDir: '/test',
+    entityId: 1001,
     conversationId: 'conv-1',
     conversationName: 'Main',
     status: 'idle',
@@ -108,7 +109,7 @@ const mockWorkspaceStore = {
           workingDir: '/test',
           isActive: true,
           conversations: [
-            { conversationId: 'conv-1', name: 'Main', status: 'idle', unread: false },
+            { entityId: 1001, conversationId: 'conv-1', name: 'Main', status: 'idle', unread: false },
           ],
         },
       ],
@@ -136,14 +137,13 @@ describe('InputBar 동작', () => {
   describe('메시지 전송', () => {
     it('텍스트 전송 시 CLAUDE_SEND 메시지가 전송되어야 한다', () => {
       // InputBar의 handleSend가 호출되면:
-      sendClaudeMessage('ws-1', 'conv-1', 'Hello, Claude!');
+      sendClaudeMessage(1001, 'Hello, Claude!');
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toEqual({
         type: MessageType.CLAUDE_SEND,
         payload: {
-          workspaceId: 'ws-1',
-          conversationId: 'conv-1',
+          entityId: 1001,
           message: 'Hello, Claude!',
           attachments: undefined,
         },
@@ -152,7 +152,7 @@ describe('InputBar 동작', () => {
 
     it('이미지 첨부 시 attachments가 포함되어야 한다', () => {
       const attachments = ['file:///test/image.jpg'];
-      sendClaudeMessage('ws-1', 'conv-1', '이미지 확인해주세요', attachments);
+      sendClaudeMessage(1001, '이미지 확인해주세요', attachments);
 
       expect(sentMessages[0].payload).toMatchObject({
         message: '이미지 확인해주세요',
@@ -163,20 +163,20 @@ describe('InputBar 동작', () => {
     it('빈 텍스트는 전송 전 UI에서 검증됨 (서비스 레벨 테스트 범위 밖)', () => {
       // UI 레벨에서 canSend 체크로 빈 메시지 방지
       // 여기서는 서비스가 정상 동작하는지만 확인
-      sendClaudeMessage('ws-1', 'conv-1', '');
+      sendClaudeMessage(1001, '');
       expect(sentMessages).toHaveLength(1); // 서비스는 그대로 전송
     });
   });
 
   describe('Stop 버튼', () => {
     it('Stop 시 CLAUDE_CONTROL 메시지가 전송되어야 한다', () => {
-      sendClaudeControl('conv-1', 'stop');
+      sendClaudeControl(1001, 'stop');
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toEqual({
         type: MessageType.CLAUDE_CONTROL,
         payload: {
-          conversationId: 'conv-1',
+          entityId: 1001,
           action: 'stop',
         },
       });
@@ -207,8 +207,8 @@ describe('ChatArea 동작', () => {
         content: 'Hello, Claude!',
         timestamp: Date.now(),
       };
-      mockConversationStore.addMessage('conv-1', userMessage);
-      sendClaudeMessage('ws-1', 'conv-1', 'Hello, Claude!');
+      mockConversationStore.addMessage(1001, userMessage);
+      sendClaudeMessage(1001, 'Hello, Claude!');
 
       // Store에 메시지가 추가됨
       expect(mockConversationState.messages).toHaveLength(1);
@@ -229,7 +229,7 @@ describe('ChatArea 동작', () => {
       // ChatArea에서 계산되는 로직:
       const currentState = mockConversationStore.getCurrentState();
       const isWorking = currentState?.status === 'working';
-      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const hasPending = mockConversationStore.hasPendingRequests(1001);
       const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(true);
@@ -241,7 +241,7 @@ describe('ChatArea 동작', () => {
 
       const currentState = mockConversationStore.getCurrentState();
       const isWorking = currentState?.status === 'working';
-      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const hasPending = mockConversationStore.hasPendingRequests(1001);
       const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(true);
@@ -253,7 +253,7 @@ describe('ChatArea 동작', () => {
 
       const currentState = mockConversationStore.getCurrentState();
       const isWorking = currentState?.status === 'working';
-      const hasPending = mockConversationStore.hasPendingRequests('conv-1');
+      const hasPending = mockConversationStore.hasPendingRequests(1001);
       const disabled = isWorking || hasPending;
 
       expect(disabled).toBe(false);
@@ -274,14 +274,13 @@ describe('WorkspaceSidebar 동작', () => {
 
   describe('대화 선택', () => {
     it('대화 선택 시 서버에 CONVERSATION_SELECT가 전송되어야 한다', () => {
-      selectConversation('ws-1', 'conv-1');
+      selectConversation(1001);
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toEqual({
         type: MessageType.CONVERSATION_SELECT,
         payload: {
-          workspaceId: 'ws-1',
-          conversationId: 'conv-1',
+          entityId: 1001,
         },
       });
     });
@@ -293,7 +292,7 @@ describe('WorkspaceSidebar 동작', () => {
 
       // 이 테스트는 실제 컴포넌트 로직 확인용
       // 대화 전환 시 상태 변경은 conversationStore가 처리
-      selectConversation('ws-1', 'conv-1');
+      selectConversation(1001);
 
       expect(sentMessages).toHaveLength(1);
     });
@@ -313,13 +312,13 @@ describe('RequestBar 동작', () => {
 
   describe('권한 요청 처리', () => {
     it('허용 응답 시 CLAUDE_PERMISSION 메시지가 전송되어야 한다', () => {
-      sendPermissionResponse('conv-1', 'tool-123', 'allow');
+      sendPermissionResponse(1001, 'tool-123', 'allow');
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_PERMISSION,
         payload: {
-          conversationId: 'conv-1',
+          entityId: 1001,
           toolUseId: 'tool-123',
           decision: 'allow',
         },
@@ -327,7 +326,7 @@ describe('RequestBar 동작', () => {
     });
 
     it('거부 응답 시 decision=deny로 전송되어야 한다', () => {
-      sendPermissionResponse('conv-1', 'tool-123', 'deny');
+      sendPermissionResponse(1001, 'tool-123', 'deny');
 
       expect(sentMessages[0].payload).toMatchObject({
         decision: 'deny',
@@ -337,13 +336,13 @@ describe('RequestBar 동작', () => {
 
   describe('질문 요청 처리', () => {
     it('질문 응답 시 CLAUDE_ANSWER가 전송되어야 한다', () => {
-      sendQuestionResponse('conv-1', 'tool-456', 'React');
+      sendQuestionResponse(1001, 'tool-456', 'React');
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_ANSWER,
         payload: {
-          conversationId: 'conv-1',
+          entityId: 1001,
           toolUseId: 'tool-456',
           answer: 'React',
         },
@@ -364,16 +363,16 @@ describe('스트리밍 동작', () => {
 
   it('text 이벤트가 연속으로 오면 textBuffer에 누적되어야 한다', () => {
     // 스트리밍 시뮬레이션
-    mockConversationStore.appendTextBuffer('conv-1', 'Hello');
-    mockConversationStore.appendTextBuffer('conv-1', ' World');
-    mockConversationStore.appendTextBuffer('conv-1', '!');
+    mockConversationStore.appendTextBuffer(1001, 'Hello');
+    mockConversationStore.appendTextBuffer(1001, ' World');
+    mockConversationStore.appendTextBuffer(1001, '!');
 
     expect(mockConversationState.textBuffer).toBe('Hello World!');
   });
 
   it('textComplete 이벤트 시 메시지로 변환되어야 한다', () => {
     mockConversationState.textBuffer = 'Complete message';
-    mockConversationStore.flushTextBuffer('conv-1');
+    mockConversationStore.flushTextBuffer(1001);
 
     expect(mockConversationState.messages).toHaveLength(1);
     expect(mockConversationState.messages[0]).toMatchObject({
@@ -395,13 +394,13 @@ describe('상태 전환', () => {
   });
 
   it('working 상태로 전환 시 status가 변경되어야 한다', () => {
-    mockConversationStore.setStatus('conv-1', 'working');
+    mockConversationStore.setStatus(1001, 'working');
 
     expect(mockConversationState.status).toBe('working');
   });
 
   it('permission 상태로 전환 시 status가 변경되어야 한다', () => {
-    mockConversationStore.setStatus('conv-1', 'permission');
+    mockConversationStore.setStatus(1001, 'permission');
 
     expect(mockConversationState.status).toBe('permission');
   });
@@ -409,7 +408,7 @@ describe('상태 전환', () => {
   it('result 이후 idle로 돌아가야 한다', () => {
     mockConversationState.status = 'working';
     // result 이벤트 처리 후
-    mockConversationStore.setStatus('conv-1', 'idle');
+    mockConversationStore.setStatus(1001, 'idle');
 
     expect(mockConversationState.status).toBe('idle');
   });

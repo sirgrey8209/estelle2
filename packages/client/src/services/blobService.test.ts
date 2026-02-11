@@ -53,7 +53,7 @@ describe('BlobTransferService', () => {
         filename: 'test.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Assert
@@ -70,7 +70,7 @@ describe('BlobTransferService', () => {
         filename: 'test.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Assert
@@ -92,7 +92,7 @@ describe('BlobTransferService', () => {
           totalSize: 1024,
           chunkSize: 512,
           totalChunks: 2,
-          context: { conversationId: 'conv-1' },
+          context: { entityId: 1001 },
         },
       };
 
@@ -270,7 +270,7 @@ describe('BlobTransferService', () => {
         filename: 'upload.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Act - Pylon에서 완료 응답
@@ -280,7 +280,7 @@ describe('BlobTransferService', () => {
           blobId,
           fileId: 'file-123',
           path: '/uploads/upload.png',
-          conversationId: 'conv-1',
+          entityId: 1001,
         },
       });
 
@@ -292,7 +292,7 @@ describe('BlobTransferService', () => {
         expect.objectContaining({
           blobId,
           pylonPath: '/uploads/upload.png',
-          conversationId: 'conv-1',
+          entityId: 1001,
         })
       );
     });
@@ -306,7 +306,7 @@ describe('BlobTransferService', () => {
         filename: 'thumb-test.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       const thumbnailBase64 = btoa(String.fromCharCode(10, 20, 30));
@@ -318,7 +318,7 @@ describe('BlobTransferService', () => {
           blobId,
           fileId: 'file-456',
           path: '/uploads/thumb-test.png',
-          conversationId: 'conv-1',
+          entityId: 1001,
           thumbnail: thumbnailBase64,
         },
       });
@@ -343,7 +343,7 @@ describe('BlobTransferService', () => {
         filename: 'test.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
         mimeType: 'image/png',
       });
 
@@ -366,7 +366,7 @@ describe('BlobTransferService', () => {
         filename: 'small.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Assert
@@ -385,7 +385,7 @@ describe('BlobTransferService', () => {
         filename: 'final.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Assert
@@ -404,7 +404,7 @@ describe('BlobTransferService', () => {
         filename: 'context.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
         message: 'Check this image',
       });
 
@@ -412,7 +412,7 @@ describe('BlobTransferService', () => {
       const startMessage = sentMessages.find((m) => m.type === 'blob_start');
       const context = (startMessage?.payload as any).context;
       expect(context.workspaceId).toBe('ws-1');
-      expect(context.conversationId).toBe('conv-1');
+      expect(context.entityId).toBe(1001);
       expect(context.message).toBe('Check this image');
     });
   });
@@ -425,7 +425,7 @@ describe('BlobTransferService', () => {
       // Act
       service.requestFile({
         targetDeviceId: 1,
-        conversationId: 'conv-1',
+        entityId: 1001,
         filename: 'download.png',
       });
 
@@ -448,7 +448,7 @@ describe('BlobTransferService', () => {
       // Act
       service.requestFile({
         targetDeviceId: 1,
-        conversationId: 'conv-1',
+        entityId: 1001,
         filename: 'not-cached.png',
       });
 
@@ -501,7 +501,7 @@ describe('BlobTransferService', () => {
         filename: 'unsub-upload.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Act
@@ -584,7 +584,7 @@ describe('BlobTransferService', () => {
         filename: 'dispose.png',
         targetDeviceId: 1,
         workspaceId: 'ws-1',
-        conversationId: 'conv-1',
+        entityId: 1001,
       });
 
       // Act
