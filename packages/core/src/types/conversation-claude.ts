@@ -132,16 +132,7 @@ export interface ConversationClaudeState {
   /** 실시간 토큰 사용량 */
   realtimeUsage: RealtimeUsage | null;
 
-  // === 히스토리 페이징 ===
-
-  /** 전체 메시지 수 */
-  totalCount: number;
-
-  /** 더 많은 히스토리가 있는지 */
-  hasMore: boolean;
-
-  /** 히스토리 추가 로딩 중 */
-  isLoadingMore: boolean;
+  // 히스토리 페이징 상태는 syncStore에서 관리
 }
 
 // ============================================================================
@@ -164,9 +155,6 @@ export function createInitialClaudeState(): ConversationClaudeState {
     pendingRequests: [],
     workStartTime: null,
     realtimeUsage: null,
-    totalCount: 0,
-    hasMore: false,
-    isLoadingMore: false,
   };
 }
 

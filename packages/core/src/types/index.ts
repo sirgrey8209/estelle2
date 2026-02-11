@@ -43,3 +43,6 @@ export * from './usage.js';
 
 // conversation-claude.js - 대화별 Claude 상태 타입
 export * from './conversation-claude.js';
+
+// account.js - 계정 관련 타입
+export * from './account.js';

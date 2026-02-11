@@ -173,6 +173,12 @@ export const MessageType = {
   /** 사용량 조회 응답 */
   USAGE_RESPONSE: 'usage_response',
 
+  // === Account ===
+  /** 계정 전환 요청 */
+  ACCOUNT_SWITCH: 'account_switch',
+  /** 계정 상태 알림 */
+  ACCOUNT_STATUS: 'account_status',
+
   // === Utility ===
   /** 연결 유지 확인 요청 */
   PING: 'ping',

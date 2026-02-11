@@ -11,6 +11,32 @@ import type { ConversationStatusValue } from '../constants/conversation-status.j
 import type { PermissionModeValue } from '../constants/permission-mode.js';
 
 // ============================================================================
+// LinkedDocument (연결된 문서)
+// ============================================================================
+
+/**
+ * 연결된 문서(LinkedDocument) 정보
+ *
+ * @description
+ * 대화에 연결된 문서의 경로와 추가 시각을 나타냅니다.
+ *
+ * @example
+ * ```typescript
+ * const doc: LinkedDocument = {
+ *   path: 'src\\components\\App.tsx',
+ *   addedAt: Date.now(),
+ * };
+ * ```
+ */
+export interface LinkedDocument {
+  /** 문서 경로 (백슬래시 정규화) */
+  path: string;
+
+  /** 추가 시각 (Unix timestamp) */
+  addedAt: number;
+}
+
+// ============================================================================
 // Conversation (대화)
 // ============================================================================
 
@@ -35,7 +61,10 @@ import type { PermissionModeValue } from '../constants/permission-mode.js';
  * ```
  */
 export interface Conversation {
-  /** 대화 고유 식별자 (UUID) */
+  /** 엔티티 고유 식별자 (숫자) - Pylon의 EntityId */
+  entityId: number;
+
+  /** 대화 고유 식별자 (UUID) - 하위 호환용 */
   conversationId: string;
 
   /** 대화 이름 (표시용) */
@@ -56,9 +85,10 @@ export interface Conversation {
   /** 대화 생성 시각 (Unix timestamp) */
   createdAt: number;
 
+  /** 연결된 문서 목록 (선택) */
+  linkedDocuments?: LinkedDocument[];
+
   // 향후 추가 예정
-  // /** 연결된 문서 경로 */
-  // linkedDocument?: string;
   // /** 분기 원본 대화 ID */
   // parentConversationId?: string;
 }
