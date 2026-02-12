@@ -5,7 +5,7 @@
  * 각 대화(Conversation)의 Claude 상태를 독립적으로 관리합니다.
  * claudeStore의 전역 상태 문제를 해결하기 위해 도입되었습니다.
  *
- * entityId(number)를 키로 사용합니다.
+ * conversationId(number)를 키로 사용합니다.
  */
 
 import { create } from 'zustand';
@@ -33,83 +33,80 @@ export { createInitialClaudeState as getInitialClaudeState };
  * conversationStore 상태 인터페이스
  */
 export interface ConversationStoreState {
-  /** 대화별 Claude 상태 (entityId → state) */
+  /** 대화별 Claude 상태 (conversationId → state) */
   states: Map<number, ConversationClaudeState>;
 
-  /** 현재 선택된 entityId */
-  currentEntityId: number | null;
+  /** 현재 선택된 conversationId */
+  currentConversationId: number | null;
 
   // === Getters ===
 
   /** 특정 대화의 상태 조회 */
-  getState: (entityId: number) => ConversationClaudeState | null;
+  getState: (conversationId: number) => ConversationClaudeState | null;
 
   /** 현재 선택된 대화의 상태 조회 */
   getCurrentState: () => ConversationClaudeState | null;
 
   /** pendingRequests 존재 여부 */
-  hasPendingRequests: (entityId: number) => boolean;
+  hasPendingRequests: (conversationId: number) => boolean;
 
   // === Actions: 대화 선택 ===
 
   /** 현재 대화 설정 */
-  setCurrentConversation: (entityId: number | null) => void;
+  setCurrentConversation: (conversationId: number | null) => void;
 
   // === Actions: status ===
 
   /** 상태 변경 */
-  setStatus: (entityId: number, status: ClaudeStatus) => void;
+  setStatus: (conversationId: number, status: ClaudeStatus) => void;
 
   // === Actions: messages ===
 
   /** 메시지 추가 */
-  addMessage: (entityId: number, message: StoreMessage) => void;
+  addMessage: (conversationId: number, message: StoreMessage) => void;
 
   /** 메시지 목록 설정 (히스토리 로드) */
-  setMessages: (entityId: number, messages: StoreMessage[]) => void;
+  setMessages: (conversationId: number, messages: StoreMessage[]) => void;
 
   /** 이전 메시지 추가 (페이징) */
-  prependMessages: (entityId: number, messages: StoreMessage[]) => void;
+  prependMessages: (conversationId: number, messages: StoreMessage[]) => void;
 
   /** 메시지 목록 비우기 */
-  clearMessages: (entityId: number) => void;
+  clearMessages: (conversationId: number) => void;
 
 
   // === Actions: textBuffer ===
 
   /** 텍스트 버퍼에 추가 */
-  appendTextBuffer: (entityId: number, text: string) => void;
+  appendTextBuffer: (conversationId: number, text: string) => void;
 
   /** 텍스트 버퍼 비우기 */
-  clearTextBuffer: (entityId: number) => void;
+  clearTextBuffer: (conversationId: number) => void;
 
   /** 텍스트 버퍼를 메시지로 변환 */
-  flushTextBuffer: (entityId: number) => void;
+  flushTextBuffer: (conversationId: number) => void;
 
   // === Actions: pendingRequests ===
 
   /** 대기 중인 요청 추가 */
-  addPendingRequest: (entityId: number, request: PendingRequest) => void;
+  addPendingRequest: (conversationId: number, request: PendingRequest) => void;
 
   /** 대기 중인 요청 제거 */
-  removePendingRequest: (entityId: number, toolUseId: string) => void;
+  removePendingRequest: (conversationId: number, toolUseId: string) => void;
 
   // === Actions: realtimeUsage ===
 
   /** 실시간 사용량 업데이트 */
-  updateRealtimeUsage: (entityId: number, usage: Omit<RealtimeUsage, 'lastUpdateType'>) => void;
+  updateRealtimeUsage: (conversationId: number, usage: Omit<RealtimeUsage, 'lastUpdateType'>) => void;
 
   // === Actions: 대화 관리 ===
 
   /** 대화 상태 삭제 */
-  deleteConversation: (entityId: number) => void;
+  deleteConversation: (conversationId: number) => void;
 
   /** 전체 상태 초기화 */
   reset: () => void;
 
-  // === 하위 호환 ===
-  /** @deprecated currentEntityId 사용 권장 */
-  currentConversationId: string | null;
 }
 
 // ============================================================================
@@ -128,12 +125,12 @@ function generateId(): string {
  */
 function getOrCreateState(
   states: Map<number, ConversationClaudeState>,
-  entityId: number
+  conversationId: number
 ): ConversationClaudeState {
-  let state = states.get(entityId);
+  let state = states.get(conversationId);
   if (!state) {
     state = createInitialClaudeState();
-    states.set(entityId, state);
+    states.set(conversationId, state);
   }
   return state;
 }
@@ -147,13 +144,12 @@ function getOrCreateState(
  */
 export const useConversationStore = create<ConversationStoreState>((set, get) => ({
   states: new Map(),
-  currentEntityId: null,
   currentConversationId: null,
 
   // === Getters ===
 
-  getState: (entityId) => {
-    return get().states.get(entityId) ?? null;
+  getState: (conversationId) => {
+    return get().states.get(conversationId) ?? null;
   },
 
   /**
@@ -163,39 +159,38 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
    * 이 함수는 get()을 호출하여 Zustand selector 구독을 우회함
    */
   getCurrentState: () => {
-    const { currentEntityId, states } = get();
-    if (!currentEntityId) return null;
-    return states.get(currentEntityId) ?? null;
+    const { currentConversationId, states } = get();
+    if (!currentConversationId) return null;
+    return states.get(currentConversationId) ?? null;
   },
 
-  hasPendingRequests: (entityId) => {
-    const state = get().states.get(entityId);
+  hasPendingRequests: (conversationId) => {
+    const state = get().states.get(conversationId);
     return state ? state.pendingRequests.length > 0 : false;
   },
 
   // === Actions: 대화 선택 ===
 
-  setCurrentConversation: (entityId) => {
-    if (!entityId) {
-      set({ currentEntityId: null, currentConversationId: null });
+  setCurrentConversation: (conversationId) => {
+    if (!conversationId) {
+      set({ currentConversationId: null });
       return;
     }
 
     const states = new Map(get().states);
-    getOrCreateState(states, entityId);
+    getOrCreateState(states, conversationId);
 
     set({
-      currentEntityId: entityId,
-      currentConversationId: String(entityId),
+      currentConversationId: conversationId,
       states,
     });
   },
 
   // === Actions: status ===
 
-  setStatus: (entityId, status) => {
+  setStatus: (conversationId, status) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
     const updates: Partial<ConversationClaudeState> = { status };
 
@@ -213,26 +208,26 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       updates.realtimeUsage = null;
     }
 
-    states.set(entityId, { ...state, ...updates });
+    states.set(conversationId, { ...state, ...updates });
     set({ states });
   },
 
   // === Actions: messages ===
 
-  addMessage: (entityId, message) => {
+  addMessage: (conversationId, message) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       messages: [...state.messages, message],
     });
     set({ states });
   },
 
-  setMessages: (entityId, messages) => {
+  setMessages: (conversationId, messages) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
     // 히스토리 로드 시 실시간으로 받은 메시지와 병합
     // 히스토리의 마지막 timestamp 이후에 온 실시간 메시지만 보존
@@ -249,33 +244,33 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       ? [...messages, ...realtimeMessages].sort((a, b) => a.timestamp - b.timestamp)
       : messages;
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       messages: mergedMessages,
     });
     set({ states });
   },
 
-  prependMessages: (entityId, messages) => {
+  prependMessages: (conversationId, messages) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
     // 중복 제거 후 앞에 추가
     const existingIds = new Set(state.messages.map((m) => m.id));
     const newMessages = messages.filter((m) => !existingIds.has(m.id));
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       messages: [...newMessages, ...state.messages],
     });
     set({ states });
   },
 
-  clearMessages: (entityId) => {
+  clearMessages: (conversationId) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       messages: [],
       pendingRequests: [],
@@ -285,32 +280,32 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: textBuffer ===
 
-  appendTextBuffer: (entityId, text) => {
+  appendTextBuffer: (conversationId, text) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       textBuffer: state.textBuffer + text,
     });
     set({ states });
   },
 
-  clearTextBuffer: (entityId) => {
+  clearTextBuffer: (conversationId) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, { ...state, textBuffer: '' });
+    states.set(conversationId, { ...state, textBuffer: '' });
     set({ states });
   },
 
-  flushTextBuffer: (entityId) => {
+  flushTextBuffer: (conversationId) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
     if (!state.textBuffer.trim()) {
       // 빈 버퍼면 그냥 비우기만
-      states.set(entityId, { ...state, textBuffer: '' });
+      states.set(conversationId, { ...state, textBuffer: '' });
       set({ states });
       return;
     }
@@ -323,7 +318,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       timestamp: Date.now(),
     };
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       messages: [...state.messages, newMessage],
       textBuffer: '',
@@ -333,22 +328,22 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: pendingRequests ===
 
-  addPendingRequest: (entityId, request) => {
+  addPendingRequest: (conversationId, request) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       pendingRequests: [...state.pendingRequests, request],
     });
     set({ states });
   },
 
-  removePendingRequest: (entityId, toolUseId) => {
+  removePendingRequest: (conversationId, toolUseId) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       pendingRequests: state.pendingRequests.filter((r) => r.toolUseId !== toolUseId),
     });
@@ -357,9 +352,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: realtimeUsage ===
 
-  updateRealtimeUsage: (entityId, usage) => {
+  updateRealtimeUsage: (conversationId, usage) => {
     const states = new Map(get().states);
-    const state = getOrCreateState(states, entityId);
+    const state = getOrCreateState(states, conversationId);
 
     const prev = state.realtimeUsage;
     let lastUpdateType: 'input' | 'output' = 'input';
@@ -374,7 +369,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       }
     }
 
-    states.set(entityId, {
+    states.set(conversationId, {
       ...state,
       realtimeUsage: { ...usage, lastUpdateType },
     });
@@ -383,22 +378,20 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: 대화 관리 ===
 
-  deleteConversation: (entityId) => {
+  deleteConversation: (conversationId) => {
     const states = new Map(get().states);
-    states.delete(entityId);
+    states.delete(conversationId);
 
-    const currentId = get().currentEntityId;
+    const currentId = get().currentConversationId;
     set({
       states,
-      currentEntityId: currentId === entityId ? null : currentId,
-      currentConversationId: currentId === entityId ? null : get().currentConversationId,
+      currentConversationId: currentId === conversationId ? null : currentId,
     });
   },
 
   reset: () => {
     set({
       states: new Map(),
-      currentEntityId: null,
       currentConversationId: null,
     });
   },
@@ -418,7 +411,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
  */
 export function useCurrentConversationState(): ConversationClaudeState | null {
   return useConversationStore((s) => {
-    if (!s.currentEntityId) return null;
-    return s.states.get(s.currentEntityId) ?? null;
+    if (!s.currentConversationId) return null;
+    return s.states.get(s.currentConversationId) ?? null;
   });
 }

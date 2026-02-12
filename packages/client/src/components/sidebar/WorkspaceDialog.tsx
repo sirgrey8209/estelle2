@@ -263,7 +263,7 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     }
 
     if (Object.keys(updates).length > 0) {
-      updateWorkspace(workspace.workspaceId, updates);
+      updateWorkspace(Number(workspace.workspaceId), updates);
     }
     handleClose();
   };
@@ -271,7 +271,7 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   // 삭제 (롱홀드)
   const handleDelete = () => {
     if (!workspace) return;
-    deleteWorkspace(workspace.workspaceId);
+    deleteWorkspace(Number(workspace.workspaceId));
     handleClose();
   };
 

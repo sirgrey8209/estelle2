@@ -17,7 +17,7 @@ import { MessageType } from '@estelle/core';
 // Mock stores
 const mockConversationStore = {
   states: new Map<number, unknown>(),
-  currentEntityId: 1001 as number | null,
+  currentConversationId: 1001 as number | null,
   addMessage: vi.fn(),
   getState: vi.fn(() => ({ messages: [], status: 'idle' })),
   getCurrentState: vi.fn(() => ({ messages: [], status: 'idle' })),
@@ -28,8 +28,7 @@ const mockWorkspaceStore = {
   selectedConversation: {
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
-    entityId: 1001,
-    conversationId: 'conv-1',
+    conversationId: 1001,
     conversationName: 'Main',
   },
   connectedPylons: [{ deviceId: 1, deviceName: 'Test PC' }],

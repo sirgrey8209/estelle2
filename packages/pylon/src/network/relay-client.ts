@@ -21,6 +21,16 @@ import { createWsAdapterFactory } from './ws-websocket-adapter.js';
 export const DEFAULT_RECONNECT_INTERVAL = 3000;
 
 /**
+ * 기본 Heartbeat 간격 (ms)
+ */
+export const DEFAULT_HEARTBEAT_INTERVAL = 10000;
+
+/**
+ * 기본 Heartbeat 타임아웃 (ms)
+ */
+export const DEFAULT_HEARTBEAT_TIMEOUT = 30000;
+
+/**
  * RelayClient 생성 옵션
  */
 export interface RelayClientOptions {
@@ -32,6 +42,10 @@ export interface RelayClientOptions {
   deviceName?: string;
   /** 재연결 간격 (ms, 기본: 3000) */
   reconnectInterval?: number;
+  /** Heartbeat 간격 (ms, 기본: 10000) */
+  heartbeatInterval?: number;
+  /** Heartbeat 타임아웃 (ms, 기본: 30000) */
+  heartbeatTimeout?: number;
   /** 로거 인스턴스 (선택) */
   logger?: Logger;
   /** WebSocket 어댑터 팩토리 (선택, 테스트용) */
@@ -93,6 +107,12 @@ export class RelayClient {
   /** 재연결 간격 (ms) */
   private readonly reconnectInterval: number;
 
+  /** Heartbeat 간격 (ms) */
+  private readonly heartbeatInterval: number;
+
+  /** Heartbeat 타임아웃 (ms) */
+  private readonly heartbeatTimeout: number;
+
   /** WebSocket 어댑터 팩토리 */
   private readonly adapterFactory: WebSocketAdapterFactory;
 
@@ -107,6 +127,12 @@ export class RelayClient {
 
   /** 재연결 타이머 ID */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Heartbeat 타이머 ID */
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** 마지막 pong 수신 시간 */
+  private lastPongTime: number = 0;
 
   /** 메시지 수신 콜백 */
   private messageCallback: ((data: unknown) => void) | null = null;
@@ -127,6 +153,8 @@ export class RelayClient {
     this.deviceId = options.deviceId;
     this.deviceName = options.deviceName;
     this.reconnectInterval = options.reconnectInterval ?? DEFAULT_RECONNECT_INTERVAL;
+    this.heartbeatInterval = options.heartbeatInterval ?? DEFAULT_HEARTBEAT_INTERVAL;
+    this.heartbeatTimeout = options.heartbeatTimeout ?? DEFAULT_HEARTBEAT_TIMEOUT;
     this.logger = options.logger;
     // 기본값: 실제 WebSocket 어댑터 사용
     this.adapterFactory = options.adapterFactory ?? createWsAdapterFactory(this.url);
@@ -277,12 +305,22 @@ export class RelayClient {
 
       // 식별 메시지 전송
       this.send(this.createIdentifyMessage());
+
+      // Heartbeat 시작
+      this.startHeartbeat();
     };
 
     // 메시지 수신 이벤트
     this.adapter.onMessage = (message: string) => {
       try {
-        const data = JSON.parse(message);
+        const data = JSON.parse(message) as { type?: string };
+
+        // pong 메시지는 heartbeat용이므로 별도 처리
+        if (data.type === 'pong') {
+          this.lastPongTime = Date.now();
+          return;
+        }
+
         this.logger?.log('From Relay:', data);
 
         if (this.messageCallback) {
@@ -298,6 +336,9 @@ export class RelayClient {
     this.adapter.onClose = () => {
       this.connected = false;
       this.logger?.log('Disconnected from Relay');
+
+      // Heartbeat 중지
+      this.stopHeartbeat();
 
       // 상태 변경 콜백 호출
       if (this.statusChangeCallback) {
@@ -317,6 +358,60 @@ export class RelayClient {
     };
 
     this.adapter.connect();
+  }
+
+  /**
+   * Heartbeat 시작
+   *
+   * @private
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat(); // 기존 타이머 정리
+    this.lastPongTime = Date.now();
+
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.connected || !this.adapter) {
+        this.stopHeartbeat();
+        return;
+      }
+
+      // ping 전송
+      this.send({ type: 'ping' });
+
+      // 타임아웃 체크
+      const elapsed = Date.now() - this.lastPongTime;
+      if (elapsed > this.heartbeatTimeout) {
+        this.logger?.warn(`Heartbeat timeout (${elapsed}ms), forcing reconnect`);
+        this.forceReconnect();
+      }
+    }, this.heartbeatInterval);
+  }
+
+  /**
+   * Heartbeat 중지
+   *
+   * @private
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  /**
+   * 강제 재연결 (heartbeat 실패 시)
+   *
+   * @private
+   */
+  private forceReconnect(): void {
+    this.stopHeartbeat();
+
+    // 현재 어댑터 강제 종료 (onClose 이벤트가 재연결 트리거)
+    if (this.adapter) {
+      this.adapter.disconnect();
+      // adapter = null과 connected = false는 onClose에서 처리됨
+    }
   }
 
   /**
@@ -344,6 +439,9 @@ export class RelayClient {
    */
   disconnect(): void {
     this.reconnectEnabled = false;
+
+    // Heartbeat 중지
+    this.stopHeartbeat();
 
     // 재연결 타이머 정리
     if (this.reconnectTimer) {

@@ -38,7 +38,7 @@ import type {
   BlobRequestPayload,
   BlobContext,
   Message,
-  EntityId,
+  ConversationId,
 } from '@estelle/core';
 import { BlobConfig, MessageType } from '@estelle/core';
 
@@ -344,7 +344,7 @@ export class BlobHandler {
     }
 
     // 대화별 폴더 생성
-    const folderName = context.entityId ? String(context.entityId) : 'unknown';
+    const folderName = context.conversationId ? String(context.conversationId) : 'unknown';
     const conversationDir = this.joinPath(this.uploadsDir, folderName);
     this.fs.mkdir(conversationDir);
 
@@ -541,7 +541,7 @@ export class BlobHandler {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks,
         encoding: BlobConfig.ENCODING,
-        context: { type: 'file_transfer', entityId: 0 as EntityId },
+        context: { type: 'file_transfer', conversationId: 0 as ConversationId },
       } satisfies BlobStartPayload,
       timestamp: Date.now(),
     });

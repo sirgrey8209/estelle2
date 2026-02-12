@@ -7,7 +7,8 @@
  */
 
 import type { DeviceConfig, RelayDeviceType } from './types.js';
-import { DEVICES, DYNAMIC_DEVICE_ID_START } from './constants.js';
+import { isValidClientIndex } from '@estelle/core';
+import { DEVICES } from './constants.js';
 
 // ============================================================================
 // 인증 결과 타입
@@ -45,7 +46,7 @@ export interface AuthResult {
  * 1. 등록된 디바이스 (DEVICES에 존재): allowedIps 검사
  *    - '*'이면 모든 IP 허용
  *    - 특정 IP 목록이면 해당 IP만 허용
- * 2. 동적 디바이스 (100 이상): 무조건 허용
+ * 2. 동적 디바이스 (0~15 범위의 유효한 clientIndex): 무조건 허용
  * 3. 그 외: 거부
  *
  * @param deviceId - 인증할 디바이스 ID
@@ -66,8 +67,8 @@ export interface AuthResult {
  * });
  * // { success: false, error: 'IP not allowed: 10.0.0.1' }
  *
- * // 동적 디바이스 인증 성공
- * const result3 = authenticateDevice(105, 'app', '10.0.0.1');
+ * // 동적 디바이스 인증 성공 (0~15 범위)
+ * const result3 = authenticateDevice(5, 'app', '10.0.0.1');
  * // { success: true }
  *
  * // 미등록 디바이스 인증 실패
@@ -95,8 +96,8 @@ export function authenticateDevice(
     return { success: false, error: `IP not allowed: ${ip}` };
   }
 
-  // 동적 디바이스 ID 허용 (100 이상)
-  if (deviceId >= DYNAMIC_DEVICE_ID_START) {
+  // 동적 디바이스 ID 허용 (0~15 범위의 유효한 clientIndex)
+  if (isValidClientIndex(deviceId)) {
     return { success: true };
   }
 
@@ -141,24 +142,24 @@ export function isIpAllowed(
 }
 
 /**
- * deviceId가 동적 범위에 속하는지 확인합니다.
+ * deviceId가 동적 클라이언트 범위에 속하는지 확인합니다.
  *
  * @description
- * DYNAMIC_DEVICE_ID_START(100) 이상의 ID는 동적 클라이언트용입니다.
+ * 0~15 범위의 유효한 clientIndex는 동적 클라이언트용입니다.
  *
  * @param deviceId - 검사할 디바이스 ID
  * @returns 동적 디바이스 여부
  *
  * @example
  * ```typescript
- * isDynamicDeviceId(1);   // false (고정 디바이스)
- * isDynamicDeviceId(99);  // false (고정 영역)
- * isDynamicDeviceId(100); // true (동적 시작)
- * isDynamicDeviceId(105); // true (동적 클라이언트)
+ * isDynamicDeviceId(0);   // true (동적 클라이언트)
+ * isDynamicDeviceId(15);  // true (동적 클라이언트)
+ * isDynamicDeviceId(16);  // false (범위 밖)
+ * isDynamicDeviceId(-1);  // false (음수)
  * ```
  */
 export function isDynamicDeviceId(deviceId: number): boolean {
-  return deviceId >= DYNAMIC_DEVICE_ID_START;
+  return isValidClientIndex(deviceId);
 }
 
 /**

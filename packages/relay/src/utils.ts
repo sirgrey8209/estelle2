@@ -7,7 +7,8 @@
  */
 
 import type { DeviceInfo, DeviceConfig } from './types.js';
-import { DEVICES, DYNAMIC_DEVICE_ID_START } from './constants.js';
+import { isValidClientIndex } from '@estelle/core';
+import { DEVICES } from './constants.js';
 
 // ============================================================================
 // 로깅
@@ -111,7 +112,7 @@ export function getClientIp(req: HttpRequest): string {
  *
  * @description
  * DEVICES 상수에 등록된 디바이스면 해당 정보를 반환하고,
- * 동적 디바이스(100 이상)면 기본 클라이언트 정보를 반환합니다.
+ * 동적 디바이스(0~15 범위의 유효한 clientIndex)면 기본 클라이언트 정보를 반환합니다.
  * 그 외에는 unknown 역할의 기본 정보를 반환합니다.
  *
  * @param deviceId - 조회할 디바이스 ID
@@ -124,9 +125,9 @@ export function getClientIp(req: HttpRequest): string {
  * const info1 = getDeviceInfo(1);
  * // { name: 'Device 1', icon: '🏢', role: 'office' }
  *
- * // 동적 클라이언트
- * const info2 = getDeviceInfo(105);
- * // { name: 'Client 105', icon: '📱', role: 'client' }
+ * // 동적 클라이언트 (0~15 범위)
+ * const info2 = getDeviceInfo(5);
+ * // { name: 'Client 5', icon: '📱', role: 'client' }
  *
  * // 미등록 디바이스
  * const info3 = getDeviceInfo(50);
@@ -147,8 +148,8 @@ export function getDeviceInfo(
     };
   }
 
-  // 동적 디바이스 (100 이상)
-  if (deviceId >= DYNAMIC_DEVICE_ID_START) {
+  // 동적 디바이스 (0~15 범위의 유효한 clientIndex)
+  if (isValidClientIndex(deviceId)) {
     return {
       name: `Client ${deviceId}`,
       icon: '📱',

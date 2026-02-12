@@ -12,7 +12,7 @@ import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStor
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
 import { useResponsive } from '../../hooks/useResponsive';
 
-// 대화별 입력 텍스트 저장소 (entityId → draft text)
+// 대화별 입력 텍스트 저장소 (conversationId → draft text)
 const draftTexts = new Map<number, string>();
 
 interface InputBarProps {
@@ -29,7 +29,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generalFileInputRef = useRef<HTMLInputElement>(null);
-  const prevEntityIdRef = useRef<number | null>(null);
+  const prevConversationIdRef = useRef<number | null>(null);
 
   const { selectedConversation } = useWorkspaceStore();
   // conversationStore에서 현재 대화의 status 가져오기
@@ -38,14 +38,14 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const { attachedImage, setAttachedImage, hasActiveUpload } = useImageUploadStore();
   const { isDesktop, isTablet } = useResponsive();
 
-  const entityId = selectedConversation?.entityId || null;
+  const conversationId = selectedConversation?.conversationId || null;
 
   // 대화 변경 시 텍스트 저장/복원
   useEffect(() => {
-    const prevId = prevEntityIdRef.current;
+    const prevId = prevConversationIdRef.current;
 
     // 이전 대화의 텍스트 저장
-    if (prevId && prevId !== entityId) {
+    if (prevId && prevId !== conversationId) {
       if (text.trim()) {
         draftTexts.set(prevId, text);
       } else {
@@ -54,15 +54,15 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     }
 
     // 새 대화의 텍스트 복원
-    if (entityId) {
-      const savedText = draftTexts.get(entityId) || '';
+    if (conversationId) {
+      const savedText = draftTexts.get(conversationId) || '';
       setText(savedText);
     } else {
       setText('');
     }
 
-    prevEntityIdRef.current = entityId;
-  }, [entityId]); // text는 의존성에서 제외 (무한 루프 방지)
+    prevConversationIdRef.current = conversationId;
+  }, [conversationId]); // text는 의존성에서 제외 (무한 루프 방지)
 
   const isWorking = status === 'working';
   const canSend = (text.trim() || attachedImage) && !disabled && !isWorking;
@@ -79,10 +79,10 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     setText('');
     setAttachedImage(null);
     // 전송 후 draft 삭제
-    if (entityId) {
-      draftTexts.delete(entityId);
+    if (conversationId) {
+      draftTexts.delete(conversationId);
     }
-  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, entityId]);
+  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, conversationId]);
 
   const handleStop = () => {
     onStop?.();

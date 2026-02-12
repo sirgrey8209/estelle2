@@ -22,9 +22,9 @@ import type {
   BlobRequestPayload,
   BlobContext,
   Message,
-  EntityId,
+  ConversationId,
 } from '@estelle/core';
-import { BlobConfig, encodeEntityId } from '@estelle/core';
+import { BlobConfig, encodeConversationId } from '@estelle/core';
 
 // ============================================================================
 // 테스트 헬퍼
@@ -66,12 +66,12 @@ function createChunkData(content: string): string {
 /**
  * 테스트용 BlobContext 생성
  */
-const TEST_ENTITY_ID = encodeEntityId(1, 1, 123);
+const TEST_CONVERSATION_ID = encodeConversationId(1, 1, 123);
 
 function createTestContext(overrides?: Partial<BlobContext>): BlobContext {
   return {
     type: 'image_upload',
-    entityId: TEST_ENTITY_ID,
+    conversationId: TEST_CONVERSATION_ID,
     ...overrides,
   };
 }
@@ -135,15 +135,15 @@ describe('BlobHandler', () => {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks: 1,
         encoding: 'base64',
-        context: createTestContext({ entityId: encodeEntityId(1, 2, 1) }),
+        context: createTestContext({ conversationId: encodeConversationId(1, 2, 1) }),
       };
 
       handler.handleBlobStart(payload, 'device-001');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(`/uploads/${encodeEntityId(1, 2, 1)}`);
+      expect(mockFs.mkdir).toHaveBeenCalledWith(`/uploads/${encodeConversationId(1, 2, 1)}`);
     });
 
-    it('should use unknown folder when entityId is 0', () => {
+    it('should use unknown folder when conversationId is 0', () => {
       const payload: BlobStartPayload = {
         blobId: 'blob-001',
         filename: 'test.png',
@@ -152,7 +152,7 @@ describe('BlobHandler', () => {
         chunkSize: BlobConfig.CHUNK_SIZE,
         totalChunks: 1,
         encoding: 'base64',
-        context: { type: 'image_upload', entityId: 0 as EntityId },
+        context: { type: 'image_upload', conversationId: 0 as ConversationId },
       };
 
       handler.handleBlobStart(payload, 'device-001');
@@ -498,7 +498,7 @@ describe('BlobHandler', () => {
       });
 
       expect(result.context).toBeDefined();
-      expect(result.context?.entityId).toBe(TEST_ENTITY_ID);
+      expect(result.context?.conversationId).toBe(TEST_CONVERSATION_ID);
     });
 
     it('should clean up chunks after successful write', () => {

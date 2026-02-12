@@ -27,12 +27,28 @@ import {
   isClaudeErrorEvent,
   isClaudeEvent,
 } from '../../src/types/claude-event.js';
-import { encodeEntityId } from '../../src/utils/entity-id.js';
+import {
+  encodePylonId,
+  encodeWorkspaceId,
+  encodeConversationId,
+} from '../../src/utils/id-system.js';
 
-/** 테스트용 EntityId */
-const TEST_ENTITY_ID = encodeEntityId(1, 1, 1);
-const TEST_ENTITY_ID_2 = encodeEntityId(1, 1, 2);
-const TEST_ENTITY_ID_3 = encodeEntityId(1, 2, 1);
+/** 테스트용 ConversationId 생성 헬퍼 */
+function createTestConversationId(
+  envId: 0 | 1 | 2,
+  deviceIndex: number,
+  workspaceIndex: number,
+  conversationIndex: number
+) {
+  const pylonId = encodePylonId(envId, deviceIndex);
+  const workspaceId = encodeWorkspaceId(pylonId, workspaceIndex);
+  return encodeConversationId(workspaceId, conversationIndex);
+}
+
+/** 테스트용 ConversationId */
+const TEST_CONVERSATION_ID = createTestConversationId(0, 1, 1, 1);
+const TEST_CONVERSATION_ID_2 = createTestConversationId(0, 1, 1, 2);
+const TEST_CONVERSATION_ID_3 = createTestConversationId(0, 1, 2, 1);
 
 describe('ClaudeStateEvent', () => {
   it('should have type "state" and state property', () => {
@@ -401,29 +417,29 @@ describe('ClaudeEvent (Union Type)', () => {
 });
 
 describe('ClaudeEventPayload', () => {
-  it('should have entityId and event properties', () => {
+  it('should have conversationId and event properties', () => {
     const payload: ClaudeEventPayload = {
-      entityId: TEST_ENTITY_ID,
+      conversationId: TEST_CONVERSATION_ID,
       event: { type: 'text', content: 'Hello from conversation' },
     };
 
-    expect(payload.entityId).toBe(TEST_ENTITY_ID);
+    expect(payload.conversationId).toBe(TEST_CONVERSATION_ID);
     expect(payload.event.type).toBe('text');
   });
 
   it('should work with all event types', () => {
     const textPayload: ClaudeEventPayload = {
-      entityId: TEST_ENTITY_ID,
+      conversationId: TEST_CONVERSATION_ID,
       event: { type: 'text', content: 'Hello' },
     };
 
     const errorPayload: ClaudeEventPayload = {
-      entityId: TEST_ENTITY_ID_2,
+      conversationId: TEST_CONVERSATION_ID_2,
       event: { type: 'error', error: 'Something failed' },
     };
 
     const permissionPayload: ClaudeEventPayload = {
-      entityId: TEST_ENTITY_ID_3,
+      conversationId: TEST_CONVERSATION_ID_3,
       event: {
         type: 'permission_request',
         toolName: 'bash',
@@ -437,16 +453,6 @@ describe('ClaudeEventPayload', () => {
     expect(permissionPayload.event.type).toBe('permission_request');
   });
 
-  it('should support optional legacy conversationId', () => {
-    const payload: ClaudeEventPayload = {
-      entityId: TEST_ENTITY_ID,
-      conversationId: '대화-001',
-      event: { type: 'state', state: 'idle' },
-    };
-
-    expect(payload.conversationId).toBe('대화-001');
-    expect(payload.entityId).toBe(TEST_ENTITY_ID);
-  });
 });
 
 describe('Type Guards', () => {

@@ -68,8 +68,8 @@ export type {
   SendAction,
   BroadcastAction,
   UpdateClientAction,
-  IncrementNextClientIdAction,
-  ResetNextClientIdAction,
+  AllocateClientIndexAction,
+  ReleaseClientIndexAction,
   RelayAction,
 } from './types.js';
 
@@ -81,7 +81,7 @@ export { isAuthenticatedClient } from './types.js';
 // ============================================================================
 // 상수
 // ============================================================================
-export { DEVICES, DYNAMIC_DEVICE_ID_START, DEFAULT_PORT } from './constants.js';
+export { DEVICES, DEFAULT_PORT } from './constants.js';
 
 // ============================================================================
 // 유틸리티

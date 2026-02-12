@@ -11,9 +11,9 @@
  * - ClaudeAdapter: SDK 어댑터 (주입 가능)
  *
  * 통신 프로토콜:
- * - Pylon → Beacon (register): { "action": "register", "pylonAddress": "...", "env": "dev" }
- * - Pylon → Beacon (query): { "action": "query", "entityId": 2049, "options": { ... } }
- * - Beacon → Pylon (event): { "type": "event", "entityId": 2049, "message": { ... } }
+ * - Pylon → Beacon (register): { "action": "register", "pylonId": 65, "mcpHost": "127.0.0.1", "mcpPort": 9878, "env": "dev" }
+ * - Pylon → Beacon (query): { "action": "query", "conversationId": 2049, "options": { ... } }
+ * - Beacon → Pylon (event): { "type": "event", "conversationId": 2049, "message": { ... } }
  *
  * 테스트 케이스:
  * - 생성자: SDK 어댑터 + ToolContextMap + BeaconServer
@@ -279,14 +279,18 @@ describe('ClaudeBeacon', () => {
       // Arrange & Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
       // Assert
       expect(responses[0]).toEqual({ success: true });
       expect(beacon.getPylons()).toContainEqual({
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
     });
@@ -295,17 +299,23 @@ describe('ClaudeBeacon', () => {
       // Arrange & Act
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9876',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'dev',
       });
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9879',
+        pylonId: 1,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'release',
       });
 
@@ -319,14 +329,18 @@ describe('ClaudeBeacon', () => {
       // Arrange
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -341,22 +355,26 @@ describe('ClaudeBeacon', () => {
       // Arrange
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
-      // Act - 같은 주소, 다른 env로 재등록
+      // Act - 같은 pylonId, 다른 mcpPort로 재등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
-        env: 'stage',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9999,
+        env: 'dev',
         force: true,
       });
 
       // Assert
       const pylons = beacon.getPylons();
       expect(pylons).toHaveLength(1);
-      expect(pylons[0].env).toBe('stage');
+      expect(pylons[0].mcpPort).toBe(9999);
     });
   });
 
@@ -375,7 +393,9 @@ describe('ClaudeBeacon', () => {
       // Pylon 등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
     });
@@ -384,7 +404,7 @@ describe('ClaudeBeacon', () => {
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'unregister',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
       });
 
       // Assert
@@ -396,7 +416,7 @@ describe('ClaudeBeacon', () => {
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'unregister',
-        pylonAddress: '127.0.0.1:9999',
+        pylonId: 999,
       });
 
       // Assert
@@ -428,7 +448,9 @@ describe('ClaudeBeacon', () => {
       // Pylon 등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
     });
@@ -437,7 +459,7 @@ describe('ClaudeBeacon', () => {
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: {
           prompt: 'Hello, Claude!',
           cwd: 'C:\\WorkSpace\\project',
@@ -449,11 +471,11 @@ describe('ClaudeBeacon', () => {
       expect(events.length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should_send_events_with_correct_entity_id', async () => {
+    it('should_send_events_with_correct_conversation_id', async () => {
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: {
           prompt: 'Test',
           cwd: '/test',
@@ -461,9 +483,9 @@ describe('ClaudeBeacon', () => {
       });
 
       // Assert
-      const events = responses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ entityId: number }>;
+      const events = responses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ conversationId: number }>;
       for (const event of events) {
-        expect(event.entityId).toBe(2049);
+        expect(event.conversationId).toBe(2049);
       }
     });
 
@@ -472,7 +494,7 @@ describe('ClaudeBeacon', () => {
       // beforeEach에서 등록된 Pylon을 삭제
       await sendMessage(TEST_PORT, {
         action: 'unregister',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
       });
 
       // Act - 등록되지 않은 Pylon 주소로 쿼리
@@ -483,7 +505,7 @@ describe('ClaudeBeacon', () => {
       client.write(
         JSON.stringify({
           action: 'query',
-          entityId: 9999,
+          conversationId: 9999,
           options: { prompt: 'Test', cwd: '/test' },
         }) + '\n'
       );
@@ -518,7 +540,9 @@ describe('ClaudeBeacon', () => {
       // Arrange - 두 번째 Pylon 등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9879',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
 
@@ -526,12 +550,12 @@ describe('ClaudeBeacon', () => {
       const [responses1, responses2] = await Promise.all([
         sendMessage(TEST_PORT, {
           action: 'query',
-          entityId: 2049,
+          conversationId: 2049,
           options: { prompt: 'Query 1', cwd: '/test1' },
         }),
         sendMessage(TEST_PORT, {
           action: 'query',
-          entityId: 3073,
+          conversationId: 3073,
           options: { prompt: 'Query 2', cwd: '/test2' },
         }),
       ]);
@@ -576,7 +600,9 @@ describe('ClaudeBeacon', () => {
       // Pylon 등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
     });
@@ -585,22 +611,21 @@ describe('ClaudeBeacon', () => {
       // Act
       await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: { prompt: 'Test', cwd: '/test' },
       });
 
-      // Assert
-      const info = beacon.toolContextMap.get('toolu_01ABC123');
-      expect(info).toBeDefined();
-      expect(info?.pylonAddress).toBe('127.0.0.1:9878');
-      expect(info?.entityId).toBe(2049);
+      // Assert - pylonAddress 제거됨, conversationId만 확인
+      const context = beacon.toolContextMap.get('toolu_01ABC123');
+      expect(context).toBeDefined();
+      expect(context?.conversationId).toBe(2049);
     });
 
     it('should_store_tool_raw_info_in_context_map', async () => {
       // Act
       await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: { prompt: 'Test', cwd: '/test' },
       });
 
@@ -642,7 +667,7 @@ describe('ClaudeBeacon', () => {
       // Act
       await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: { prompt: 'Test', cwd: '/test' },
       });
 
@@ -674,17 +699,23 @@ describe('ClaudeBeacon', () => {
       // Arrange - 3개 Pylon 등록
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9876',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'dev',
       });
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9879',
+        pylonId: 1,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'release',
       });
 
@@ -692,37 +723,41 @@ describe('ClaudeBeacon', () => {
       expect(beacon.getPylons()).toHaveLength(3);
     });
 
-    it('should_route_events_to_correct_pylon_by_entity_id', async () => {
+    it('should_route_events_to_correct_pylon_by_conversation_id', async () => {
       // Arrange
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9876',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'dev',
       });
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
 
       // Act - 각 Pylon에서 쿼리
       const devResponses = await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 1025,
+        conversationId: 1025,
         options: { prompt: 'Dev query', cwd: '/dev' },
       });
       const stageResponses = await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: { prompt: 'Stage query', cwd: '/stage' },
       });
 
-      // Assert - 각 응답에 올바른 entityId
-      const devEvents = devResponses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ entityId: number }>;
-      const stageEvents = stageResponses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ entityId: number }>;
+      // Assert - 각 응답에 올바른 conversationId
+      const devEvents = devResponses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ conversationId: number }>;
+      const stageEvents = stageResponses.filter((r: unknown) => (r as { type?: string }).type === 'event') as Array<{ conversationId: number }>;
 
-      devEvents.forEach((e) => expect(e.entityId).toBe(1025));
-      stageEvents.forEach((e) => expect(e.entityId).toBe(2049));
+      devEvents.forEach((e) => expect(e.conversationId).toBe(1025));
+      stageEvents.forEach((e) => expect(e.conversationId).toBe(2049));
     });
   });
 
@@ -740,7 +775,9 @@ describe('ClaudeBeacon', () => {
 
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
     });
@@ -761,14 +798,16 @@ describe('ClaudeBeacon', () => {
       await waitForPort(TEST_PORT);
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
       // Act
       const responses = await sendMessage(TEST_PORT, {
         action: 'query',
-        entityId: 2049,
+        conversationId: 2049,
         options: { prompt: 'Test', cwd: '/test' },
       });
 
@@ -794,7 +833,7 @@ describe('ClaudeBeacon', () => {
     });
 
     it('should_handle_missing_required_fields', async () => {
-      // Act - query without entityId
+      // Act - query without conversationId
       const responses = await sendMessage(TEST_PORT, {
         action: 'query',
         options: { prompt: 'Test', cwd: '/test' },
@@ -803,7 +842,7 @@ describe('ClaudeBeacon', () => {
       // Assert
       expect(responses[0]).toEqual({
         success: false,
-        error: expect.stringMatching(/entityId/i),
+        error: expect.stringMatching(/conversationId/i),
       });
     });
   });
@@ -825,7 +864,9 @@ describe('ClaudeBeacon', () => {
       // Act
       await sendMessage(TEST_PORT, {
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -841,7 +882,9 @@ describe('ClaudeBeacon', () => {
       client.write(
         JSON.stringify({
           action: 'register',
-          pylonAddress: '127.0.0.1:9878',
+          pylonId: 65,
+          mcpHost: '127.0.0.1',
+          mcpPort: 9878,
           env: 'dev',
         }) + '\n'
       );

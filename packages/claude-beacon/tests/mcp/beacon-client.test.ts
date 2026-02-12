@@ -6,18 +6,17 @@
  *
  * 프로토콜:
  * - 요청: { "action": "lookup", "toolUseId": "toolu_xxx" }
- * - 응답: { "success": true, "pylonAddress": "...", "entityId": 123, "raw": {...} }
+ * - 응답: { "success": true, "conversationId": 123, "mcpHost": "127.0.0.1", "mcpPort": 9878, "raw": {...} }
  *
  * 테스트 케이스:
  * - 생성자: 기본값, 커스텀 옵션
- * - lookup: toolUseId로 PylonInfo 조회
+ * - lookup: toolUseId로 ToolContext 조회
  * - 에러 처리: 연결 실패, 타임아웃, 잘못된 응답
  * - 싱글턴: getInstance, resetInstance
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import net from 'net';
-// 아직 구현되지 않은 모듈 - 테스트 실패 예상
 import { BeaconClient } from '../../src/mcp/beacon-client.js';
 import type { LookupResult } from '../../src/mcp/beacon-client.js';
 
@@ -238,7 +237,7 @@ describe('BeaconClient', () => {
   });
 
   // ============================================================================
-  // lookup 테스트 - 정상 케이스
+  // lookup 테스트 - 정상 케이스 (새로운 응답 형식: mcpHost, mcpPort)
   // ============================================================================
   describe('lookup - happy path', () => {
     beforeEach(async () => {
@@ -246,13 +245,14 @@ describe('BeaconClient', () => {
       await mockServer.listen();
     });
 
-    it('should_return_success_result_when_tool_use_id_exists', async () => {
+    it('should_return_success_result_with_mcpHost_and_mcpPort', async () => {
       // Arrange
       const toolUseId = 'toolu_01ABC123';
       mockServer.setResponse(toolUseId, {
         success: true,
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: { file_path: '/test.ts' } },
       });
 
@@ -262,13 +262,14 @@ describe('BeaconClient', () => {
       // Assert
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.pylonAddress).toBe('127.0.0.1:9878');
-        expect(result.entityId).toBe(2049);
+        expect(result.mcpHost).toBe('127.0.0.1');
+        expect(result.mcpPort).toBe(9878);
+        expect(result.conversationId).toBe(2049);
         expect(result.raw.name).toBe('Read');
       }
     });
 
-    it('should_return_full_pylon_info_with_raw_data', async () => {
+    it('should_return_full_tool_context_with_raw_data', async () => {
       // Arrange
       const toolUseId = 'toolu_02DEF456';
       const rawData = {
@@ -279,8 +280,9 @@ describe('BeaconClient', () => {
       };
       mockServer.setResponse(toolUseId, {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1025,
+        conversationId: 1025,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: rawData,
       });
 
@@ -297,12 +299,13 @@ describe('BeaconClient', () => {
       }
     });
 
-    it('should_handle_different_pylon_addresses', async () => {
+    it('should_handle_different_mcp_ports', async () => {
       // Arrange - dev, stage, release 각각 다른 포트
       mockServer.setResponse('toolu_dev', {
         success: true,
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,  // dev
         raw: { type: 'tool_use', id: 'toolu_dev', name: 'Read', input: {} },
       });
 
@@ -312,7 +315,7 @@ describe('BeaconClient', () => {
       // Assert
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.pylonAddress).toBe('127.0.0.1:9878');
+        expect(result.mcpPort).toBe(9878);
       }
     });
   });
@@ -367,8 +370,9 @@ describe('BeaconClient', () => {
       const toolUseId = 'toolu_01-ABC_123';
       mockServer.setResponse(toolUseId, {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: { type: 'tool_use', id: toolUseId, name: 'Bash', input: {} },
       });
 
@@ -384,8 +388,9 @@ describe('BeaconClient', () => {
       const toolUseId = 'toolu_' + 'A'.repeat(100);
       mockServer.setResponse(toolUseId, {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: {} },
       });
 
@@ -402,8 +407,9 @@ describe('BeaconClient', () => {
       const largeInput = { content: 'x'.repeat(10000), file_path: '/large.ts' };
       mockServer.setResponse(toolUseId, {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: { type: 'tool_use', id: toolUseId, name: 'Write', input: largeInput },
       });
 
@@ -477,14 +483,16 @@ describe('BeaconClient', () => {
       // Arrange
       mockServer.setResponse('toolu_01', {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: { type: 'tool_use', id: 'toolu_01', name: 'Read', input: {} },
       });
       mockServer.setResponse('toolu_02', {
         success: true,
-        pylonAddress: '127.0.0.1:9877',
-        entityId: 2001,
+        conversationId: 2001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         raw: { type: 'tool_use', id: 'toolu_02', name: 'Write', input: {} },
       });
 
@@ -502,8 +510,9 @@ describe('BeaconClient', () => {
       for (let i = 0; i < 5; i++) {
         mockServer.setResponse(`toolu_0${i}`, {
           success: true,
-          pylonAddress: `127.0.0.1:987${i}`,
-          entityId: 1000 + i,
+          conversationId: 1000 + i,
+          mcpHost: '127.0.0.1',
+          mcpPort: 9870 + i,
           raw: { type: 'tool_use', id: `toolu_0${i}`, name: 'Read', input: {} },
         });
       }
@@ -524,20 +533,23 @@ describe('BeaconClient', () => {
       // Arrange
       mockServer.setResponse('toolu_a', {
         success: true,
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1001,
+        conversationId: 1001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         raw: { type: 'tool_use', id: 'toolu_a', name: 'Read', input: {} },
       });
       mockServer.setResponse('toolu_b', {
         success: true,
-        pylonAddress: '127.0.0.1:9877',
-        entityId: 2001,
+        conversationId: 2001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         raw: { type: 'tool_use', id: 'toolu_b', name: 'Write', input: {} },
       });
       mockServer.setResponse('toolu_c', {
         success: true,
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 3001,
+        conversationId: 3001,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         raw: { type: 'tool_use', id: 'toolu_c', name: 'Edit', input: {} },
       });
 

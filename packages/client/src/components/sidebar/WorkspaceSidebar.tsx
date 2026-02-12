@@ -146,7 +146,7 @@ function SortableConversationItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: conversation.entityId });
+  } = useSortable({ id: conversation.conversationId });
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -185,9 +185,9 @@ interface SortableWorkspaceCardProps {
   onLongPress: () => void;
   onConversationSelect: (conversation: Conversation) => void;
   onNewConversation: () => void;
-  isSelectedConversation: (entityId: number) => boolean;
+  isSelectedConversation: (conversationId: number) => boolean;
   closeSidebar: () => void;
-  onConversationDragEnd: (workspaceId: string, conversationIds: string[]) => void;
+  onConversationDragEnd: (workspaceId: string, conversationIds: number[]) => void;
   conversationSensors: ReturnType<typeof useSensors>;
 }
 
@@ -223,8 +223,8 @@ function SortableWorkspaceCard({
 
     if (over && active.id !== over.id) {
       const conversations = workspace.conversations;
-      const oldIndex = conversations.findIndex((c) => c.entityId === active.id);
-      const newIndex = conversations.findIndex((c) => c.entityId === over.id);
+      const oldIndex = conversations.findIndex((c) => c.conversationId === active.id);
+      const newIndex = conversations.findIndex((c) => c.conversationId === over.id);
 
       if (oldIndex !== -1 && newIndex !== -1) {
         const newOrder = arrayMove(conversations, oldIndex, newIndex);
@@ -277,16 +277,16 @@ function SortableWorkspaceCard({
               onDragEnd={handleConversationDragEnd}
             >
               <SortableContext
-                items={workspace.conversations.map((c) => c.entityId)}
+                items={workspace.conversations.map((c) => c.conversationId)}
                 strategy={verticalListSortingStrategy}
               >
                 {workspace.conversations.map((conversation) => (
                   <SortableConversationItem
-                    key={conversation.entityId}
+                    key={conversation.conversationId}
                     conversation={conversation}
                     workspaceName={workspace.name}
                     workingDir={workspace.workingDir}
-                    isSelected={isSelectedConversation(conversation.entityId)}
+                    isSelected={isSelectedConversation(conversation.conversationId)}
                     onPress={() => onConversationSelect(conversation)}
                   />
                 ))}
@@ -406,8 +406,8 @@ export function WorkspaceSidebar() {
     });
   }, []);
 
-  const isSelectedConversation = (entityId: number) =>
-    selectedConversation?.entityId === entityId;
+  const isSelectedConversation = (conversationId: number) =>
+    selectedConversation?.conversationId === conversationId;
 
   // 워크스페이스 편집 다이얼로그 열기
   const openEditDialog = useCallback((workspace: WorkspaceWithPylon) => {
@@ -452,10 +452,10 @@ export function WorkspaceSidebar() {
           const pylonNewIndex = pylonWorkspaces.findIndex((w) => w.workspaceId === over.id);
 
           const newOrder = arrayMove(pylonWorkspaces, pylonOldIndex, pylonNewIndex);
-          const newIds = newOrder.map((w) => w.workspaceId);
+          const newIds = newOrder.map((w) => Number(w.workspaceId));
 
           // 로컬 상태 먼저 업데이트 (낙관적)
-          reorderInStore(pylonId, newIds);
+          reorderInStore(pylonId, newIds.map(String));
 
           // 서버에 동기화
           reorderWorkspaces(newIds);
@@ -466,23 +466,23 @@ export function WorkspaceSidebar() {
 
   // 대화 선택 핸들러
   const handleConversationSelect = useCallback((workspace: WorkspaceWithPylon, conversation: Conversation) => {
-    // workspaceStore에서 대화 선택 (entityId 사용)
+    // workspaceStore에서 대화 선택 (conversationId 사용)
     selectInStore(
       workspace.pylonId,
-      conversation.entityId
+      conversation.conversationId
     );
 
-    // conversationStore에서 현재 대화 설정 (entityId 사용)
-    useConversationStore.getState().setCurrentConversation(conversation.entityId);
+    // conversationStore에서 현재 대화 설정 (conversationId 사용)
+    useConversationStore.getState().setCurrentConversation(conversation.conversationId);
 
-    // Pylon에 대화 선택 알림 (히스토리 로드 요청) - entityId 사용
-    selectConversation(conversation.entityId);
+    // Pylon에 대화 선택 알림 (히스토리 로드 요청) - conversationId 사용
+    selectConversation(conversation.conversationId);
 
     closeSidebar();
   }, [selectInStore, closeSidebar]);
 
   // 대화 드래그 종료 핸들러
-  const handleConversationDragEnd = useCallback((workspaceId: string, conversationIds: string[]) => {
+  const handleConversationDragEnd = useCallback((workspaceId: string, conversationIds: number[]) => {
     const workspace = flatWorkspaces.find((w) => w.workspaceId === workspaceId);
     if (!workspace) return;
 
@@ -490,7 +490,7 @@ export function WorkspaceSidebar() {
     reorderConversationsInStore(workspace.pylonId, workspaceId, conversationIds);
 
     // 서버에 동기화
-    reorderConversations(workspaceId, conversationIds);
+    reorderConversations(Number(workspaceId), conversationIds);
   }, [flatWorkspaces, reorderConversationsInStore]);
 
   return (
@@ -509,7 +509,7 @@ export function WorkspaceSidebar() {
               const expanded = isExpanded(workspace.workspaceId);
               const selectedConvInWorkspace = !expanded
                 ? workspace.conversations.find((c) =>
-                    isSelectedConversation(c.entityId)
+                    isSelectedConversation(c.conversationId)
                   )
                 : null;
 

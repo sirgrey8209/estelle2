@@ -3,14 +3,14 @@
  * @description 메시지 전송 플로우 E2E 테스트
  *
  * 사용자 메시지 전송 -> Claude 응답 수신 플로우를 검증합니다.
- * entityId(number)를 키로 사용합니다.
+ * conversationId(number)를 키로 사용합니다.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageType } from '@estelle/core';
 
-// Entity IDs (number)
-const ENTITY_ID = 1001;
+// Conversation IDs (number)
+const CONVERSATION_ID = 1001;
 
 // Mock workspaces
 const mockWorkspaces = [
@@ -21,8 +21,7 @@ const mockWorkspaces = [
     isActive: true,
     conversations: [
       {
-        entityId: ENTITY_ID,
-        conversationId: 'conv-1',
+        conversationId: CONVERSATION_ID,
         name: 'Main',
         status: 'idle' as const,
         unread: false,
@@ -35,11 +34,10 @@ const mockWorkspaceStore = {
   connectedPylons: [{ deviceId: 1, deviceName: 'Test PC' }],
   workspacesByPylon: new Map<number, unknown[]>(),
   selectedConversation: {
-    entityId: ENTITY_ID,
+    conversationId: CONVERSATION_ID,
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
     workingDir: '/test',
-    conversationId: 'conv-1',
     conversationName: 'Main',
     status: 'idle',
     unread: false,
@@ -51,27 +49,27 @@ const mockWorkspaceStore = {
   getAllWorkspaces: vi.fn(() => [{ pylonId: 1, workspaces: mockWorkspaces }]),
 };
 
-// conversationStore mock (entityId: number 기반)
+// conversationStore mock (conversationId: number 기반)
 const convMessages: Map<number, any[]> = new Map();
 const mockConversationStore = {
   states: new Map<number, unknown>(),
-  currentEntityId: ENTITY_ID as number | null,
-  setMessages: vi.fn((entityId: number, msgs: any[]) => {
-    convMessages.set(entityId, [...msgs]);
+  currentConversationId: CONVERSATION_ID as number | null,
+  setMessages: vi.fn((conversationId: number, msgs: any[]) => {
+    convMessages.set(conversationId, [...msgs]);
   }),
   setStatus: vi.fn(),
   appendTextBuffer: vi.fn(),
   flushTextBuffer: vi.fn(),
   clearTextBuffer: vi.fn(),
-  addMessage: vi.fn((entityId: number, msg: any) => {
-    const msgs = convMessages.get(entityId) || [];
+  addMessage: vi.fn((conversationId: number, msg: any) => {
+    const msgs = convMessages.get(conversationId) || [];
     msgs.push(msg);
-    convMessages.set(entityId, msgs);
+    convMessages.set(conversationId, msgs);
   }),
   addPendingRequest: vi.fn(),
   updateRealtimeUsage: vi.fn(),
-  getState: vi.fn((entityId: number) => ({
-    messages: convMessages.get(entityId) || [],
+  getState: vi.fn((conversationId: number) => ({
+    messages: convMessages.get(conversationId) || [],
     status: 'idle',
   })),
 };
@@ -161,18 +159,21 @@ describe('메시지 플로우 E2E 테스트', () => {
       const message = 'Hello, Claude!';
 
       // When
-      sendClaudeMessage(ENTITY_ID, message);
+      sendClaudeMessage(CONVERSATION_ID, message);
 
       // Then
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]).toEqual({
+      // to 필드는 pylonId 기반으로 동적 생성되므로 toMatchObject 사용
+      expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_SEND,
         payload: {
-          entityId: ENTITY_ID,
+          conversationId: CONVERSATION_ID,
           message,
-          attachments: undefined,
         },
       });
+      // to 필드가 숫자 배열임을 검증
+      expect(sentMessages[0].to).toBeDefined();
+      expect(Array.isArray(sentMessages[0].to)).toBe(true);
     });
 
     it('첨부 파일이 있는 메시지가 전송되어야 한다', () => {
@@ -181,7 +182,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       const attachments = ['file:///path/to/image.png'];
 
       // When
-      sendClaudeMessage(ENTITY_ID, message, attachments);
+      sendClaudeMessage(CONVERSATION_ID, message, attachments);
 
       // Then
       expect(sentMessages[0].payload.attachments).toEqual(attachments);
@@ -202,7 +203,7 @@ describe('메시지 플로우 E2E 테스트', () => {
               name: 'Project A',
               workingDir: 'C:\\Projects\\A',
               isActive: true,
-              conversations: [{ entityId: ENTITY_ID, conversationId: 'conv-1', status: 'idle' }],
+              conversations: [{ conversationId: CONVERSATION_ID, status: 'idle' }],
             },
           ],
         },
@@ -229,7 +230,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       const message = {
         type: MessageType.CLAUDE_EVENT,
         payload: {
-          entityId: ENTITY_ID,
+          conversationId: CONVERSATION_ID,
           event: {
             type: 'text',
             text: 'Hello! How can I help you?',
@@ -242,7 +243,7 @@ describe('메시지 플로우 E2E 테스트', () => {
 
       // Then
       expect(mockConversationStore.appendTextBuffer).toHaveBeenCalledWith(
-        ENTITY_ID,
+        CONVERSATION_ID,
         'Hello! How can I help you?'
       );
     });
@@ -255,7 +256,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       ];
       const message = {
         type: MessageType.HISTORY_RESULT,
-        payload: { messages, entityId: ENTITY_ID, totalCount: 2 },
+        payload: { messages, conversationId: CONVERSATION_ID, totalCount: 2 },
       };
 
       // When
@@ -263,14 +264,14 @@ describe('메시지 플로우 E2E 테스트', () => {
 
       // Then
       // setMessages는 이제 paging 정보 없이 호출됨 (syncStore에서 관리)
-      expect(mockConversationStore.setMessages).toHaveBeenCalledWith(ENTITY_ID, messages);
+      expect(mockConversationStore.setMessages).toHaveBeenCalledWith(CONVERSATION_ID, messages);
     });
   });
 
   describe('전체 플로우', () => {
     it('메시지 전송 후 응답 수신까지 전체 플로우가 동작해야 한다', async () => {
       // 1. 사용자 메시지 전송
-      sendClaudeMessage(ENTITY_ID, 'What is 2+2?');
+      sendClaudeMessage(CONVERSATION_ID, 'What is 2+2?');
 
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0].type).toBe(MessageType.CLAUDE_SEND);
@@ -279,7 +280,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       routeMessage({
         type: MessageType.CLAUDE_EVENT,
         payload: {
-          entityId: ENTITY_ID,
+          conversationId: CONVERSATION_ID,
           event: {
             type: 'text',
             text: '2+2 equals 4.',
@@ -289,14 +290,14 @@ describe('메시지 플로우 E2E 테스트', () => {
 
       // 3. 응답이 처리되었는지 확인
       expect(mockConversationStore.appendTextBuffer).toHaveBeenCalledWith(
-        ENTITY_ID,
+        CONVERSATION_ID,
         '2+2 equals 4.'
       );
     });
 
     it('사용자 메시지가 store에 추가되어야 한다', () => {
       // When - ChatArea의 handleSend 로직 시뮬레이션
-      mockConversationStore.addMessage(ENTITY_ID, {
+      mockConversationStore.addMessage(CONVERSATION_ID, {
         id: `user-${Date.now()}-test`,
         role: 'user',
         type: 'text',
@@ -304,11 +305,11 @@ describe('메시지 플로우 E2E 테스트', () => {
         timestamp: Date.now(),
         attachments: undefined,
       });
-      sendClaudeMessage(ENTITY_ID, 'Hello, Claude!');
+      sendClaudeMessage(CONVERSATION_ID, 'Hello, Claude!');
 
       // Then
       expect(mockConversationStore.addMessage).toHaveBeenCalledWith(
-        ENTITY_ID,
+        CONVERSATION_ID,
         expect.objectContaining({
           role: 'user',
           type: 'text',
@@ -325,7 +326,7 @@ describe('메시지 플로우 E2E 테스트', () => {
       ];
 
       // When - ChatArea의 handleSend 로직 시뮬레이션
-      mockConversationStore.addMessage(ENTITY_ID, {
+      mockConversationStore.addMessage(CONVERSATION_ID, {
         id: `user-${Date.now()}-test`,
         role: 'user',
         type: 'text',
@@ -333,11 +334,11 @@ describe('메시지 플로우 E2E 테스트', () => {
         timestamp: Date.now(),
         attachments,
       });
-      sendClaudeMessage(ENTITY_ID, 'Check this', ['/path/to/image.png']);
+      sendClaudeMessage(CONVERSATION_ID, 'Check this', ['/path/to/image.png']);
 
       // Then
       expect(mockConversationStore.addMessage).toHaveBeenCalledWith(
-        ENTITY_ID,
+        CONVERSATION_ID,
         expect.objectContaining({
           role: 'user',
           type: 'text',

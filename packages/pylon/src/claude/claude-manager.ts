@@ -284,8 +284,8 @@ export interface ClaudeQueryOptions {
   /** 중단용 AbortController */
   abortController: AbortController;
 
-  /** Entity ID (세션 식별자, Beacon 어댑터용) */
-  entityId?: number;
+  /** 대화 ID (세션 식별자, Beacon 어댑터용) */
+  conversationId?: number;
 
   /** 부분 메시지 포함 여부 */
   includePartialMessages?: boolean;
@@ -421,7 +421,10 @@ export interface ClaudeManagerOptions {
   /** SDK raw 메시지 로거 (선택) */
   onRawMessage?: RawMessageLogger;
 
-  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 선택) */
+  /**
+   * @deprecated Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
+   * Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 선택)
+   */
   claudeConfigDir?: string;
 }
 
@@ -506,10 +509,13 @@ export class ClaudeManager {
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
     this.onRawMessage = options.onRawMessage;
-    this.claudeConfigDir = options.claudeConfigDir;
+    // DEPRECATED: Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
+    // this.claudeConfigDir = options.claudeConfigDir;
   }
 
-  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR) */
+  /**
+   * @deprecated Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
+   */
   private readonly claudeConfigDir?: string;
 
   // ============================================================================
@@ -887,7 +893,7 @@ export class ClaudeManager {
       prompt: message,
       cwd: sessionInfo.workingDir,
       abortController,
-      entityId: sessionId,
+      conversationId: sessionId,
       includePartialMessages: true,
       settingSources: ['project'],
       canUseTool: async (toolName, input) => {
@@ -903,13 +909,14 @@ export class ClaudeManager {
       }
     }
 
-    // 환경변수 설정 (CLAUDE_CONFIG_DIR)
-    if (this.claudeConfigDir) {
-      queryOptions.env = {
-        ...process.env as Record<string, string>,
-        CLAUDE_CONFIG_DIR: this.claudeConfigDir,
-      };
-    }
+    // DEPRECATED: Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서 env를 전달하지 않음
+    // SDK 호출 시 Beacon의 process.env.CLAUDE_CONFIG_DIR이 사용됨
+    // if (this.claudeConfigDir) {
+    //   queryOptions.env = {
+    //     ...process.env as Record<string, string>,
+    //     CLAUDE_CONFIG_DIR: this.claudeConfigDir,
+    //   };
+    // }
 
     // 세션 재개
     if (sessionInfo.claudeSessionId) {

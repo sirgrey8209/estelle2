@@ -12,6 +12,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { BeaconClient, type LookupSuccessResult } from '../beacon-client.js';
+import { PylonClient } from '../pylon-client.js';
 
 // ============================================================================
 // 타입
@@ -20,6 +22,10 @@ import path from 'path';
 interface SendFileArgs {
   path?: string;
   description?: string;
+}
+
+interface ToolMeta {
+  toolUseId: string;
 }
 
 interface McpTextContent {
@@ -204,8 +210,6 @@ export async function executeSendFile(
 // PylonClient 통합 함수
 // ============================================================================
 
-import { PylonClient } from '../pylon-client.js';
-
 /** PylonClient 통합 인자 타입 */
 interface SendFileWithPylonArgs {
   path: string;
@@ -216,18 +220,19 @@ interface SendFileWithPylonArgs {
  * PylonClient를 통한 파일 전송
  *
  * MCP 도구가 Pylon을 통해 파일을 전송할 때 사용합니다.
+ * BeaconClient lookup으로 mcpHost:mcpPort를 조회하여 동적 연결.
  *
- * @param entityId - 대화 엔티티 ID
+ * @param toolUseId - 도구 호출 ID (BeaconClient lookup에 사용)
  * @param args - 도구 인자 (path, description)
  * @returns MCP 표준 응답
  */
 export async function executeSendFileWithPylon(
-  entityId: number,
+  toolUseId: string,
   args: SendFileWithPylonArgs,
 ): Promise<McpResponse> {
-  // 1. entityId 검증
-  if (!entityId || entityId <= 0) {
-    return createErrorResponse('유효하지 않은 entityId입니다.');
+  // 1. toolUseId 검증
+  if (!toolUseId || toolUseId === '') {
+    return createErrorResponse('유효하지 않은 toolUseId입니다.');
   }
 
   // 2. path 인자 검증
@@ -235,24 +240,34 @@ export async function executeSendFileWithPylon(
     return createErrorResponse('path 인자가 필요해요.');
   }
 
-  // 3. PylonClient를 통한 파일 전송
-  const client = PylonClient.getInstance();
-
+  // 3. BeaconClient로 conversationId, mcpHost, mcpPort 조회
   try {
-    const result = await client.sendFile(entityId, args.path, args.description);
+    const beaconClient = BeaconClient.getInstance();
+    const lookupResult = await beaconClient.lookup(toolUseId);
 
-    if (!result.success) {
-      // 에러 메시지에 따라 적절한 응답 반환
-      return createErrorResponse(result.error || '파일 전송에 실패했습니다.');
+    if (!lookupResult.success) {
+      return createErrorResponse(`Lookup failed: ${lookupResult.error}`);
     }
 
-    // 성공 응답
+    const result = lookupResult as LookupSuccessResult;
+
+    // 4. PylonClient를 통한 파일 전송 (동적 host:port)
+    const pylonClient = new PylonClient({
+      host: result.mcpHost,
+      port: result.mcpPort,
+    });
+
+    const sendResult = await pylonClient.sendFile(result.conversationId, args.path, args.description);
+
+    if (!sendResult.success) {
+      return createErrorResponse(sendResult.error || '파일 전송에 실패했습니다.');
+    }
+
     return createSuccessResponse({
       success: true,
-      file: result.file,
+      file: sendResult.file,
     });
   } catch (error) {
-    // 연결 실패 등의 예외 처리
     const errorMessage =
       error instanceof Error ? error.message : 'Pylon 연결에 실패했습니다.';
 

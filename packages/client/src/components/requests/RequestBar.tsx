@@ -8,7 +8,7 @@ import { sendPermissionResponse, sendQuestionResponse } from '../../services/rel
  */
 export function RequestBar() {
   const { selectedConversation } = useWorkspaceStore();
-  const entityId = selectedConversation?.entityId;
+  const conversationId = selectedConversation?.conversationId;
 
   // conversationStore에서 현재 대화의 pendingRequests 가져오기
   const currentState = useCurrentConversationState();
@@ -19,21 +19,21 @@ export function RequestBar() {
   const currentRequest = pendingRequests[0];
 
   const handlePermissionAllow = () => {
-    if (!entityId) return;
-    sendPermissionResponse(entityId, currentRequest.toolUseId, 'allow');
-    useConversationStore.getState().removePendingRequest(entityId, currentRequest.toolUseId);
+    if (!conversationId) return;
+    sendPermissionResponse(conversationId, currentRequest.toolUseId, 'allow');
+    useConversationStore.getState().removePendingRequest(conversationId, currentRequest.toolUseId);
   };
 
   const handlePermissionDeny = () => {
-    if (!entityId) return;
-    sendPermissionResponse(entityId, currentRequest.toolUseId, 'deny');
-    useConversationStore.getState().removePendingRequest(entityId, currentRequest.toolUseId);
+    if (!conversationId) return;
+    sendPermissionResponse(conversationId, currentRequest.toolUseId, 'deny');
+    useConversationStore.getState().removePendingRequest(conversationId, currentRequest.toolUseId);
   };
 
   const handleQuestionAnswer = (answer: string) => {
-    if (!entityId) return;
-    sendQuestionResponse(entityId, currentRequest.toolUseId, answer);
-    useConversationStore.getState().removePendingRequest(entityId, currentRequest.toolUseId);
+    if (!conversationId) return;
+    sendQuestionResponse(conversationId, currentRequest.toolUseId, answer);
+    useConversationStore.getState().removePendingRequest(conversationId, currentRequest.toolUseId);
   };
 
   return (

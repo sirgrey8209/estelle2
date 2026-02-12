@@ -9,7 +9,8 @@ module.exports = {
       autorestart: true,
       env: {
         NODE_ENV: 'development',
-        PORT: '3000'
+        PORT: '3000',
+        ENV_ID: '2'
       }
     },
     {
@@ -20,7 +21,18 @@ module.exports = {
       autorestart: true,
       env: {
         NODE_ENV: 'development',
-        ESTELLE_ENV_CONFIG: "{\"envId\":2,\"pylon\":{\"deviceId\":\"1\",\"relayUrl\":\"ws://localhost:3000\",\"configDir\":\"C:\\\\Users\\\\LINEGAMES\\\\.claude-dev\",\"credentialsBackupDir\":\"C:\\\\Users\\\\LINEGAMES\\\\.claude-credentials\\\\dev\",\"dataDir\":\"C:\\\\WorkSpace\\\\estelle2\\\\dev-data\",\"mcpPort\":9878},\"beacon\":{\"enabled\":true,\"host\":\"127.0.0.1\",\"port\":9875,\"env\":\"dev\",\"reconnect\":true,\"reconnectInterval\":3000}}"
+        ESTELLE_ENV_CONFIG: "{\"envId\":2,\"pylon\":{\"deviceId\":\"1\",\"relayUrl\":\"ws://localhost:3000\",\"configDir\":\"C:\\\\Users\\\\LINEGAMES\\\\.claude-dev\",\"credentialsBackupDir\":\"C:\\\\Users\\\\LINEGAMES\\\\.claude-credentials\\\\dev\",\"dataDir\":\"C:\\\\WorkSpace\\\\estelle2\\\\dev-data\",\"mcpPort\":9878},\"beacon\":{\"host\":\"127.0.0.1\",\"port\":9875,\"env\":\"dev\",\"pingInterval\":10000}}"
+      }
+    },
+    {
+      name: 'estelle-client-dev',
+      script: 'C:\\WorkSpace\\estelle2\\node_modules\\vite\\bin\\vite.js',
+      cwd: 'C:\\WorkSpace\\estelle2\\packages\\client',
+      args: '--port 5173 --host',
+      watch: false,
+      autorestart: false,
+      env: {
+        NODE_ENV: 'development'
       }
     }
   ]

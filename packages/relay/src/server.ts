@@ -20,14 +20,15 @@ import type {
   SendAction,
   BroadcastAction,
   UpdateClientAction,
-  IncrementNextClientIdAction,
-  ResetNextClientIdAction,
+  AllocateClientIndexAction,
+  ReleaseClientIndexAction,
   DeviceConfig,
 } from './types.js';
 import { handleMessage, handleDisconnect, handleConnection } from './message-handler.js';
 import { getDeviceList, createDeviceStatusMessage } from './device-status.js';
 import { log, getClientIp, generateClientId, getDeviceInfo } from './utils.js';
-import { DEVICES, DYNAMIC_DEVICE_ID_START, DEFAULT_PORT } from './constants.js';
+import { DEVICES, DEFAULT_PORT } from './constants.js';
+import { ClientIndexAllocator } from './device-id-validation.js';
 
 // ============================================================================
 // main() 함수 반환 타입
@@ -59,11 +60,14 @@ export interface MainResult {
  * 순수 함수들은 이 상태를 읽기만 하고, 상태 변경은 어댑터에서 수행합니다.
  */
 export interface RelayServerState {
+  /** 환경 ID (0=release, 1=stage, 2=dev) */
+  envId: 0 | 1 | 2;
+
   /** 연결된 클라이언트 맵 (clientId -> Client + WebSocket) */
   clients: Map<string, Client & { ws: WebSocket }>;
 
-  /** 다음 앱 클라이언트에 할당할 ID */
-  nextClientId: number;
+  /** clientIndex 할당기 */
+  clientAllocator: ClientIndexAllocator;
 
   /** 디바이스 설정 */
   devices: Record<number, DeviceConfig>;
@@ -145,13 +149,14 @@ function executeAction(action: RelayAction, state: RelayServerState): void {
       executeUpdateClientAction(action, state);
       break;
 
-    case 'increment_next_client_id':
-      state.nextClientId++;
+    case 'allocate_client_index':
+      // handleAuth가 getNextId() 값으로 deviceId를 설정했으므로,
+      // allocator에서 실제 할당을 수행하여 상태를 동기화
+      state.clientAllocator.assign('desktop');
       break;
 
-    case 'reset_next_client_id':
-      state.nextClientId = action.value;
-      log(`Reset nextClientId to ${action.value}`);
+    case 'release_client_index':
+      state.clientAllocator.release(action.deviceIndex);
       break;
   }
 }
@@ -241,12 +246,18 @@ function onMessage(
   try {
     const data = JSON.parse(rawData.toString()) as RelayMessage;
 
+    // 디버그 로그
+    if (data.type !== 'ping') {
+      log(`[MSG] ${clientId} (${client.deviceType ?? 'unauth'}): ${data.type}`);
+    }
+
     // 순수 함수로 처리하고 액션 받기
     const result = handleMessage(
       clientId,
       client,
       data,
-      state.nextClientId,
+      state.envId,
+      state.clientAllocator.getNextId(),
       // clients에서 ws 제거하고 Client만 전달
       new Map(
         Array.from(state.clients.entries()).map(([id, c]) => [
@@ -264,6 +275,12 @@ function onMessage(
     );
 
     // 액션 실행
+    if (data.type !== 'ping' && result.actions.length > 0) {
+      const broadcastAction = result.actions.find(a => a.type === 'broadcast') as BroadcastAction | undefined;
+      if (broadcastAction) {
+        log(`[ROUTE] ${data.type} -> ${broadcastAction.clientIds.length} clients`);
+      }
+    }
     executeActions(result.actions, state);
 
     // 인증 성공 후 device_status 브로드캐스트 (상태가 업데이트된 후)
@@ -376,6 +393,9 @@ function broadcastDeviceStatus(state: RelayServerState): void {
  * Relay 서버 설정 옵션
  */
 export interface RelayServerOptions {
+  /** 환경 ID (0=release, 1=stage, 2=dev). 기본값: ENV_ID 환경변수 또는 0 */
+  envId?: 0 | 1 | 2;
+
   /** 서버 포트 (기본값: 8080 또는 환경변수 PORT) */
   port?: number;
 
@@ -430,9 +450,14 @@ export function createRelayServer(
   wss: WebSocketServer,
   options: RelayServerOptions = {}
 ): RelayServer {
+  // envId: 옵션 > 환경변수 > 기본값(0=release)
+  const envIdFromEnv = parseInt(process.env['ENV_ID'] || '0', 10);
+  const envId = (options.envId ?? (envIdFromEnv >= 0 && envIdFromEnv <= 2 ? envIdFromEnv : 0)) as 0 | 1 | 2;
+
   const state: RelayServerState = {
+    envId,
     clients: new Map(),
-    nextClientId: DYNAMIC_DEVICE_ID_START,
+    clientAllocator: new ClientIndexAllocator(),
     devices: options.devices ?? DEVICES,
   };
 

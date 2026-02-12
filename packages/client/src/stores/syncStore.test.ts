@@ -239,7 +239,7 @@ describe('syncStore', () => {
       expect(useSyncStore.getState().isReady(1001)).toBe(true);
     });
 
-    it('workspace synced + entityId null = true (workspace만 확인)', () => {
+    it('workspace synced + conversationId null = true (workspace만 확인)', () => {
       const store = useSyncStore.getState();
 
       store.setWorkspaceSync('synced');

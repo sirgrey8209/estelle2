@@ -23,8 +23,14 @@
 /** 환경 ID (0=release, 1=stage, 2=dev) */
 export type EnvId = 0 | 1 | 2;
 
-/** 디바이스 타입 (0=Pylon, 1=Client) */
-export type DeviceType = 0 | 1;
+/**
+ * 숫자 디바이스 타입 (0=Pylon, 1=Client)
+ *
+ * @remarks
+ * 주의: types/device.ts의 DeviceType (문자열 'pylon' | 'desktop')과 다릅니다.
+ * 이것은 ID 인코딩을 위한 숫자 타입입니다.
+ */
+export type NumericDeviceType = 0 | 1;
 
 /** Pylon ID (7비트) */
 export type PylonId = number & { readonly __brand: 'PylonId' };
@@ -32,8 +38,14 @@ export type PylonId = number & { readonly __brand: 'PylonId' };
 /** Client ID (7비트) */
 export type ClientId = number & { readonly __brand: 'ClientId' };
 
-/** Device ID (PylonId 또는 ClientId) */
-export type DeviceId = PylonId | ClientId;
+/**
+ * 숫자 Device ID (PylonId 또는 ClientId)
+ *
+ * @remarks
+ * 주의: types/device.ts의 DeviceId (인터페이스)와 다릅니다.
+ * 이것은 7비트 인코딩된 숫자 ID입니다.
+ */
+export type NumericDeviceId = PylonId | ClientId;
 
 /** Workspace ID (14비트) */
 export type WorkspaceId = number & { readonly __brand: 'WorkspaceId' };
@@ -186,7 +198,7 @@ interface DecodedClientId {
 /** Device ID 디코딩 결과 */
 interface DecodedDeviceId {
   envId: EnvId;
-  deviceType: DeviceType;
+  deviceType: NumericDeviceType;
   deviceIndex: number;
 }
 
@@ -205,7 +217,7 @@ interface DecodedConversationId {
 /** Conversation ID 전체 디코딩 결과 */
 interface DecodedConversationIdFull {
   envId: EnvId;
-  deviceType: DeviceType;
+  deviceType: NumericDeviceType;
   deviceIndex: number;
   workspaceIndex: number;
   conversationIndex: number;
@@ -252,14 +264,14 @@ export function decodeClientId(clientId: ClientId): DecodedClientId {
  * @param deviceId Device ID
  * @returns 디코딩된 Device ID 정보
  */
-export function decodeDeviceId(deviceId: DeviceId): DecodedDeviceId {
+export function decodeDeviceId(deviceId: NumericDeviceId): DecodedDeviceId {
   const deviceIndex = deviceId & ((1 << DEVICE_INDEX_BITS) - 1);
   const deviceType = (deviceId >> DEVICE_INDEX_BITS) & ((1 << DEVICE_TYPE_BITS) - 1);
   const envId = (deviceId >> (DEVICE_INDEX_BITS + DEVICE_TYPE_BITS)) & ((1 << ENV_ID_BITS) - 1);
 
   return {
     envId: envId as EnvId,
-    deviceType: deviceType as DeviceType,
+    deviceType: deviceType as NumericDeviceType,
     deviceIndex,
   };
 }
@@ -329,7 +341,7 @@ export function decodeConversationIdFull(conversationId: ConversationId): Decode
  * @param deviceId Device ID
  * @returns Pylon ID이면 true
  */
-export function isPylonId(deviceId: DeviceId): deviceId is PylonId {
+export function isPylonId(deviceId: NumericDeviceId): deviceId is PylonId {
   const deviceType = (deviceId >> DEVICE_INDEX_BITS) & ((1 << DEVICE_TYPE_BITS) - 1);
   return deviceType === 0;
 }
@@ -339,7 +351,7 @@ export function isPylonId(deviceId: DeviceId): deviceId is PylonId {
  * @param deviceId Device ID
  * @returns Client ID이면 true
  */
-export function isClientId(deviceId: DeviceId): deviceId is ClientId {
+export function isClientId(deviceId: NumericDeviceId): deviceId is ClientId {
   const deviceType = (deviceId >> DEVICE_INDEX_BITS) & ((1 << DEVICE_TYPE_BITS) - 1);
   return deviceType === 1;
 }

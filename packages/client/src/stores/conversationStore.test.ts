@@ -47,10 +47,10 @@ describe('conversationStore', () => {
   });
 
   describe('초기 상태', () => {
-    it('초기 상태는 빈 Map과 null currentEntityId', () => {
+    it('초기 상태는 빈 Map과 null currentConversationId', () => {
       const state = useConversationStore.getState();
 
-      expect(state.currentEntityId).toBeNull();
+      expect(state.currentConversationId).toBeNull();
       expect(state.states.size).toBe(0);
     });
 
@@ -72,7 +72,7 @@ describe('conversationStore', () => {
 
       setCurrentConversation(1001);
 
-      expect(useConversationStore.getState().currentEntityId).toBe(1001);
+      expect(useConversationStore.getState().currentConversationId).toBe(1001);
     });
 
     it('존재하지 않는 대화 선택 시 초기 상태 생성', () => {
@@ -419,23 +419,23 @@ describe('conversationStore', () => {
       expect(store.getState(1001)).toBeNull();
     });
 
-    it('현재 선택된 대화 삭제 시 currentEntityId null로', () => {
+    it('현재 선택된 대화 삭제 시 currentConversationId null로', () => {
       const { setCurrentConversation, deleteConversation } = useConversationStore.getState();
 
       setCurrentConversation(1001);
       deleteConversation(1001);
 
-      expect(useConversationStore.getState().currentEntityId).toBeNull();
+      expect(useConversationStore.getState().currentConversationId).toBeNull();
     });
 
-    it('다른 대화 삭제 시 currentEntityId 유지', () => {
+    it('다른 대화 삭제 시 currentConversationId 유지', () => {
       const { setCurrentConversation, deleteConversation } = useConversationStore.getState();
 
       setCurrentConversation(1001);
       setCurrentConversation(1002);
       deleteConversation(1001);
 
-      expect(useConversationStore.getState().currentEntityId).toBe(1002);
+      expect(useConversationStore.getState().currentConversationId).toBe(1002);
     });
   });
 
@@ -450,7 +450,7 @@ describe('conversationStore', () => {
       reset();
 
       const state = useConversationStore.getState();
-      expect(state.currentEntityId).toBeNull();
+      expect(state.currentConversationId).toBeNull();
       expect(state.states.size).toBe(0);
     });
   });
@@ -643,7 +643,7 @@ describe('useCurrentConversationState', () => {
         useConversationStore.getState().deleteConversation(1001);
       });
 
-      // Assert - currentEntityId가 null이 되므로 null 반환
+      // Assert - currentConversationId가 null이 되므로 null 반환
       expect(result.current).toBeNull();
     });
 
@@ -667,7 +667,7 @@ describe('useCurrentConversationState', () => {
   });
 
   describe('리액티브 구독 검증', () => {
-    it('should_subscribe_to_currentEntityId_changes', () => {
+    it('should_subscribe_to_currentConversationId_changes', () => {
       // Arrange
       const store = useConversationStore.getState();
 
@@ -679,7 +679,7 @@ describe('useCurrentConversationState', () => {
         useConversationStore.getState().setCurrentConversation(1001);
       });
 
-      // Assert - currentEntityId 변경에 반응
+      // Assert - currentConversationId 변경에 반응
       expect(result.current).not.toBeNull();
     });
 

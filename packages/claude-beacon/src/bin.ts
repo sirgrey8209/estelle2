@@ -27,9 +27,14 @@ const DEFAULT_PORT = 9875;
 
 /**
  * Claude SDK 어댑터 (실제 SDK 호출)
+ *
+ * 주의: env 옵션을 명시적으로 설정하면 SDK가 해당 값만 사용합니다.
+ * 전체 process.env를 상속받으면서 CLAUDE_CONFIG_DIR만 오버라이드합니다.
  */
 const sdkAdapter = {
   async *query(options: Record<string, unknown>) {
+    console.log(`[Beacon] SDK adapter query() called, prompt: ${(options.prompt as string)?.slice(0, 50)}`);
+
     const sdkOptions = {
       cwd: options.cwd as string | undefined,
       abortController: options.abortController as AbortController | undefined,
@@ -38,17 +43,27 @@ const sdkAdapter = {
       resume: options.resume as string | undefined,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: options.canUseTool as CanUseTool | undefined,
-      env: options.env as Record<string, string> | undefined,
+      // 전체 process.env를 상속받음 (SDK 기본 동작과 동일)
+      // CLAUDE_CONFIG_DIR은 PM2 ecosystem.config.cjs에서 이미 설정됨
+      stderr: (data: string) => {
+        console.error(`[Beacon] SDK stderr: ${data.trimEnd()}`);
+      },
     };
 
+    console.log(`[Beacon] SDK query() calling with cwd=${sdkOptions.cwd}, resume=${sdkOptions.resume || '(none)'}`);
     const sdkQuery = query({
       prompt: options.prompt as string,
       options: sdkOptions,
     });
+    console.log(`[Beacon] SDK query() returned iterator, starting to iterate...`);
 
+    let msgCount = 0;
     for await (const msg of sdkQuery) {
+      msgCount++;
+      console.log(`[Beacon] SDK msg #${msgCount}: type=${msg.type}, subtype=${(msg as Record<string,unknown>).subtype || '-'}`);
       yield msg as { type: string; [key: string]: unknown };
     }
+    console.log(`[Beacon] SDK query() iteration complete, total messages: ${msgCount}`);
   },
 };
 
@@ -92,7 +107,7 @@ async function main(): Promise<void> {
     const pylons = beacon.getPylons();
     if (pylons.length > 0) {
       console.log(
-        `[ClaudeBeacon] Connected Pylons: ${pylons.map((p) => `${p.env}(${p.pylonAddress})`).join(', ')}`
+        `[ClaudeBeacon] Connected Pylons: ${pylons.map((p) => `${p.env}(pylonId=${p.pylonId}, ${p.mcpHost}:${p.mcpPort})`).join(', ')}`
       );
     }
   }, 10000);

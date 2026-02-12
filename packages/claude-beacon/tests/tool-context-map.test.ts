@@ -2,22 +2,21 @@
  * @file tool-context-map.test.ts
  * @description ClaudeBeacon의 ToolContextMap 테스트
  *
- * Pylon의 ToolContextMap과 달리, Beacon의 ToolContextMap은
- * toolUseId → { pylonAddress, entityId, raw } 매핑을 관리한다.
+ * ToolContextMap은 toolUseId → { conversationId, raw } 매핑을 관리한다.
+ * pylonId는 conversationId에서 비트 추출로 획득 (conversationId >> 17).
  *
- * MCP에서 toolUseId로 조회하면 해당 도구 호출이 어느 Pylon의
- * 어느 대화에서 발생했는지 알 수 있다.
+ * MCP에서 toolUseId로 조회하면 해당 도구 호출이 어느 대화에서
+ * 발생했는지 알 수 있다.
  *
  * 테스트 케이스:
- * - set: toolUseId → PylonInfo 저장
- * - get: toolUseId → PylonInfo 조회
+ * - set: toolUseId → ToolContext 저장
+ * - get: toolUseId → ToolContext 조회
  * - delete: toolUseId 삭제
  * - cleanup: 오래된 항목 자동 정리
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-// 아직 구현되지 않은 모듈 - 테스트 실패 예상
-import { ToolContextMap, type PylonInfo, type ToolUseRaw } from '../src/tool-context-map.js';
+import { ToolContextMap, type ToolContext } from '../src/tool-context-map.js';
 
 describe('ToolContextMap', () => {
   let contextMap: ToolContextMap;
@@ -31,98 +30,88 @@ describe('ToolContextMap', () => {
   // ============================================================================
   describe('set', () => {
     // 정상 케이스
-    it('should_store_pylon_info_when_tool_use_id_provided', () => {
+    it('should_store_context_when_tool_use_id_provided', () => {
       // Arrange
       const toolUseId = 'toolu_01ABC123';
-      const info: PylonInfo = {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+      const context: ToolContext = {
+        conversationId: 2049,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: {} },
       };
 
       // Act
-      contextMap.set(toolUseId, info);
+      contextMap.set(toolUseId, context);
 
       // Assert
       const result = contextMap.get(toolUseId);
       expect(result).toBeDefined();
-      expect(result?.pylonAddress).toBe('127.0.0.1:9878');
-      expect(result?.entityId).toBe(2049);
+      expect(result?.conversationId).toBe(2049);
       expect(result?.raw.name).toBe('Read');
     });
 
     it('should_overwrite_existing_mapping_when_same_tool_use_id', () => {
       // Arrange
       const toolUseId = 'toolu_01ABC123';
-      const info1: PylonInfo = {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+      const context1: ToolContext = {
+        conversationId: 2049,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: {} },
       };
-      const info2: PylonInfo = {
-        pylonAddress: '127.0.0.1:9879',
-        entityId: 3073,
+      const context2: ToolContext = {
+        conversationId: 3073,
         raw: { type: 'tool_use', id: toolUseId, name: 'Write', input: {} },
       };
-      contextMap.set(toolUseId, info1);
+      contextMap.set(toolUseId, context1);
 
       // Act
-      contextMap.set(toolUseId, info2);
+      contextMap.set(toolUseId, context2);
 
       // Assert
       const result = contextMap.get(toolUseId);
-      expect(result?.pylonAddress).toBe('127.0.0.1:9879');
-      expect(result?.entityId).toBe(3073);
+      expect(result?.conversationId).toBe(3073);
       expect(result?.raw.name).toBe('Write');
     });
 
-    it('should_store_multiple_mappings_for_different_pylons', () => {
-      // Arrange & Act - 3개의 Pylon(dev/stage/release)에서 도구 호출
-      contextMap.set('toolu_dev_01', {
-        pylonAddress: '127.0.0.1:9876', // dev
-        entityId: 1025,
-        raw: { type: 'tool_use', id: 'toolu_dev_01', name: 'Read', input: {} },
+    it('should_store_multiple_mappings_for_different_conversations', () => {
+      // Arrange & Act - 3개의 대화에서 도구 호출
+      contextMap.set('toolu_conv_01', {
+        conversationId: 1025,
+        raw: { type: 'tool_use', id: 'toolu_conv_01', name: 'Read', input: {} },
       });
-      contextMap.set('toolu_stage_01', {
-        pylonAddress: '127.0.0.1:9878', // stage
-        entityId: 2049,
-        raw: { type: 'tool_use', id: 'toolu_stage_01', name: 'Write', input: {} },
+      contextMap.set('toolu_conv_02', {
+        conversationId: 2049,
+        raw: { type: 'tool_use', id: 'toolu_conv_02', name: 'Write', input: {} },
       });
-      contextMap.set('toolu_release_01', {
-        pylonAddress: '127.0.0.1:9879', // release
-        entityId: 3073,
-        raw: { type: 'tool_use', id: 'toolu_release_01', name: 'Edit', input: {} },
+      contextMap.set('toolu_conv_03', {
+        conversationId: 3073,
+        raw: { type: 'tool_use', id: 'toolu_conv_03', name: 'Edit', input: {} },
       });
 
       // Assert
-      expect(contextMap.get('toolu_dev_01')?.pylonAddress).toBe('127.0.0.1:9876');
-      expect(contextMap.get('toolu_stage_01')?.pylonAddress).toBe('127.0.0.1:9878');
-      expect(contextMap.get('toolu_release_01')?.pylonAddress).toBe('127.0.0.1:9879');
+      expect(contextMap.get('toolu_conv_01')?.conversationId).toBe(1025);
+      expect(contextMap.get('toolu_conv_02')?.conversationId).toBe(2049);
+      expect(contextMap.get('toolu_conv_03')?.conversationId).toBe(3073);
     });
 
     // 엣지 케이스
     it('should_not_store_when_tool_use_id_is_empty', () => {
       // Arrange
-      const info: PylonInfo = {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+      const context: ToolContext = {
+        conversationId: 2049,
         raw: { type: 'tool_use', id: '', name: 'Read', input: {} },
       };
 
       // Act
-      contextMap.set('', info);
+      contextMap.set('', context);
 
       // Assert
       expect(contextMap.get('')).toBeUndefined();
       expect(contextMap.size).toBe(0);
     });
 
-    it('should_store_info_with_complex_raw_input', () => {
+    it('should_store_context_with_complex_raw_input', () => {
       // Arrange - 실제 도구 호출처럼 복잡한 input 포함
       const toolUseId = 'toolu_complex';
-      const info: PylonInfo = {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+      const context: ToolContext = {
+        conversationId: 2049,
         raw: {
           type: 'tool_use',
           id: toolUseId,
@@ -136,7 +125,7 @@ describe('ToolContextMap', () => {
       };
 
       // Act
-      contextMap.set(toolUseId, info);
+      contextMap.set(toolUseId, context);
 
       // Assert
       const result = contextMap.get(toolUseId);
@@ -153,23 +142,21 @@ describe('ToolContextMap', () => {
   // ============================================================================
   describe('get', () => {
     // 정상 케이스
-    it('should_return_pylon_info_when_tool_use_id_exists', () => {
+    it('should_return_context_when_tool_use_id_exists', () => {
       // Arrange
       const toolUseId = 'toolu_01ABC123';
-      const info: PylonInfo = {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+      const context: ToolContext = {
+        conversationId: 2049,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: {} },
       };
-      contextMap.set(toolUseId, info);
+      contextMap.set(toolUseId, context);
 
       // Act
       const result = contextMap.get(toolUseId);
 
       // Assert
       expect(result).toBeDefined();
-      expect(result?.pylonAddress).toBe('127.0.0.1:9878');
-      expect(result?.entityId).toBe(2049);
+      expect(result?.conversationId).toBe(2049);
     });
 
     // 에러 케이스
@@ -200,8 +187,7 @@ describe('ToolContextMap', () => {
       // Arrange
       const toolUseId = 'toolu_01ABC123';
       contextMap.set(toolUseId, {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: toolUseId, name: 'Read', input: {} },
       });
 
@@ -235,8 +221,7 @@ describe('ToolContextMap', () => {
       vi.setSystemTime(now);
 
       contextMap.set('toolu_old', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: 'toolu_old', name: 'Read', input: {} },
       });
 
@@ -260,8 +245,7 @@ describe('ToolContextMap', () => {
       vi.setSystemTime(now);
 
       contextMap.set('toolu_recent', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: 'toolu_recent', name: 'Read', input: {} },
       });
 
@@ -285,8 +269,7 @@ describe('ToolContextMap', () => {
       vi.setSystemTime(now);
 
       contextMap.set('toolu_test', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: 'toolu_test', name: 'Read', input: {} },
       });
 
@@ -303,32 +286,29 @@ describe('ToolContextMap', () => {
       vi.useRealTimers();
     });
 
-    it('should_cleanup_entries_from_multiple_pylons_based_on_age', () => {
+    it('should_cleanup_entries_from_multiple_conversations_based_on_age', () => {
       // Arrange
       vi.useFakeTimers();
       const now = Date.now();
       vi.setSystemTime(now);
 
-      // 오래된 항목들 (dev, stage)
-      contextMap.set('toolu_old_dev', {
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1025,
-        raw: { type: 'tool_use', id: 'toolu_old_dev', name: 'Read', input: {} },
+      // 오래된 항목들
+      contextMap.set('toolu_old_1', {
+        conversationId: 1025,
+        raw: { type: 'tool_use', id: 'toolu_old_1', name: 'Read', input: {} },
       });
 
       vi.setSystemTime(now + 1 * 60 * 1000);
-      contextMap.set('toolu_old_stage', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
-        raw: { type: 'tool_use', id: 'toolu_old_stage', name: 'Read', input: {} },
+      contextMap.set('toolu_old_2', {
+        conversationId: 2049,
+        raw: { type: 'tool_use', id: 'toolu_old_2', name: 'Read', input: {} },
       });
 
-      // 10분 후 새 항목 (release)
+      // 10분 후 새 항목
       vi.setSystemTime(now + 10 * 60 * 1000);
-      contextMap.set('toolu_new_release', {
-        pylonAddress: '127.0.0.1:9879',
-        entityId: 3073,
-        raw: { type: 'tool_use', id: 'toolu_new_release', name: 'Read', input: {} },
+      contextMap.set('toolu_new', {
+        conversationId: 3073,
+        raw: { type: 'tool_use', id: 'toolu_new', name: 'Read', input: {} },
       });
 
       // 1분 더 경과
@@ -337,11 +317,11 @@ describe('ToolContextMap', () => {
       // Act - maxAge: 5분
       const removed = contextMap.cleanup(5 * 60 * 1000);
 
-      // Assert - dev와 stage는 삭제, release는 유지
+      // Assert - old_1, old_2는 삭제, new는 유지
       expect(removed).toBe(2);
-      expect(contextMap.get('toolu_old_dev')).toBeUndefined();
-      expect(contextMap.get('toolu_old_stage')).toBeUndefined();
-      expect(contextMap.get('toolu_new_release')).toBeDefined();
+      expect(contextMap.get('toolu_old_1')).toBeUndefined();
+      expect(contextMap.get('toolu_old_2')).toBeUndefined();
+      expect(contextMap.get('toolu_new')).toBeDefined();
 
       vi.useRealTimers();
     });
@@ -354,13 +334,11 @@ describe('ToolContextMap', () => {
     it('should_return_number_of_entries', () => {
       // Arrange
       contextMap.set('toolu_01', {
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1025,
+        conversationId: 1025,
         raw: { type: 'tool_use', id: 'toolu_01', name: 'Read', input: {} },
       });
       contextMap.set('toolu_02', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: 'toolu_02', name: 'Write', input: {} },
       });
 
@@ -381,13 +359,11 @@ describe('ToolContextMap', () => {
     it('should_remove_all_entries', () => {
       // Arrange
       contextMap.set('toolu_01', {
-        pylonAddress: '127.0.0.1:9876',
-        entityId: 1025,
+        conversationId: 1025,
         raw: { type: 'tool_use', id: 'toolu_01', name: 'Read', input: {} },
       });
       contextMap.set('toolu_02', {
-        pylonAddress: '127.0.0.1:9878',
-        entityId: 2049,
+        conversationId: 2049,
         raw: { type: 'tool_use', id: 'toolu_02', name: 'Write', input: {} },
       });
 

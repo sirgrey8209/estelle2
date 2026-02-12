@@ -8,6 +8,7 @@
  */
 
 import type { AuthPayload } from '@estelle/core';
+import { encodePylonId, encodeClientId, type EnvId } from '@estelle/core';
 import type {
   Client,
   RelayMessage,
@@ -22,7 +23,8 @@ import { authenticateDevice } from './auth.js';
 import { routeMessage, broadcastAll, broadcastToType } from './router.js';
 import { getDeviceList, createDeviceStatusMessage, createClientDisconnectMessage } from './device-status.js';
 import { getDeviceInfo, parseDeviceId, log } from './utils.js';
-import { DEVICES, DYNAMIC_DEVICE_ID_START } from './constants.js';
+import { DEVICES } from './constants.js';
+import { ClientIndexAllocator } from './device-id-validation.js';
 
 // ============================================================================
 // 핸들러 결과 타입
@@ -79,13 +81,18 @@ function createAuthFailureResult(clientId: string, error: string): HandleResult 
  * auth 타입 메시지를 처리하여 클라이언트를 인증합니다.
  *
  * 인증 규칙:
- * - pylon: deviceId 필수, IP 기반 인증
- * - app: deviceId 자동 발급, 인증 항상 성공
+ * - pylon: deviceIndex 필수 (1~15), IP 기반 인증
+ * - app: deviceIndex 자동 발급 (0~15), 인증 항상 성공
  *
- * @param clientId - 요청한 클라이언트 ID
+ * deviceId 인코딩:
+ * - pylonId = envId(2비트) + deviceType(0, 1비트) + deviceIndex(4비트)
+ * - clientId = envId(2비트) + deviceType(1, 1비트) + deviceIndex(4비트)
+ *
+ * @param clientId - 요청한 클라이언트 ID (WebSocket 연결 ID)
  * @param client - 클라이언트 정보
  * @param payload - 인증 요청 페이로드
- * @param nextClientId - 다음 앱 클라이언트에 할당할 ID
+ * @param envId - 환경 ID (0=release, 1=stage, 2=dev)
+ * @param nextClientIndex - 다음 앱 클라이언트에 할당할 deviceIndex (0~15)
  * @param clients - 전체 클라이언트 맵 (브로드캐스트용)
  * @param devices - 디바이스 설정 맵
  * @returns 핸들러 결과
@@ -96,7 +103,8 @@ function createAuthFailureResult(clientId: string, error: string): HandleResult 
  *   'client-123',
  *   client,
  *   { deviceId: 1, deviceType: 'pylon' },
- *   100,
+ *   1,  // envId: stage
+ *   0,  // nextClientIndex
  *   clients,
  *   DEVICES
  * );
@@ -107,55 +115,65 @@ export function handleAuth(
   clientId: string,
   client: Client,
   payload: AuthPayload,
-  nextClientId: number,
+  envId: EnvId,
+  nextClientIndex: number,
   clients: Map<string, Client>,
   devices: Record<number, DeviceConfig> = DEVICES
 ): HandleResult {
   const actions: RelayAction[] = [];
-  let { deviceId, deviceType } = payload;
+  const { deviceType } = payload;
+  let { deviceId } = payload;
 
   // deviceType 필수 확인
   if (!deviceType) {
     return createAuthFailureResult(clientId, 'Missing deviceType');
   }
 
+  // deviceIndex와 인코딩된 deviceId를 분리해서 관리
+  let deviceIndex: number;
+  let encodedDeviceId: number;
+
   // Pylon 인증
   if (deviceType === 'pylon') {
-    // deviceId 정규화
-    const parsedDeviceId = parseDeviceId(deviceId);
+    // deviceId를 deviceIndex로 파싱 (Pylon은 deviceIndex를 전달함)
+    const parsedDeviceIndex = parseDeviceId(deviceId);
 
-    if (parsedDeviceId === null) {
+    if (parsedDeviceIndex === null) {
       return createAuthFailureResult(clientId, 'Missing deviceId for pylon');
     }
 
-    // IP 기반 인증
-    const authResult = authenticateDevice(parsedDeviceId, deviceType, client.ip, devices);
+    // IP 기반 인증 (deviceIndex로 인증)
+    const authResult = authenticateDevice(parsedDeviceIndex, deviceType, client.ip, devices);
 
     if (!authResult.success) {
       return createAuthFailureResult(clientId, authResult.error!);
     }
 
-    deviceId = parsedDeviceId;
+    deviceIndex = parsedDeviceIndex;
+    // pylonId 인코딩: envId + deviceType(0) + deviceIndex
+    encodedDeviceId = encodePylonId(envId, deviceIndex);
   } else {
-    // App 클라이언트: deviceId 자동 발급
-    deviceId = nextClientId;
-    actions.push({ type: 'increment_next_client_id' });
+    // App 클라이언트: deviceIndex 자동 발급 (allocator의 nextId를 전달받음)
+    deviceIndex = nextClientIndex;
+    // clientId 인코딩: envId + deviceType(1) + deviceIndex
+    encodedDeviceId = encodeClientId(envId, deviceIndex);
+    actions.push({ type: 'allocate_client_index' });
   }
 
   // 인증 성공 - 클라이언트 상태 업데이트
-  const numericDeviceId = deviceId as number;
+  // 내부적으로는 deviceIndex를 저장 (라우팅에 사용)
   actions.push({
     type: 'update_client',
     clientId,
     updates: {
-      deviceId: numericDeviceId,
+      deviceId: deviceIndex,  // 내부 라우팅용 deviceIndex
       deviceType: deviceType as RelayDeviceType,
       authenticated: true,
     },
   });
 
-  // 인증 성공 응답
-  const info = getDeviceInfo(numericDeviceId, devices);
+  // 인증 성공 응답 - 클라이언트에는 인코딩된 deviceId 전달
+  const info = getDeviceInfo(deviceIndex, devices);
   actions.push({
     type: 'send',
     clientId,
@@ -164,7 +182,8 @@ export function handleAuth(
       payload: {
         success: true,
         device: {
-          deviceId: numericDeviceId,
+          deviceId: encodedDeviceId,  // 7비트 인코딩된 deviceId
+          deviceIndex,  // 로컬 인덱스도 함께 전달
           deviceType: deviceType as RelayDeviceType,
           name: info.name,
           icon: info.icon,
@@ -179,7 +198,7 @@ export function handleAuth(
   const updatedClients = new Map(clients);
   updatedClients.set(clientId, {
     ...client,
-    deviceId: numericDeviceId,
+    deviceId: deviceIndex,  // 내부 라우팅용 deviceIndex
     deviceType: deviceType as RelayDeviceType,
     authenticated: true,
   });
@@ -260,6 +279,7 @@ export function handlePing(clientId: string): HandleResult {
  * @param clientId - 발신자 클라이언트 ID
  * @param client - 발신자 클라이언트 정보
  * @param message - 전달할 메시지
+ * @param envId - 환경 ID (0=release, 1=stage, 2=dev)
  * @param clients - 클라이언트 맵
  * @param devices - 디바이스 설정 맵
  * @returns 핸들러 결과
@@ -268,6 +288,7 @@ export function handleRouting(
   clientId: string,
   client: Client,
   message: RelayMessage,
+  envId: EnvId,
   clients: Map<string, Client>,
   devices: Record<number, DeviceConfig> = DEVICES
 ): HandleResult {
@@ -277,12 +298,16 @@ export function handleRouting(
     return { actions };
   }
 
-  // from 정보 주입
+  // from 정보 주입 - 인코딩된 deviceId 사용
   const info = getDeviceInfo(client.deviceId, devices);
+  // deviceType에 따라 인코딩 방식 결정
+  const encodedDeviceId = client.deviceType === 'pylon'
+    ? encodePylonId(envId, client.deviceId)
+    : encodeClientId(envId, client.deviceId);
   const enrichedMessage: RelayMessage = {
     ...message,
     from: {
-      deviceId: client.deviceId,
+      deviceId: encodedDeviceId,
       deviceType: client.deviceType,
       name: info.name,
       icon: info.icon,
@@ -324,10 +349,11 @@ export function handleRouting(
  * 3. (인증 필요) ping: pong 응답
  * 4. (인증 필요) 그 외: 라우팅
  *
- * @param clientId - 메시지를 보낸 클라이언트 ID
+ * @param clientId - 메시지를 보낸 클라이언트 ID (WebSocket 연결 ID)
  * @param client - 클라이언트 정보
  * @param data - 수신한 메시지 데이터
- * @param nextClientId - 다음 앱 클라이언트에 할당할 ID
+ * @param envId - 환경 ID (0=release, 1=stage, 2=dev)
+ * @param nextClientIndex - 다음 앱 클라이언트에 할당할 deviceIndex (0~15)
  * @param clients - 전체 클라이언트 맵
  * @param devices - 디바이스 설정 맵
  * @returns 핸들러 결과
@@ -338,7 +364,8 @@ export function handleRouting(
  *   clientId,
  *   client,
  *   JSON.parse(rawMessage),
- *   nextClientId,
+ *   1,  // envId: stage
+ *   nextClientIndex,
  *   clients,
  *   DEVICES
  * );
@@ -352,7 +379,8 @@ export function handleMessage(
   clientId: string,
   client: Client,
   data: RelayMessage,
-  nextClientId: number,
+  envId: EnvId,
+  nextClientIndex: number,
   clients: Map<string, Client>,
   devices: Record<number, DeviceConfig> = DEVICES
 ): HandleResult {
@@ -364,7 +392,8 @@ export function handleMessage(
       clientId,
       client,
       data.payload as AuthPayload,
-      nextClientId,
+      envId,
+      nextClientIndex,
       clients,
       devices
     );
@@ -393,7 +422,7 @@ export function handleMessage(
   }
 
   // ===== 순수 라우팅 =====
-  return handleRouting(clientId, client, data, clients, devices);
+  return handleRouting(clientId, client, data, envId, clients, devices);
 }
 
 // ============================================================================
@@ -409,7 +438,7 @@ export function handleMessage(
  * 처리 사항:
  * 1. 인증된 클라이언트면 device_status 브로드캐스트
  * 2. 비-pylon 클라이언트면 pylon에게 client_disconnect 알림
- * 3. 모든 앱 클라이언트 연결 해제 시 nextClientId 리셋
+ * 3. App 클라이언트면 release_client_index 액션 반환
  *
  * @param clientId - 연결 해제된 클라이언트 ID
  * @param client - 클라이언트 정보
@@ -438,7 +467,7 @@ export function handleDisconnect(
     });
   }
 
-  // 비-pylon 클라이언트 연결 해제 시 pylon에게 알림
+  // 비-pylon 클라이언트 연결 해제 시 pylon에게 알림 및 clientIndex 해제
   if (client.deviceType !== 'pylon') {
     const pylonResult = broadcastToType('pylon', clients);
     if (pylonResult.success) {
@@ -449,22 +478,11 @@ export function handleDisconnect(
       });
     }
 
-    // 모든 앱 클라이언트가 연결 해제되었는지 확인
-    let hasAppClients = false;
-    for (const c of clients.values()) {
-      if (isAuthenticatedClient(c) && c.deviceType !== 'pylon') {
-        hasAppClients = true;
-        break;
-      }
-    }
-
-    // 모든 앱 클라이언트 연결 해제 시 ID 카운터 리셋
-    if (!hasAppClients) {
-      actions.push({
-        type: 'reset_next_client_id',
-        value: DYNAMIC_DEVICE_ID_START,
-      });
-    }
+    // clientIndex 해제 (allocator가 빈 번호 재활용하므로 리셋 불필요)
+    actions.push({
+      type: 'release_client_index',
+      deviceIndex: client.deviceId,
+    });
   }
 
   return { actions };

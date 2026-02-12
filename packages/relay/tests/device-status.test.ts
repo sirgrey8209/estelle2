@@ -43,7 +43,7 @@ describe('device-status', () => {
     clients = new Map([
       ['client-pylon-1', createClient(1, 'pylon', true)],
       ['client-pylon-2', createClient(2, 'pylon', true)],
-      ['client-app-100', createClient(100, 'app', true)],
+      ['client-app-3', createClient(3, 'app', true)],
       ['client-pending', createClient(null, null, false)],
     ]);
   });
@@ -69,11 +69,11 @@ describe('device-status', () => {
     it('should return dynamic client info for app', () => {
       const list = getDeviceList(clients, testDevices);
 
-      const app100 = list.find(d => d.deviceId === 100);
-      expect(app100).toBeDefined();
-      expect(app100?.name).toBe('Client 100');
-      expect(app100?.icon).toBe('📱');
-      expect(app100?.role).toBe('client');
+      const app3 = list.find(d => d.deviceId === 3);
+      expect(app3).toBeDefined();
+      expect(app3?.name).toBe('Client 3');
+      expect(app3?.icon).toBe('📱');
+      expect(app3?.role).toBe('client');
     });
 
     it('should return empty list when no authenticated clients', () => {

@@ -3,7 +3,7 @@
  * @description 메시지 라우터
  *
  * Relay에서 수신한 메시지를 적절한 Store에 디스패치합니다.
- * entityId(number)를 사용하여 대화를 식별합니다.
+ * conversationId(number)를 사용하여 대화를 식별합니다.
  */
 
 import { MessageType } from '@estelle/core';
@@ -44,31 +44,31 @@ export function routeMessage(message: RelayMessage): void {
       const workspaceStore = useWorkspaceStore.getState();
       const previousWorkspaces = workspaceStore.workspacesByPylon.get(pylonId);
       if (previousWorkspaces && previousWorkspaces.length > 0) {
-        // 이전 워크스페이스들의 모든 entityId 추출
-        const previousEntityIds = new Set<number>();
-        for (const ws of previousWorkspaces as Array<{ conversations?: Array<{ entityId: number }> }>) {
+        // 이전 워크스페이스들의 모든 conversationId 추출
+        const previousConversationIds = new Set<number>();
+        for (const ws of previousWorkspaces as Array<{ conversations?: Array<{ conversationId: number }> }>) {
           if (ws.conversations) {
             for (const conv of ws.conversations) {
-              previousEntityIds.add(conv.entityId);
+              previousConversationIds.add(conv.conversationId);
             }
           }
         }
 
-        // 새 워크스페이스들의 모든 entityId 추출
-        const newEntityIds = new Set<number>();
+        // 새 워크스페이스들의 모든 conversationId 추출
+        const newConversationIds = new Set<number>();
         for (const ws of (workspaces || [])) {
           if (ws.conversations) {
             for (const conv of ws.conversations) {
-              newEntityIds.add(conv.entityId);
+              newConversationIds.add(conv.conversationId);
             }
           }
         }
 
-        // 이전에 있었지만 새 목록에 없는 entityId들의 캐시 삭제
+        // 이전에 있었지만 새 목록에 없는 conversationId들의 캐시 삭제
         const convStore = useConversationStore.getState();
-        for (const entityId of previousEntityIds) {
-          if (!newEntityIds.has(entityId)) {
-            convStore.deleteConversation(entityId);
+        for (const conversationId of previousConversationIds) {
+          if (!newConversationIds.has(conversationId)) {
+            convStore.deleteConversation(conversationId);
           }
         }
       }
@@ -94,7 +94,7 @@ export function routeMessage(message: RelayMessage): void {
 
       // 워크스페이스 목록 업데이트 (서버의 active 정보 전달)
       const activeInfo = activeWorkspaceId && activeConversationId
-        ? { workspaceId: activeWorkspaceId, conversationId: activeConversationId }
+        ? { workspaceId: activeWorkspaceId, conversationId: parseInt(activeConversationId, 10) }
         : undefined;
       workspaceStore.setWorkspaces(pylonId, workspaces || [], activeInfo);
 
@@ -103,27 +103,30 @@ export function routeMessage(message: RelayMessage): void {
       const { selectedConversation } = useWorkspaceStore.getState();
       if (selectedConversation) {
         const convStore = useConversationStore.getState();
-        if (convStore.currentEntityId !== selectedConversation.entityId) {
-          convStore.setCurrentConversation(selectedConversation.entityId);
+        if (convStore.currentConversationId !== selectedConversation.conversationId) {
+          convStore.setCurrentConversation(selectedConversation.conversationId);
         }
       }
 
-      // syncOrchestrator 알림 (requesting일 때만 동작, push 무시)
-      syncOrchestrator.onWorkspaceListReceived(selectedConversation?.entityId ?? null);
+      // syncOrchestrator 알림
+      const currentSync = useSyncStore.getState().workspaceSync;
+      console.log('[Router] Before onWorkspaceListReceived, workspaceSync:', currentSync);
+      syncOrchestrator.onWorkspaceListReceived(selectedConversation?.conversationId ?? null);
+      console.log('[Router] After onWorkspaceListReceived, workspaceSync:', useSyncStore.getState().workspaceSync);
 
       break;
     }
 
     // === Conversation 상태 ===
     case MessageType.CONVERSATION_STATUS: {
-      const { entityId, status, unread, deviceId } = payload as {
-        entityId?: number;
+      const { conversationId, status, unread, deviceId } = payload as {
+        conversationId?: number;
         status: string;
         unread?: boolean;
         deviceId?: number;
       };
 
-      if (!entityId) break;
+      if (!conversationId) break;
 
       // deviceId가 없으면 첫 번째 연결된 Pylon 사용
       const pylonId = deviceId || useWorkspaceStore.getState().connectedPylons[0]?.deviceId;
@@ -136,23 +139,23 @@ export function routeMessage(message: RelayMessage): void {
 
         useWorkspaceStore.getState().updateConversationStatus(
           pylonId,
-          entityId,
+          conversationId,
           validStatus,
           unread
         );
       }
 
       // conversationStore도 동기화 (다른 대화를 보고 있을 때도 상태 반영)
-      // pylonId가 없어도 entityId만 있으면 상태 설정 (재연결 시 상태 동기화)
+      // pylonId가 없어도 conversationId만 있으면 상태 설정 (재연결 시 상태 동기화)
       // ClaudeStatus: 'idle' | 'working' | 'permission'
       if (status === 'idle' || status === 'working') {
         const convStore = useConversationStore.getState();
         // convState가 없어도 setStatus 호출 (재연결 시 상태 동기화)
-        convStore.setStatus(entityId, status);
+        convStore.setStatus(conversationId, status);
 
         // idle로 변경 시 stale textBuffer 정리
         if (status === 'idle') {
-          convStore.clearTextBuffer(entityId);
+          convStore.clearTextBuffer(conversationId);
         }
       }
       break;
@@ -160,19 +163,25 @@ export function routeMessage(message: RelayMessage): void {
 
     // === History ===
     case MessageType.HISTORY_RESULT: {
-      const { messages, entityId, totalCount, loadBefore, hasActiveSession, currentStatus } = payload as {
+      const { messages, conversationId, totalCount, loadBefore, hasActiveSession, currentStatus } = payload as {
         messages: StoreMessage[];
-        entityId?: number;
+        conversationId?: number;
         totalCount?: number;
         loadBefore?: number;
         hasActiveSession?: boolean;
         currentStatus?: 'idle' | 'working' | 'permission';
       };
 
-      // entityId 우선, fallback으로 선택된 대화의 entityId
-      const targetEntityId = entityId
-        || useWorkspaceStore.getState().selectedConversation?.entityId;
-      if (targetEntityId) {
+      // DEBUG: history_result 수신 로그
+      console.log(`[Router] history_result: conversationId=${conversationId}, messages=${messages?.length}, totalCount=${totalCount}`);
+
+      // conversationId 우선, fallback으로 선택된 대화의 conversationId
+      const targetConversationId = conversationId
+        || useWorkspaceStore.getState().selectedConversation?.conversationId;
+
+      console.log(`[Router] history_result: targetConversationId=${targetConversationId}, selectedConversation=${useWorkspaceStore.getState().selectedConversation?.conversationId}`);
+
+      if (targetConversationId) {
         const convStore = useConversationStore.getState();
         const syncStore = useSyncStore.getState();
         const resolvedTotalCount = totalCount ?? messages.length;
@@ -180,32 +189,32 @@ export function routeMessage(message: RelayMessage): void {
 
         if (loadBefore !== undefined && loadBefore > 0) {
           // 추가 로드 (과거 방향 페이징)
-          convStore.prependMessages(targetEntityId, messages);
+          convStore.prependMessages(targetConversationId, messages);
 
           // syncStore: syncedFrom 확장
           // loadBefore = 80, loadedCount = 20 → newSyncedFrom = 80 - 20 = 60
           const newSyncedFrom = loadBefore - loadedCount;
-          syncStore.extendSyncedFrom(targetEntityId, Math.max(0, newSyncedFrom));
-          syncStore.setLoadingMore(targetEntityId, false);
+          syncStore.extendSyncedFrom(targetConversationId, Math.max(0, newSyncedFrom));
+          syncStore.setLoadingMore(targetConversationId, false);
         } else {
           // 초기 로드 — stale textBuffer 정리 후 메시지 설정
-          convStore.clearTextBuffer(targetEntityId);
-          convStore.setMessages(targetEntityId, messages);
+          convStore.clearTextBuffer(targetConversationId);
+          convStore.setMessages(targetConversationId, messages);
 
           // syncStore: 범위 설정 (최신 메시지부터 로드됨)
           const syncedFrom = resolvedTotalCount - loadedCount;
-          syncStore.setConversationSync(targetEntityId, syncedFrom, resolvedTotalCount, resolvedTotalCount);
-          syncStore.setConversationPhase(targetEntityId, 'synced');
+          syncStore.setConversationSync(targetConversationId, syncedFrom, resolvedTotalCount, resolvedTotalCount);
+          syncStore.setConversationPhase(targetConversationId, 'synced');
 
           // Pylon이 보낸 현재 상태로 conversationStore 동기화
           // currentStatus가 있으면 해당 상태로 설정 (재연결 시 정확한 상태 동기화)
           if (currentStatus) {
-            convStore.setStatus(targetEntityId, currentStatus);
+            convStore.setStatus(targetConversationId, currentStatus);
           } else if (hasActiveSession === false) {
             // 레거시 호환: currentStatus가 없고 hasActiveSession=false이면 idle로 설정
-            const convState = convStore.getState(targetEntityId);
+            const convState = convStore.getState(targetConversationId);
             if (convState && convState.status !== 'idle') {
-              convStore.setStatus(targetEntityId, 'idle');
+              convStore.setStatus(targetConversationId, 'idle');
             }
           }
         }
@@ -215,11 +224,19 @@ export function routeMessage(message: RelayMessage): void {
 
     // === Claude 이벤트 ===
     case MessageType.CLAUDE_EVENT: {
-      // payload에 entityId가 있으면 해당 대화에 적용 (다른 대화에서 온 이벤트도 처리)
-      const targetEntityId = (payload as { entityId?: number }).entityId
-        || useWorkspaceStore.getState().selectedConversation?.entityId;
-      if (targetEntityId) {
-        handleClaudeEventForConversation(targetEntityId, payload);
+      // payload에 conversationId가 있으면 해당 대화에 적용 (다른 대화에서 온 이벤트도 처리)
+      const payloadConversationId = (payload as { conversationId?: number }).conversationId;
+      const selectedConversationId = useWorkspaceStore.getState().selectedConversation?.conversationId;
+      const targetConversationId = payloadConversationId || selectedConversationId;
+
+      // DEBUG: conversationId 추적
+      const eventType = (payload as { event?: { type?: string } }).event?.type;
+      if (payloadConversationId !== selectedConversationId) {
+        console.warn(`[Router] CLAUDE_EVENT mismatch! payload=${payloadConversationId}, selected=${selectedConversationId}, eventType=${eventType}`);
+      }
+
+      if (targetConversationId) {
+        handleClaudeEventForConversation(targetConversationId, payload);
       }
       break;
     }
@@ -248,11 +265,11 @@ export function routeMessage(message: RelayMessage): void {
 
     // === 대화 생성 결과 ===
     case MessageType.CONVERSATION_CREATE_RESULT: {
-      const { entityId } = payload as { entityId?: number };
+      const { conversationId } = payload as { conversationId?: number };
 
-      // entityId가 있으면 이전 캐시 삭제 (새 대화 생성 시 이전 데이터 정리)
-      if (entityId) {
-        useConversationStore.getState().deleteConversation(entityId);
+      // conversationId가 있으면 이전 캐시 삭제 (새 대화 생성 시 이전 데이터 정리)
+      if (conversationId) {
+        useConversationStore.getState().deleteConversation(conversationId);
       }
       break;
     }
@@ -279,11 +296,11 @@ export function routeMessage(message: RelayMessage): void {
 /**
  * Claude 이벤트를 conversationStore에 라우팅
  *
- * @param entityId - 대상 entityId
+ * @param conversationId - 대상 conversationId
  * @param payload - Claude 이벤트 페이로드
  */
 function handleClaudeEventForConversation(
-  entityId: number,
+  conversationId: number,
   payload: Record<string, unknown>
 ): void {
   const event = payload.event as Record<string, unknown> | undefined;
@@ -296,7 +313,7 @@ function handleClaudeEventForConversation(
     case 'state': {
       const status = event.state as 'idle' | 'working' | 'permission';
       if (status) {
-        store.setStatus(entityId, status);
+        store.setStatus(conversationId, status);
       }
       break;
     }
@@ -304,13 +321,13 @@ function handleClaudeEventForConversation(
     case 'text': {
       const text = event.text as string;
       if (text) {
-        store.appendTextBuffer(entityId, text);
+        store.appendTextBuffer(conversationId, text);
       }
       break;
     }
 
     case 'textComplete': {
-      store.flushTextBuffer(entityId);
+      store.flushTextBuffer(conversationId);
       break;
     }
 
@@ -327,7 +344,7 @@ function handleClaudeEventForConversation(
         toolInput: (event.toolInput || event.input) as Record<string, unknown>,
         ...(parentToolUseId ? { parentToolUseId } : {}),
       };
-      store.addMessage(entityId, message);
+      store.addMessage(conversationId, message);
       break;
     }
 
@@ -340,7 +357,7 @@ function handleClaudeEventForConversation(
       const parentToolUseId = event.parentToolUseId as string | null | undefined;
 
       // tool_start → tool_complete 교체
-      const state = store.getState(entityId);
+      const state = store.getState(conversationId);
       if (state) {
         const messages = [...state.messages];
         let replaced = false;
@@ -371,9 +388,9 @@ function handleClaudeEventForConversation(
         }
 
         if (replaced) {
-          store.setMessages(entityId, messages);
+          store.setMessages(conversationId, messages);
         } else {
-          store.addMessage(entityId, {
+          store.addMessage(conversationId, {
             id: toolUseId || generateId(),
             role: 'assistant',
             type: 'tool_complete',
@@ -390,13 +407,13 @@ function handleClaudeEventForConversation(
     }
 
     case 'permission_request': {
-      store.addPendingRequest(entityId, {
+      store.addPendingRequest(conversationId, {
         type: 'permission',
         toolUseId: event.toolUseId as string,
         toolName: event.toolName as string,
         toolInput: event.toolInput as Record<string, unknown>,
       });
-      store.setStatus(entityId, 'permission');
+      store.setStatus(conversationId, 'permission');
       break;
     }
 
@@ -419,19 +436,19 @@ function handleClaudeEventForConversation(
         options: (event.options as string[]) || [],
       }];
 
-      store.addPendingRequest(entityId, {
+      store.addPendingRequest(conversationId, {
         type: 'question',
         toolUseId: event.toolUseId as string,
         questions,
       });
-      store.setStatus(entityId, 'permission');
+      store.setStatus(conversationId, 'permission');
       break;
     }
 
     case 'result': {
-      store.flushTextBuffer(entityId);
+      store.flushTextBuffer(conversationId);
       const usage = event.usage as Record<string, unknown> | undefined;
-      store.addMessage(entityId, {
+      store.addMessage(conversationId, {
         id: generateId(),
         role: 'system',
         type: 'result',
@@ -443,38 +460,38 @@ function handleClaudeEventForConversation(
           cacheReadTokens: (usage?.cacheReadInputTokens as number) || 0,
         },
       } as StoreMessage);
-      store.setStatus(entityId, 'idle');
+      store.setStatus(conversationId, 'idle');
       break;
     }
 
     case 'error': {
-      store.addMessage(entityId, {
+      store.addMessage(conversationId, {
         id: generateId(),
         role: 'system',
         type: 'error',
         content: (event.message as string) || 'Unknown error',
         timestamp: Date.now(),
       } as StoreMessage);
-      store.setStatus(entityId, 'idle');
+      store.setStatus(conversationId, 'idle');
       break;
     }
 
     case 'aborted': {
-      store.addMessage(entityId, {
+      store.addMessage(conversationId, {
         id: generateId(),
         role: 'system',
         type: 'aborted',
         timestamp: Date.now(),
         reason: (event.reason as 'user' | 'session_ended') || 'user',
       } as StoreMessage);
-      store.setStatus(entityId, 'idle');
+      store.setStatus(conversationId, 'idle');
       break;
     }
 
     case 'file_attachment': {
       const fileInfo = event.file as Record<string, unknown>;
       if (fileInfo) {
-        store.addMessage(entityId, {
+        store.addMessage(conversationId, {
           id: generateId(),
           role: 'assistant',
           type: 'file_attachment',
@@ -495,7 +512,7 @@ function handleClaudeEventForConversation(
     case 'usage_update': {
       const usage = event.usage as Record<string, number> | undefined;
       if (usage) {
-        store.updateRealtimeUsage(entityId, {
+        store.updateRealtimeUsage(conversationId, {
           inputTokens: usage.inputTokens || 0,
           outputTokens: usage.outputTokens || 0,
           cacheReadInputTokens: usage.cacheReadInputTokens || 0,

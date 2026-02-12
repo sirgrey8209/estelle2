@@ -2,11 +2,13 @@
  * @file server.ts
  * @description Estelle MCP Server
  *
- * Pylon이 Claude SDK에 등록하는 MCP 서버.
+ * Beacon이 Claude SDK에 등록하는 MCP 서버.
  * Claude가 대화 중 사용할 수 있는 도구를 제공합니다.
  *
  * 등록 도구:
  * - send_file: 사용자에게 파일 전송
+ * - link_doc / unlink_doc / list_docs: 문서 연결 관리
+ * - deploy: stage/release 배포
  */
 
 import fs from 'fs';
@@ -26,6 +28,7 @@ import {
   getUnlinkDocToolDefinition,
   getListDocsToolDefinition,
 } from './tools/link-document.js';
+import { executeDeploy, deployToolDefinition } from './tools/deploy.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
 
@@ -70,6 +73,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getLinkDocToolDefinition(),
     getUnlinkDocToolDefinition(),
     getListDocsToolDefinition(),
+    deployToolDefinition,
   ],
 }));
 
@@ -97,6 +101,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     case 'list_docs': {
       const result = await executeListDocs(args as Record<string, unknown>, { toolUseId });
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'deploy': {
+      const result = await executeDeploy(args as { target?: string });
       return result as unknown as Record<string, unknown>;
     }
     default:

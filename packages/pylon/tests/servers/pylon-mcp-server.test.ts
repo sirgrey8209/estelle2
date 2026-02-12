@@ -6,9 +6,9 @@
  * MCP 도구가 WorkspaceStore에 접근할 수 있도록 중계한다.
  *
  * 프로토콜:
- * - 요청: { "action": "link", "entityId": 2049, "path": "docs/spec.md" }
- * - 요청: { "action": "unlink", "entityId": 2049, "path": "docs/spec.md" }
- * - 요청: { "action": "list", "entityId": 2049 }
+ * - 요청: { "action": "link", "conversationId": 2049, "path": "docs/spec.md" }
+ * - 요청: { "action": "unlink", "conversationId": 2049, "path": "docs/spec.md" }
+ * - 요청: { "action": "list", "conversationId": 2049 }
  * - 응답: { "success": true, "docs": [...] }
  * - 응답: { "success": false, "error": "..." }
  *
@@ -18,7 +18,7 @@
  * - link action: 문서 연결 (성공/실패)
  * - unlink action: 문서 연결 해제 (성공/실패)
  * - list action: 문서 목록 조회 (성공/빈 목록)
- * - 에러 처리: 잘못된 action, 빈 entityId 등
+ * - 에러 처리: 잘못된 action, 빈 conversationId 등
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -108,8 +108,8 @@ describe('PylonMcpServer', () => {
   // 테스트용 상수
   const PYLON_ID = 1;
   const WORKSPACE_ID = 1;
-  // encodeEntityId(1, 1, 1) = (1 << 17) | (1 << 10) | 1 = 132097
-  const TEST_ENTITY_ID = 132097;
+  // encodeConversationId(1, 1, 1) = (1 << 17) | (1 << 10) | 1 = 132097
+  const TEST_CONVERSATION_ID = 132097;
 
   beforeEach(() => {
     // WorkspaceStore 설정: 워크스페이스와 대화 생성
@@ -214,7 +214,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       };
 
@@ -234,18 +234,18 @@ describe('PylonMcpServer', () => {
       // Arrange & Act
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       });
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/readme.md',
       });
 
       const listResponse = (await sendRequest(TEST_PORT, {
         action: 'list',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       })) as { success: boolean; docs: Array<{ path: string }> };
 
       // Assert
@@ -257,14 +257,14 @@ describe('PylonMcpServer', () => {
       // Arrange - 같은 문서를 두 번 연결 시도
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       });
 
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       })) as { success: boolean; error: string };
 
@@ -273,11 +273,11 @@ describe('PylonMcpServer', () => {
       expect(response.error).toMatch(/duplicate|already|exists/i);
     });
 
-    it('should_return_error_when_entity_id_not_found', async () => {
+    it('should_return_error_when_conversation_id_not_found', async () => {
       // Arrange
       const request = {
         action: 'link',
-        entityId: 99999, // 존재하지 않는 entityId
+        conversationId: 99999, // 존재하지 않는 conversationId
         path: 'docs/spec.md',
       };
 
@@ -296,7 +296,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: '',
       };
 
@@ -323,7 +323,7 @@ describe('PylonMcpServer', () => {
       // 테스트용 문서 연결
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       });
     });
@@ -332,7 +332,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'unlink',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       };
 
@@ -351,7 +351,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'unlink',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/not-exist.md',
       };
 
@@ -366,11 +366,11 @@ describe('PylonMcpServer', () => {
       expect(response.error).toMatch(/not found|not linked/i);
     });
 
-    it('should_return_error_when_entity_id_not_found', async () => {
+    it('should_return_error_when_conversation_id_not_found', async () => {
       // Arrange
       const request = {
         action: 'unlink',
-        entityId: 99999, // 존재하지 않는 entityId
+        conversationId: 99999, // 존재하지 않는 conversationId
         path: 'docs/spec.md',
       };
 
@@ -389,7 +389,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'unlink',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: '',
       };
 
@@ -418,7 +418,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'list',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       };
 
       // Act
@@ -436,24 +436,24 @@ describe('PylonMcpServer', () => {
       // Arrange - 문서 3개 연결
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/first.md',
       });
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/second.md',
       });
       await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/third.md',
       });
 
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'list',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       })) as {
         success: boolean;
         docs: Array<{ path: string; addedAt: number }>;
@@ -468,11 +468,11 @@ describe('PylonMcpServer', () => {
       expect(response.docs[2].path).toBe('docs\\third.md');
     });
 
-    it('should_return_error_when_entity_id_not_found', async () => {
+    it('should_return_error_when_conversation_id_not_found', async () => {
       // Arrange
       const request = {
         action: 'list',
-        entityId: 99999, // 존재하지 않는 entityId
+        conversationId: 99999, // 존재하지 않는 conversationId
       };
 
       // Act
@@ -499,7 +499,7 @@ describe('PylonMcpServer', () => {
     it('should_return_error_when_action_is_missing', async () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       })) as { success: boolean; error: string };
 
@@ -512,7 +512,7 @@ describe('PylonMcpServer', () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'unknown_action',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/spec.md',
       })) as { success: boolean; error: string };
 
@@ -521,7 +521,7 @@ describe('PylonMcpServer', () => {
       expect(response.error).toMatch(/unknown action/i);
     });
 
-    it('should_return_error_when_entity_id_is_missing', async () => {
+    it('should_return_error_when_conversation_id_is_missing', async () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'link',
@@ -530,27 +530,27 @@ describe('PylonMcpServer', () => {
 
       // Assert
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/entityId/i);
+      expect(response.error).toMatch(/conversationId/i);
     });
 
-    it('should_return_error_when_entity_id_is_not_a_number', async () => {
+    it('should_return_error_when_conversation_id_is_not_a_number', async () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: 'not-a-number',
+        conversationId: 'not-a-number',
         path: 'docs/spec.md',
       })) as { success: boolean; error: string };
 
       // Assert
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/entityId|invalid/i);
+      expect(response.error).toMatch(/conversationId|invalid/i);
     });
 
     it('should_return_error_when_path_is_missing_for_link', async () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       })) as { success: boolean; error: string };
 
       // Assert
@@ -562,7 +562,7 @@ describe('PylonMcpServer', () => {
       // Act
       const response = (await sendRequest(TEST_PORT, {
         action: 'unlink',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       })) as { success: boolean; error: string };
 
       // Assert
@@ -615,9 +615,9 @@ describe('PylonMcpServer', () => {
     it('should_handle_multiple_concurrent_requests', async () => {
       // Act - 동시에 여러 요청
       const results = await Promise.all([
-        sendRequest(TEST_PORT, { action: 'list', entityId: TEST_ENTITY_ID }),
-        sendRequest(TEST_PORT, { action: 'link', entityId: TEST_ENTITY_ID, path: 'docs/a.md' }),
-        sendRequest(TEST_PORT, { action: 'link', entityId: TEST_ENTITY_ID, path: 'docs/b.md' }),
+        sendRequest(TEST_PORT, { action: 'list', conversationId: TEST_CONVERSATION_ID }),
+        sendRequest(TEST_PORT, { action: 'link', conversationId: TEST_CONVERSATION_ID, path: 'docs/a.md' }),
+        sendRequest(TEST_PORT, { action: 'link', conversationId: TEST_CONVERSATION_ID, path: 'docs/b.md' }),
       ]);
 
       // Assert
@@ -634,17 +634,17 @@ describe('PylonMcpServer', () => {
       // Act
       const result1 = await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/first.md',
       });
       const result2 = await sendRequest(TEST_PORT, {
         action: 'link',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'docs/second.md',
       });
       const result3 = await sendRequest(TEST_PORT, {
         action: 'list',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       });
 
       // Assert
@@ -672,7 +672,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'C:\\test\\file.txt', // 테스트용 경로
         description: '테스트 파일입니다',
       };
@@ -701,7 +701,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'C:\\test\\image.png',
       };
 
@@ -724,7 +724,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'C:\\nonexistent\\file.txt',
       };
 
@@ -743,7 +743,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
       };
 
       // Act
@@ -761,7 +761,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: '',
       };
 
@@ -776,11 +776,11 @@ describe('PylonMcpServer', () => {
       expect(response.error).toMatch(/path/i);
     });
 
-    it('should_return_error_when_entityId_not_found', async () => {
+    it('should_return_error_when_conversationId_not_found', async () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: 99999, // 존재하지 않는 entityId
+        conversationId: 99999, // 존재하지 않는 conversationId
         path: 'C:\\test\\file.txt',
       };
 
@@ -799,7 +799,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'C:\\test\\image.png',
       };
 
@@ -818,7 +818,7 @@ describe('PylonMcpServer', () => {
       // Arrange
       const request = {
         action: 'send_file',
-        entityId: TEST_ENTITY_ID,
+        conversationId: TEST_CONVERSATION_ID,
         path: 'C:\\test\\file.txt',
       };
 

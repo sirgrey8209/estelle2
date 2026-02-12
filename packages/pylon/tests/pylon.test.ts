@@ -207,10 +207,11 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
       });
 
+      // to는 이제 배열 형태
       expect(deps.relayClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'workspace_list_result',
-          to: 'client-1',
+          to: ['client-1'],
         })
       );
     });
@@ -292,7 +293,7 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'conversation_delete',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -305,14 +306,14 @@ describe('Pylon', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // 메시지 추가
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
 
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -320,7 +321,7 @@ describe('Pylon', () => {
       expect(deps.relayClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'history_result',
-          to: 'client-1',
+          to: ['client-1'],
         })
       );
     });
@@ -343,7 +344,7 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -352,7 +353,7 @@ describe('Pylon', () => {
         expect.objectContaining({
           type: 'history_result',
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
             currentStatus: 'idle',
           }),
         })
@@ -374,7 +375,7 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -383,7 +384,7 @@ describe('Pylon', () => {
         expect.objectContaining({
           type: 'history_result',
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
             currentStatus: 'working',
           }),
         })
@@ -410,7 +411,7 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -419,7 +420,7 @@ describe('Pylon', () => {
         expect.objectContaining({
           type: 'history_result',
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
             currentStatus: 'permission',
           }),
         })
@@ -440,7 +441,7 @@ describe('Pylon', () => {
         type: 'claude_send',
         from: { deviceId: 'client-1' },
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           message: 'Hello Claude',
         },
       });
@@ -455,14 +456,14 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_permission',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           toolUseId: 'tool-1',
           decision: 'allow',
         },
       });
 
       expect(deps.claudeManager.respondPermission).toHaveBeenCalledWith(
-        conversation.entityId,
+        conversation.conversationId,
         'tool-1',
         'allow'
       );
@@ -475,14 +476,14 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_answer',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           toolUseId: 'tool-1',
           answer: 'Yes',
         },
       });
 
       expect(deps.claudeManager.respondQuestion).toHaveBeenCalledWith(
-        conversation.entityId,
+        conversation.conversationId,
         'tool-1',
         'Yes'
       );
@@ -495,12 +496,12 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_control',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           action: 'stop',
         },
       });
 
-      expect(deps.claudeManager.stop).toHaveBeenCalledWith(conversation.entityId);
+      expect(deps.claudeManager.stop).toHaveBeenCalledWith(conversation.conversationId);
     });
 
     it('should handle claude_control new_session action', () => {
@@ -510,12 +511,12 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_control',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           action: 'new_session',
         },
       });
 
-      expect(deps.claudeManager.newSession).toHaveBeenCalledWith(conversation.entityId);
+      expect(deps.claudeManager.newSession).toHaveBeenCalledWith(conversation.conversationId);
     });
   });
 
@@ -575,14 +576,14 @@ describe('Pylon', () => {
 
       // 여러 메시지 추가 (작은 메시지는 모두 100KB 이내)
       for (let i = 0; i < 10; i++) {
-        deps.messageStore.addUserMessage(conversation.entityId, `Message ${i}`);
+        deps.messageStore.addUserMessage(conversation.conversationId, `Message ${i}`);
       }
 
       pylon.handleMessage({
         type: 'history_request',
         from: { deviceId: 'client-1' },
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           offset: 0,
         },
       });
@@ -650,11 +651,11 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
-      expect(pylon.getSessionViewerCount(conversation.entityId)).toBe(1);
+      expect(pylon.getSessionViewerCount(conversation.conversationId)).toBe(1);
     });
 
     it('should unregister session viewer on client_disconnect', () => {
@@ -667,7 +668,7 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -677,7 +678,7 @@ describe('Pylon', () => {
         payload: { deviceId: 'client-1' },
       });
 
-      expect(pylon.getSessionViewerCount(conversation.entityId)).toBe(0);
+      expect(pylon.getSessionViewerCount(conversation.conversationId)).toBe(0);
     });
 
     it('should NOT unload message cache when switching away from active session', () => {
@@ -686,31 +687,31 @@ describe('Pylon', () => {
       const convB = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // 대화 A에 메시지 추가
-      deps.messageStore.addUserMessage(convA.entityId, 'Hello');
-      deps.messageStore.addAssistantText(convA.entityId, 'Hi there');
+      deps.messageStore.addUserMessage(convA.conversationId, 'Hello');
+      deps.messageStore.addAssistantText(convA.conversationId, 'Hi there');
 
       // 대화 A 선택 (뷰어 등록)
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convA.entityId },
+        payload: { conversationId: convA.conversationId },
       });
 
       // Claude가 A에서 작업 중
       vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
-        (eid: number) => eid === convA.entityId
+        (eid: number) => eid === convA.conversationId
       );
 
       // 대화 B로 전환 → A의 뷰어가 0명이 되지만 캐시는 유지되어야 함
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convB.entityId },
+        payload: { conversationId: convB.conversationId },
       });
 
       // A의 메시지 캐시가 유지되어야 함
-      expect(deps.messageStore.hasCache(convA.entityId)).toBe(true);
-      expect(deps.messageStore.getCount(convA.entityId)).toBe(2);
+      expect(deps.messageStore.hasCache(convA.conversationId)).toBe(true);
+      expect(deps.messageStore.getCount(convA.conversationId)).toBe(2);
     });
 
     it('should unload message cache when switching away from idle session', () => {
@@ -719,13 +720,13 @@ describe('Pylon', () => {
       const convB = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // 대화 A에 메시지 추가
-      deps.messageStore.addUserMessage(convA.entityId, 'Hello');
+      deps.messageStore.addUserMessage(convA.conversationId, 'Hello');
 
       // 대화 A 선택
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convA.entityId },
+        payload: { conversationId: convA.conversationId },
       });
 
       // Claude는 A에서 idle (기본 mock: hasActiveSession → false)
@@ -734,11 +735,11 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convB.entityId },
+        payload: { conversationId: convB.conversationId },
       });
 
       // A의 메시지 캐시가 언로드되어야 함
-      expect(deps.messageStore.hasCache(convA.entityId)).toBe(false);
+      expect(deps.messageStore.hasCache(convA.conversationId)).toBe(false);
     });
 
     it('should preserve history when switching back to active session', () => {
@@ -748,31 +749,31 @@ describe('Pylon', () => {
 
       // 대화 A에 메시지 5개 추가
       for (let i = 0; i < 5; i++) {
-        deps.messageStore.addUserMessage(convA.entityId, `msg-${i}`);
+        deps.messageStore.addUserMessage(convA.conversationId, `msg-${i}`);
       }
-      expect(deps.messageStore.getCount(convA.entityId)).toBe(5);
+      expect(deps.messageStore.getCount(convA.conversationId)).toBe(5);
 
       // 대화 A 선택
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convA.entityId },
+        payload: { conversationId: convA.conversationId },
       });
 
       // Claude가 A에서 작업 중
       vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
-        (eid: number) => eid === convA.entityId
+        (eid: number) => eid === convA.conversationId
       );
 
       // B로 전환
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convB.entityId },
+        payload: { conversationId: convB.conversationId },
       });
 
       // 작업 중 이벤트로 A에 메시지 추가
-      pylon.sendClaudeEvent(convA.entityId, {
+      pylon.sendClaudeEvent(convA.conversationId, {
         type: 'textComplete',
         text: 'new response',
       });
@@ -782,7 +783,7 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
-        payload: { entityId: convA.entityId },
+        payload: { conversationId: convA.conversationId },
       });
 
       // history_result에 모든 메시지가 포함되어야 함 (원래 5 + 새로 추가된 1)
@@ -810,14 +811,14 @@ describe('Pylon', () => {
         from: { deviceId: 'client-1' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
       vi.clearAllMocks();
 
       // Claude 이벤트 전달
-      pylon.sendClaudeEvent(conversation.entityId, {
+      pylon.sendClaudeEvent(conversation.conversationId, {
         type: 'text',
         content: 'Hello!',
       });
@@ -827,7 +828,7 @@ describe('Pylon', () => {
           type: 'claude_event',
           to: ['client-1'],
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
           }),
         })
       );
@@ -837,7 +838,7 @@ describe('Pylon', () => {
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
-      pylon.sendClaudeEvent(conversation.entityId, {
+      pylon.sendClaudeEvent(conversation.conversationId, {
         type: 'state',
         state: 'working',
       });
@@ -854,7 +855,7 @@ describe('Pylon', () => {
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
-      pylon.sendClaudeEvent(conversation.entityId, {
+      pylon.sendClaudeEvent(conversation.conversationId, {
         type: 'state',
         state: 'working',
       });
@@ -863,16 +864,16 @@ describe('Pylon', () => {
         expect.objectContaining({
           type: 'conversation_status',
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
             status: 'working',
           }),
         })
       );
     });
 
-    it('should still broadcast conversation_status for unknown entityId', () => {
+    it('should still broadcast conversation_status for unknown conversationId', () => {
       // workspaceStore에 존재하지 않는 세션에도 conversation_status는 broadcast됨
-      // (EntityId 기반 구조에서는 별도 존재 확인 없이 broadcast)
+      // (ConversationId 기반 구조에서는 별도 존재 확인 없이 broadcast)
       pylon.sendClaudeEvent(999999, {
         type: 'state',
         state: 'working',
@@ -883,7 +884,7 @@ describe('Pylon', () => {
           type: 'conversation_status',
           broadcast: 'clients',
           payload: expect.objectContaining({
-            entityId: 999999,
+            conversationId: 999999,
             status: 'working',
           }),
         })
@@ -907,13 +908,16 @@ describe('Pylon', () => {
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
-      // 클라이언트 A가 대화를 선택 (viewer로 등록)
+      // 클라이언트 A가 대화를 선택 (viewer로 등록) - deviceId는 숫자
+      const clientA = 100; // 인코딩된 deviceId (숫자)
+      const clientB = 101; // 인코딩된 deviceId (숫자)
+
       pylon.handleMessage({
         type: 'conversation_select',
-        from: { deviceId: 'client-A' },
+        from: { deviceId: clientA },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -921,36 +925,36 @@ describe('Pylon', () => {
       const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
       pylon.handleMessage({
         type: 'conversation_select',
-        from: { deviceId: 'client-B' },
+        from: { deviceId: clientB },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conv2.entityId,
+          conversationId: conv2.conversationId,
         },
       });
 
       vi.clearAllMocks();
 
       // Claude 이벤트 발생 (textComplete는 unread 트리거)
-      pylon.sendClaudeEvent(conversation.entityId, {
+      pylon.sendClaudeEvent(conversation.conversationId, {
         type: 'textComplete',
         text: 'Hello',
       });
 
-      // 클라이언트 B에게 unread 알림이 entityId 포함해서 전송되어야 함
+      // 클라이언트 B에게 unread 알림이 conversationId 포함해서 전송되어야 함
       // status는 현재 대화 상태를 유지하고, unread: true만 전달
       expect(deps.relayClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'conversation_status',
-          to: ['client-B'],
+          to: [clientB],
           payload: expect.objectContaining({
-            entityId: conversation.entityId,
+            conversationId: conversation.conversationId,
             unread: true,
           }),
         })
       );
     });
 
-    it('should send unread to non-viewers even for unknown entityId', () => {
+    it('should send unread to non-viewers even for unknown conversationId', () => {
       // 워크스페이스 생성 (대화 포함)
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
@@ -961,7 +965,7 @@ describe('Pylon', () => {
         from: { deviceId: 'client-A' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
         },
       });
 
@@ -972,14 +976,14 @@ describe('Pylon', () => {
         from: { deviceId: 'client-B' },
         payload: {
           workspaceId: workspace.workspaceId,
-          entityId: conv2.entityId,
+          conversationId: conv2.conversationId,
         },
       });
 
       vi.clearAllMocks();
 
       // 워크스페이스에 없는 세션으로 이벤트 발생
-      // EntityId 기반 구조에서는 별도 존재 확인 없이 unread 전송
+      // ConversationId 기반 구조에서는 별도 존재 확인 없이 unread 전송
       pylon.sendClaudeEvent(999999, {
         type: 'textComplete',
         text: 'Hello',
@@ -991,7 +995,7 @@ describe('Pylon', () => {
         expect.objectContaining({
           type: 'conversation_status',
           payload: expect.objectContaining({
-            entityId: 999999,
+            conversationId: 999999,
             unread: true,
           }),
         })
@@ -1097,12 +1101,12 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_set_permission_mode',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           mode: 'acceptEdits',
         },
       });
 
-      const updated = deps.workspaceStore.getConversation(conversation.entityId);
+      const updated = deps.workspaceStore.getConversation(conversation.conversationId);
       expect(updated?.permissionMode).toBe('acceptEdits');
     });
 
@@ -1126,7 +1130,7 @@ describe('Pylon', () => {
       pylon.handleMessage({
         type: 'claude_set_permission_mode',
         payload: {
-          entityId: conversation.entityId,
+          conversationId: conversation.conversationId,
           mode: 'bypassPermissions',
         },
       });
@@ -1138,7 +1142,7 @@ describe('Pylon', () => {
     it('should include permissionMode in workspace_list_result', () => {
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.workspaceStore.setConversationPermissionMode(conversation.entityId, 'acceptEdits');
+      deps.workspaceStore.setConversationPermissionMode(conversation.conversationId, 'acceptEdits');
 
       pylon.handleMessage({
         type: 'workspace_list',
@@ -1168,7 +1172,7 @@ describe('Pylon', () => {
       // 1. 워크스페이스 생성 및 퍼미션 변경
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.workspaceStore.setConversationPermissionMode(conversation.entityId, 'bypassPermissions');
+      deps.workspaceStore.setConversationPermissionMode(conversation.conversationId, 'bypassPermissions');
 
       // 2. 현재 상태 저장
       const savedData = deps.workspaceStore.toJSON();
@@ -1177,7 +1181,7 @@ describe('Pylon', () => {
       const newWorkspaceStore = WorkspaceStore.fromJSON(PYLON_ID, savedData);
 
       // 4. 퍼미션 모드 복구 확인
-      const restored = newWorkspaceStore.getConversation(conversation.entityId);
+      const restored = newWorkspaceStore.getConversation(conversation.conversationId);
       expect(restored?.permissionMode).toBe('bypassPermissions');
     });
   });
@@ -1272,8 +1276,8 @@ describe('Pylon', () => {
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId)!;
       const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
-      const eid1 = conv1.entityId;
-      const eid2 = conv2.entityId;
+      const eid1 = conv1.conversationId;
+      const eid2 = conv2.conversationId;
 
       // conv1을 working 상태로 설정 (리셋 대상)
       const c1 = deps.workspaceStore.getConversation(eid1)!;

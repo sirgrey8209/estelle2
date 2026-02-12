@@ -51,7 +51,7 @@ export interface Routable {
  */
 export interface PromptMessage extends BaseMessage, Routable {
   type: 'prompt';
-  conversationId: string;
+  conversationId: number;
   content: string;
 }
 
@@ -61,7 +61,7 @@ export interface PromptMessage extends BaseMessage, Routable {
  */
 export interface ClaudeMessage extends BaseMessage, Routable {
   type: 'claude_message';
-  conversationId: string;
+  conversationId: number;
   role: 'assistant';
   content: string;
 }
@@ -72,7 +72,7 @@ export interface ClaudeMessage extends BaseMessage, Routable {
  */
 export interface StreamChunk extends BaseMessage, Routable {
   type: 'stream_chunk';
-  conversationId: string;
+  conversationId: number;
   content: string;
 }
 

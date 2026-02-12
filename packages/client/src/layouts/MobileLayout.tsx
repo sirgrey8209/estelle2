@@ -29,17 +29,17 @@ export function MobileLayout({ sidebar, main }: MobileLayoutProps) {
   const lastTapTimeRef = useRef<number | null>(null);
 
   // 새 대화 선택 시에만 메인 페이지로 이동
-  const prevEntityIdRef = useRef<number | null>(null);
+  const prevConversationIdRef = useRef<number | null>(null);
   useEffect(() => {
-    const currentId = selectedConversation?.entityId ?? null;
-    const prevId = prevEntityIdRef.current;
+    const currentId = selectedConversation?.conversationId ?? null;
+    const prevId = prevConversationIdRef.current;
 
     // 대화가 새로 선택된 경우에만 채팅창으로 이동
     if (currentId && currentId !== prevId) {
       setPageIndex(1);
     }
-    prevEntityIdRef.current = currentId;
-  }, [selectedConversation?.entityId]);
+    prevConversationIdRef.current = currentId;
+  }, [selectedConversation?.conversationId]);
 
   const goToPage = useCallback((index: number) => {
     setPageIndex(index);

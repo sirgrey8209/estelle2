@@ -6,7 +6,7 @@
  *
  * 프로토콜:
  * - 요청: { "action": "lookup", "toolUseId": "toolu_xxx" }
- * - 응답: { "success": true, "pylonAddress": "...", "entityId": 123, "raw": {...} }
+ * - 응답: { "success": true, "conversationId": 123, "mcpHost": "127.0.0.1", "mcpPort": 9878, "raw": {...} }
  */
 
 import net from 'net';
@@ -39,11 +39,12 @@ export interface ToolUseRaw {
   input: Record<string, unknown>;
 }
 
-/** Lookup 성공 결과 */
+/** Lookup 성공 결과 (신규 형식: mcpHost, mcpPort 포함) */
 export interface LookupSuccessResult {
   success: true;
-  pylonAddress: string;
-  entityId: number;
+  conversationId: number;
+  mcpHost: string;
+  mcpPort: number;
   raw: ToolUseRaw;
 }
 
@@ -134,10 +135,10 @@ export class BeaconClient {
   // ============================================================================
 
   /**
-   * toolUseId로 PylonInfo 조회
+   * toolUseId로 ToolContext 조회
    *
    * @param toolUseId 조회할 도구 호출 ID
-   * @returns Lookup 결과 (성공 시 PylonInfo, 실패 시 에러)
+   * @returns Lookup 결과 (성공 시 conversationId, mcpHost, mcpPort, raw)
    * @throws 연결 실패, 타임아웃, 빈 toolUseId 등
    */
   async lookup(toolUseId: string): Promise<LookupResult> {

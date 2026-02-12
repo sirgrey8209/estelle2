@@ -38,7 +38,7 @@ export function NewConversationDialog({
   const handleCreate = () => {
     if (!name.trim()) return;
 
-    createConversation(workspaceId, name.trim());
+    createConversation(Number(workspaceId), name.trim());
     setName('');
     onClose();
   };

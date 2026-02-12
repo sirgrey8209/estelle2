@@ -11,7 +11,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         BEACON_PORT: '9875',
-        CLAUDE_CONFIG_DIR: 'C:\\Users\\LINEGAMES\\.claude-release'
+        CLAUDE_CONFIG_DIR: 'C:\\Users\\LINEGAMES\\.claude-release',
+        DEBUG_CLAUDE_AGENT_SDK: '1'
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: './logs/pm2-error.log',

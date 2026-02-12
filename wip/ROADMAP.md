@@ -151,12 +151,13 @@
 ### 테스트 현황
 
 ```
-✓ Core:    201 tests
-✓ Relay:   162 tests
-✓ Pylon:   508 tests
-✓ Client:  172 tests (vitest, jsdom)
+✓ Core:    601 tests
+✓ Relay:   165 tests
+✓ Pylon:   748 tests
+✓ Client:  335 tests (vitest, jsdom)
+✓ Beacon:   88 tests (1 skipped)
 ─────────────────────
-  Total: 1043 tests passing
+  Total: 1937 tests passing
 ```
 
 ---
@@ -180,6 +181,15 @@
 
 ## 작업 로그
 
+- [260213 02:00] MCP Beacon 마이그레이션 완료 (MCP 서버 Pylon→Beacon 이동, 동적 Pylon 라우팅, PylonRegistry/ToolContextMap 통합, 795개 테스트 통과)
+- [260212 15:00] wip 문서 정리 (완료 7건 → log 이동, id-system 통합으로 3건 삭제, 분석문서 doc 이동)
+- [260212 10:45] link_doc MCP 버그 3건 수정 (파일 존재확인, onChange 콜백, 절대경로 처리)
+- [260212 01:00] Relay ID 마이그레이션 완료 (DYNAMIC_DEVICE_ID_START=100 → ClientIndexAllocator 0~15, 레거시 완전 제거, 194개 테스트 통과)
+- [260212 05:30] ID 시스템 마이그레이션 Phase 5 완료 (전체 테스트 1937개 통과: Core 601 + Relay 165 + Client 335 + Beacon 88 + Pylon 748, PylonClient.initInstance 추가)
+- [260212 05:00] ID 시스템 마이그레이션 Phase 3 완료 (Relay deviceId→deviceIndex, 빈 번호 재활용, Core 601개 + Relay 165개 테스트 통과)
+- [260212 04:35] ID 시스템 마이그레이션 Phase 2 완료 (WorkspaceStore 24비트 ID 체계 적용, Core 598개 + Pylon 744개 테스트 통과)
+- [260212 00:14] ID 시스템 마이그레이션 Phase 1 완료 (id-system.ts 80개 테스트, 레거시 충돌 해결)
+- [260211 23:30] 24비트 ID 시스템 TDD 플랜 작성 (id-system-plan.md, id-system-tdd.md)
 - [260211 12:55] ClaudeBeacon + BeaconServer 통합 (BeaconServer 제거, lookup 액션 ClaudeBeacon에 통합, 포트 9877 제거 → 9875 단일 포트)
 - [260211 12:30] ClaudeBeaconAdapter 자동 재연결 로직 추가 (reconnect, reconnectInterval, maxReconnectAttempts 옵션, onReconnect/onReconnectFailed 콜백, 88개 테스트 통과)
 - [260211 21:00] send_file MCP 마이그레이션 (toolComplete 훅 → PylonClient 기반, PylonMcpServer send_file 액션, 22개 테스트 추가, 748개 전체 통과)
@@ -232,4 +242,4 @@
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-11*
+*갱신일: 2026-02-13*

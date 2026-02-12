@@ -75,8 +75,8 @@ describe('SyncOrchestrator', () => {
     expect(deps.requestWorkspaceList).toHaveBeenCalledTimes(3);
   });
 
-  // 5. selectedEntityId 전달 — synced 후 selectConversation 호출 + phase 'requesting'
-  it('should call selectConversation and set conversation phase when entityId provided', () => {
+  // 5. selectedConversationId 전달 — synced 후 selectConversation 호출 + phase 'requesting'
+  it('should call selectConversation and set conversation phase when conversationId provided', () => {
     orchestrator.startInitialSync();
     orchestrator.onWorkspaceListReceived(1001);
 
@@ -87,13 +87,46 @@ describe('SyncOrchestrator', () => {
     expect(convSync?.phase).toBe('requesting');
   });
 
-  // 6. push 방어 — workspaceSync가 'idle'일 때 onWorkspaceListReceived 무시
-  it('should ignore onWorkspaceListReceived when workspaceSync is not requesting', () => {
-    // idle 상태에서 호출 (startInitialSync 안 함)
-    orchestrator.onWorkspaceListReceived(null);
+  // 6. idle 상태에서도 동작 — full refresh 시 race condition 해결
+  it('should handle onWorkspaceListReceived when workspaceSync is idle (race condition)', () => {
+    // idle 상태에서 호출 (startInitialSync 안 함 - workspace_list_result가 auth_result보다 먼저 도착)
+    orchestrator.onWorkspaceListReceived(1001);
 
-    expect(useSyncStore.getState().workspaceSync).toBe('idle');
-    expect(deps.selectConversation).not.toHaveBeenCalled();
+    // idle → synced로 전환되어야 함
+    expect(useSyncStore.getState().workspaceSync).toBe('synced');
+    expect(deps.selectConversation).toHaveBeenCalledWith(1001);
+  });
+
+  // 6-2. push 방어 — workspaceSync가 'synced'일 때 onWorkspaceListReceived 무시
+  it('should ignore onWorkspaceListReceived when workspaceSync is already synced', () => {
+    orchestrator.startInitialSync();
+    orchestrator.onWorkspaceListReceived(1001);
+    expect(useSyncStore.getState().workspaceSync).toBe('synced');
+
+    // 이미 synced 상태에서 다시 호출 → 무시
+    orchestrator.onWorkspaceListReceived(2002);
+
+    // 첫 번째 호출의 대화만 선택되어야 함
+    expect(deps.selectConversation).toHaveBeenCalledTimes(1);
+    expect(deps.selectConversation).toHaveBeenCalledWith(1001);
+  });
+
+  // 6-3. failed 복구 — workspaceSync가 'failed'일 때 onWorkspaceListReceived로 synced 복구
+  it('should recover from failed state when workspace list received', () => {
+    orchestrator.startInitialSync();
+
+    // MAX_RETRIES 초과하여 failed 상태로
+    for (let i = 0; i < SyncOrchestrator.MAX_RETRIES; i++) {
+      vi.advanceTimersByTime(SyncOrchestrator.TIMEOUT_MS);
+    }
+    expect(useSyncStore.getState().workspaceSync).toBe('failed');
+
+    // Pylon이 늦게 연결되어 workspace_list_result 수신
+    orchestrator.onWorkspaceListReceived(1001);
+
+    // failed → synced로 복구되어야 함
+    expect(useSyncStore.getState().workspaceSync).toBe('synced');
+    expect(deps.selectConversation).toHaveBeenCalledWith(1001);
   });
 
   // 7. onHistoryReceived — conversation synced + 범위 업데이트

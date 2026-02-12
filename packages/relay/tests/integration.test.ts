@@ -302,7 +302,7 @@ describe('Relay L2 통합 테스트', () => {
   // ==========================================================================
 
   describe('3. App 인증', () => {
-    it('3.1 should_auto_assign_deviceId_when_mobile_connects_without_deviceId', async () => {
+    it('3.1 should_auto_assign_encoded_deviceId_when_mobile_connects_without_deviceId', async () => {
       // Arrange
       const client = createClient();
       await client.connect();
@@ -316,13 +316,14 @@ describe('Relay L2 통합 테스트', () => {
 
       const result = await client.waitForMessageType('auth_result') as any;
 
-      // Assert
+      // Assert - 인코딩된 deviceId (envId=0, type=app(1), index=0~15 → 16~31)
       expect(result.payload.success).toBe(true);
       expect(result.payload.device).toBeDefined();
-      expect(result.payload.device.deviceId).toBeGreaterThanOrEqual(100); // DYNAMIC_DEVICE_ID_START 이상
+      expect(result.payload.device.deviceId).toBeGreaterThanOrEqual(16);
+      expect(result.payload.device.deviceId).toBeLessThanOrEqual(31);
     });
 
-    it('3.2 should_auto_assign_deviceId_when_desktop_connects_without_deviceId', async () => {
+    it('3.2 should_auto_assign_encoded_deviceId_when_desktop_connects_without_deviceId', async () => {
       // Arrange
       const client = createClient();
       await client.connect();
@@ -336,10 +337,11 @@ describe('Relay L2 통합 테스트', () => {
 
       const result = await client.waitForMessageType('auth_result') as any;
 
-      // Assert
+      // Assert - 인코딩된 deviceId (envId=0, type=app(1), index=0~15 → 16~31)
       expect(result.payload.success).toBe(true);
       expect(result.payload.device).toBeDefined();
-      expect(result.payload.device.deviceId).toBeGreaterThanOrEqual(100); // DYNAMIC_DEVICE_ID_START 이상
+      expect(result.payload.device.deviceId).toBeGreaterThanOrEqual(16);
+      expect(result.payload.device.deviceId).toBeLessThanOrEqual(31);
     });
 
     it('3.3 should_assign_incremented_deviceId_for_second_app', async () => {
@@ -643,11 +645,11 @@ describe('Relay L2 통합 테스트', () => {
       pylon.clearMessages();
       app.clearMessages();
 
-      // Act - Pylon이 특정 deviceId로 메시지 전송
+      // Act - Pylon이 특정 deviceId로 메시지 전송 (to는 숫자 배열)
       pylon.send({
         type: 'custom_message',
         payload: { data: 'hello' },
-        to: { deviceId: appDeviceId },
+        to: [appDeviceId],
       });
 
       // Assert - App이 메시지 수신
@@ -720,10 +722,11 @@ describe('Relay L2 통합 테스트', () => {
       pylon.clearMessages();
       app.clearMessages();
 
-      // Act - Pylon이 메시지 전송 (기본 라우팅 - app들에게)
+      // Act - Pylon이 메시지 전송 (명시적 broadcast 필요 - 기본 라우팅 없음)
       pylon.send({
         type: 'test_message',
         payload: { data: 'test' },
+        broadcast: 'clients',  // app들에게 브로드캐스트
       });
 
       // Assert - App이 수신한 메시지에 from 정보가 주입됨
@@ -772,20 +775,24 @@ describe('Relay L2 통합 테스트', () => {
       expect(disconnect.payload.deviceType).toBeDefined();
     });
 
-    it('8.2 should_reset_nextClientId_when_all_apps_disconnect', async () => {
+    it('8.2 should_reuse_released_deviceId_when_all_apps_disconnect', async () => {
+      // 인코딩된 deviceId 계산: (envId << 5) | (deviceType << 4) | deviceIndex
+      // envId=0, deviceType=app(1), deviceIndex=0 → 16
+      const encodeAppDeviceId = (deviceIndex: number) => (0 << 5) | (1 << 4) | deviceIndex;
+
       // Arrange - App 연결 및 인증
       const app1 = createClient();
       await app1.connect();
       await app1.waitForMessage();
       app1.send({ type: 'auth', payload: { deviceType: 'mobile' } });
       const auth1 = await app1.waitForMessageType('auth_result') as any;
-      expect(auth1.payload.device.deviceId).toBe(100);
+      expect(auth1.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
 
-      // Act - App 연결 종료 (모든 app 해제)
+      // Act - App 연결 종료 (모든 app 해제, allocator가 0번 해제)
       app1.close();
       clients = clients.filter((c) => c !== app1);
 
-      // 잠시 대기 (서버가 상태 리셋할 시간)
+      // 잠시 대기 (서버가 상태 처리할 시간)
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Arrange - 새 App 연결 및 인증
@@ -795,8 +802,137 @@ describe('Relay L2 통합 테스트', () => {
       app2.send({ type: 'auth', payload: { deviceType: 'desktop' } });
       const auth2 = await app2.waitForMessageType('auth_result') as any;
 
-      // Assert - nextClientId가 100으로 리셋되었으므로 새 App도 100번 할당
-      expect(auth2.payload.device.deviceId).toBe(100);
+      // Assert - allocator가 해제된 인덱스 0번을 재사용 → 인코딩된 16
+      expect(auth2.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
+    });
+  });
+
+  // ==========================================================================
+  // 9. [새 체계] ClientIndexAllocator 기반 deviceId 할당
+  // ==========================================================================
+
+  describe('9. [새 체계] ClientIndexAllocator 기반 deviceId 할당', () => {
+    // 인코딩된 deviceId 계산 헬퍼
+    // deviceId = (envId << 5) | (deviceType << 4) | deviceIndex
+    // envId=0 (release, 테스트 기본값), deviceType: pylon=0, app=1
+    const encodeAppDeviceId = (deviceIndex: number) => (0 << 5) | (1 << 4) | deviceIndex;
+
+    it('9.1 should_assign_encoded_deviceId_when_app_connects', async () => {
+      // Arrange
+      const client = createClient();
+      await client.connect();
+      await client.waitForMessage(); // connected 소비
+
+      // Act
+      client.send({
+        type: 'auth',
+        payload: { deviceType: 'mobile' },
+      });
+      const result = await client.waitForMessageType('auth_result') as any;
+
+      // Assert — 새 체계: deviceId가 인코딩된 값 (16~31 범위: envId=0, type=app)
+      expect(result.payload.success).toBe(true);
+      expect(result.payload.device.deviceId).toBeGreaterThanOrEqual(16);
+      expect(result.payload.device.deviceId).toBeLessThanOrEqual(31);
+    });
+
+    it('9.2 should_assign_encoded_deviceId_16_as_first_when_no_apps_connected', async () => {
+      // Arrange
+      const client = createClient();
+      await client.connect();
+      await client.waitForMessage(); // connected 소비
+
+      // Act
+      client.send({
+        type: 'auth',
+        payload: { deviceType: 'desktop' },
+      });
+      const result = await client.waitForMessageType('auth_result') as any;
+
+      // Assert — 새 체계: 첫 번째 앱은 인코딩된 deviceId 16 (envId=0, type=1, index=0)
+      expect(result.payload.success).toBe(true);
+      expect(result.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
+    });
+
+    it('9.3 should_assign_sequential_encoded_deviceIds', async () => {
+      // Arrange
+      const client1 = createClient();
+      const client2 = createClient();
+      const client3 = createClient();
+
+      await client1.connect();
+      await client1.waitForMessage();
+      await client2.connect();
+      await client2.waitForMessage();
+      await client3.connect();
+      await client3.waitForMessage();
+
+      // Act - 세 앱 순차 인증
+      client1.send({ type: 'auth', payload: { deviceType: 'mobile' } });
+      const r1 = await client1.waitForMessageType('auth_result') as any;
+
+      client2.send({ type: 'auth', payload: { deviceType: 'desktop' } });
+      const r2 = await client2.waitForMessageType('auth_result') as any;
+
+      client3.send({ type: 'auth', payload: { deviceType: 'mobile' } });
+      const r3 = await client3.waitForMessageType('auth_result') as any;
+
+      // Assert — 새 체계: 인코딩된 16, 17, 18 순차 할당
+      expect(r1.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
+      expect(r2.payload.device.deviceId).toBe(encodeAppDeviceId(1)); // = 17
+      expect(r3.payload.device.deviceId).toBe(encodeAppDeviceId(2)); // = 18
+    });
+
+    it('9.4 should_reuse_released_deviceId_when_app_reconnects', async () => {
+      // Arrange - 두 앱 연결
+      const app1 = createClient();
+      const app2 = createClient();
+
+      await app1.connect();
+      await app1.waitForMessage();
+      await app2.connect();
+      await app2.waitForMessage();
+
+      app1.send({ type: 'auth', payload: { deviceType: 'mobile' } });
+      const r1 = await app1.waitForMessageType('auth_result') as any;
+      expect(r1.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
+
+      app2.send({ type: 'auth', payload: { deviceType: 'desktop' } });
+      const r2 = await app2.waitForMessageType('auth_result') as any;
+      expect(r2.payload.device.deviceId).toBe(encodeAppDeviceId(1)); // = 17
+
+      // Act - app1 연결 종료 (deviceIndex 0 해제)
+      app1.close();
+      clients = clients.filter(c => c !== app1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // 새 앱 연결
+      const app3 = createClient();
+      await app3.connect();
+      await app3.waitForMessage();
+      app3.send({ type: 'auth', payload: { deviceType: 'mobile' } });
+      const r3 = await app3.waitForMessageType('auth_result') as any;
+
+      // Assert — 새 체계: 해제된 인덱스 0번을 재사용 → 인코딩된 16
+      expect(r3.payload.device.deviceId).toBe(encodeAppDeviceId(0)); // = 16
+    });
+
+    it('9.5 should_show_client_role_for_dynamically_assigned_device', async () => {
+      // Arrange
+      const client = createClient();
+      await client.connect();
+      await client.waitForMessage();
+
+      // Act
+      client.send({
+        type: 'auth',
+        payload: { deviceType: 'mobile' },
+      });
+      const result = await client.waitForMessageType('auth_result') as any;
+
+      // Assert — 새 체계: 동적 할당된 앱도 client role을 가져야 함
+      expect(result.payload.success).toBe(true);
+      expect(result.payload.device.role).toBe('client');
     });
   });
 });

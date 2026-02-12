@@ -8,13 +8,14 @@
  * - ClaudeAdapter: SDK 어댑터 (주입 가능)
  *
  * 통신 프로토콜:
- * - Pylon → Beacon (register): { "action": "register", "pylonAddress": "...", "env": "dev" }
- * - Pylon → Beacon (query): { "action": "query", "entityId": 2049, "options": { ... } }
- * - Beacon → Pylon (event): { "type": "event", "entityId": 2049, "message": { ... } }
+ * - Pylon → Beacon (register): { "action": "register", "pylonId": 65, "mcpHost": "127.0.0.1", "mcpPort": 9878, "env": "dev" }
+ * - Pylon → Beacon (query): { "action": "query", "conversationId": 2049, "options": { ... } }
+ * - Beacon → Pylon (event): { "type": "event", "conversationId": 2049, "message": { ... } }
  */
 
 import { createServer, type Server, type Socket } from 'net';
-import { ToolContextMap, type PylonInfo, type ToolUseRaw } from './tool-context-map.js';
+import { ToolContextMap, type ToolContext, type ToolUseRaw } from './tool-context-map.js';
+import { PylonRegistry, extractPylonId, getEnvName } from './pylon-registry.js';
 
 // ============================================================================
 // 상수
@@ -28,19 +29,11 @@ const DEFAULT_PORT = 9877;
 // ============================================================================
 
 /**
- * Pylon 등록 정보 (연결 상태와 무관하게 유지)
- */
-interface PylonRegistration {
-  pylonAddress: string;
-  env: string;
-}
-
-/**
  * 활성 연결 정보
  */
 interface ActiveConnection {
   socket: Socket;
-  pylonAddress: string;
+  pylonId: number;
 }
 
 /**
@@ -80,6 +73,9 @@ export interface ClaudeBeaconOptions {
 
   /** ToolContextMap (외부 주입 가능) */
   toolContextMap?: ToolContextMap;
+
+  /** PylonRegistry (외부 주입 가능) */
+  pylonRegistry?: PylonRegistry;
 }
 
 /**
@@ -87,10 +83,14 @@ export interface ClaudeBeaconOptions {
  */
 interface RequestMessage {
   action: string;
-  pylonAddress?: string;
+  // register 전용 필드
+  pylonId?: number;
+  mcpHost?: string;
+  mcpPort?: number;
   env?: string;
   force?: boolean;
-  entityId?: number;
+  // query 전용 필드
+  conversationId?: number;
   options?: Record<string, unknown>;
   // permission_response 전용 필드
   toolUseId?: string;
@@ -128,14 +128,14 @@ export class ClaudeBeacon {
   /** ToolContextMap */
   private readonly _toolContextMap: ToolContextMap;
 
+  /** PylonRegistry */
+  private readonly _pylonRegistry: PylonRegistry;
+
   /** TCP 서버 */
   private _server: Server | null = null;
 
   /** 실행 상태 */
   private _running: boolean = false;
-
-  /** 등록된 Pylon 정보 (pylonAddress -> PylonRegistration) */
-  private readonly _pylons: Map<string, PylonRegistration> = new Map();
 
   /** 활성 연결 (소켓 -> ActiveConnection) */
   private readonly _activeConnections: Map<Socket, ActiveConnection> = new Map();
@@ -160,6 +160,7 @@ export class ClaudeBeacon {
     this._adapter = options.adapter;
     this._port = options.port ?? DEFAULT_PORT;
     this._toolContextMap = options.toolContextMap ?? new ToolContextMap();
+    this._pylonRegistry = options.pylonRegistry ?? new PylonRegistry();
   }
 
   // ============================================================================
@@ -174,6 +175,11 @@ export class ClaudeBeacon {
   /** ToolContextMap */
   get toolContextMap(): ToolContextMap {
     return this._toolContextMap;
+  }
+
+  /** PylonRegistry */
+  get pylonRegistry(): PylonRegistry {
+    return this._pylonRegistry;
   }
 
   /** 실행 상태 */
@@ -221,7 +227,7 @@ export class ClaudeBeacon {
         socket.destroy();
       }
       this._activeConnections.clear();
-      this._pylons.clear();
+      this._pylonRegistry.clear();
 
       this._server!.close(() => {
         this._running = false;
@@ -238,15 +244,13 @@ export class ClaudeBeacon {
   /**
    * 등록된 Pylon 목록
    */
-  getPylons(): Array<{ pylonAddress: string; env: string }> {
-    const result: Array<{ pylonAddress: string; env: string }> = [];
-    for (const [, pylon] of this._pylons) {
-      result.push({
-        pylonAddress: pylon.pylonAddress,
-        env: pylon.env,
-      });
-    }
-    return result;
+  getPylons(): Array<{ pylonId: number; mcpHost: string; mcpPort: number; env: string }> {
+    return this._pylonRegistry.getAll().map((conn) => ({
+      pylonId: conn.pylonId,
+      mcpHost: conn.mcpHost,
+      mcpPort: conn.mcpPort,
+      env: getEnvName(conn.pylonId),
+    }));
   }
 
   /**
@@ -339,6 +343,10 @@ export class ClaudeBeacon {
         this._handleLookup(socket, request);
         break;
 
+      case 'ping':
+        this._handlePing(socket);
+        break;
+
       default:
         this._sendResponse(socket, {
           success: false,
@@ -353,27 +361,32 @@ export class ClaudeBeacon {
 
   /**
    * register 처리
+   *
+   * 요청 필드:
+   * - pylonId: Pylon ID (envId << 5 | 0 << 4 | deviceIndex)
+   * - mcpHost: MCP 서버 호스트
+   * - mcpPort: MCP 서버 포트
+   * - env: 환경 (dev/stage/release)
+   * - force: 강제 등록 여부
    */
   private _handleRegister(socket: Socket, request: RequestMessage): void {
-    const { pylonAddress, env, force } = request;
+    const { pylonId, mcpHost, mcpPort, env, force } = request;
 
-    if (!pylonAddress || !env) {
+    if (pylonId === undefined || !mcpHost || !mcpPort || !env) {
       this._sendResponse(socket, {
         success: false,
-        error: 'Missing pylonAddress or env',
+        error: 'Missing pylonId, mcpHost, mcpPort, or env',
       });
       return;
     }
 
-    // pylonAddress는 이미 envId:deviceId 형태로 고유함 (예: "2:1", "1:1")
-
     // 이미 등록된 경우
-    if (this._pylons.has(pylonAddress)) {
+    if (this._pylonRegistry.has(pylonId)) {
       if (force) {
-        // 강제 업데이트 - 등록 정보 갱신
-        this._pylons.set(pylonAddress, { pylonAddress, env });
+        // 강제 업데이트 - PylonRegistry 갱신
+        this._pylonRegistry.set(pylonId, { pylonId, mcpHost, mcpPort });
         // 활성 연결도 갱신
-        this._activeConnections.set(socket, { socket, pylonAddress });
+        this._activeConnections.set(socket, { socket, pylonId });
         this._sendResponse(socket, { success: true });
       } else {
         this._sendResponse(socket, {
@@ -384,12 +397,12 @@ export class ClaudeBeacon {
       return;
     }
 
-    // 새 등록
-    this._pylons.set(pylonAddress, { pylonAddress, env });
+    // 새 등록 - PylonRegistry에 저장
+    this._pylonRegistry.set(pylonId, { pylonId, mcpHost, mcpPort });
     // 활성 연결 추가
-    this._activeConnections.set(socket, { socket, pylonAddress });
+    this._activeConnections.set(socket, { socket, pylonId });
 
-    console.log(`[Beacon] Registered: ${pylonAddress} (${env})`);
+    console.log(`[Beacon] Registered: pylonId=${pylonId}, mcpHost=${mcpHost}, mcpPort=${mcpPort}, env=${env}`);
     this._sendResponse(socket, { success: true });
   }
 
@@ -397,19 +410,17 @@ export class ClaudeBeacon {
    * unregister 처리
    */
   private _handleUnregister(socket: Socket, request: RequestMessage): void {
-    const { pylonAddress } = request;
+    const { pylonId } = request;
 
-    if (!pylonAddress) {
+    if (pylonId === undefined) {
       this._sendResponse(socket, {
         success: false,
-        error: 'Missing pylonAddress',
+        error: 'Missing pylonId',
       });
       return;
     }
 
-    // pylonAddress는 이미 envId:deviceId 형태로 고유함
-
-    if (!this._pylons.has(pylonAddress)) {
+    if (!this._pylonRegistry.has(pylonId)) {
       this._sendResponse(socket, {
         success: false,
         error: 'Pylon not found',
@@ -417,12 +428,12 @@ export class ClaudeBeacon {
       return;
     }
 
-    // 등록 정보 삭제
-    this._pylons.delete(pylonAddress);
+    // PylonRegistry에서 삭제
+    this._pylonRegistry.delete(pylonId);
     // 활성 연결에서도 삭제
     this._activeConnections.delete(socket);
 
-    console.log(`[Beacon] Unregistered: ${pylonAddress}`);
+    console.log(`[Beacon] Unregistered: pylonId=${pylonId}`);
     this._sendResponse(socket, { success: true });
   }
 
@@ -433,13 +444,13 @@ export class ClaudeBeacon {
     socket: Socket,
     request: RequestMessage
   ): Promise<void> {
-    const { entityId, options } = request;
+    const { conversationId, options } = request;
 
-    // entityId 검증
-    if (entityId === undefined || entityId === null) {
+    // conversationId 검증
+    if (conversationId === undefined || conversationId === null) {
       this._sendResponse(socket, {
         success: false,
-        error: 'Missing required field: entityId',
+        error: 'Missing required field: conversationId',
       });
       return;
     }
@@ -449,10 +460,10 @@ export class ClaudeBeacon {
 
     // 활성 연결이 없으면, 등록된 Pylon 중 첫 번째를 사용
     // (테스트에서 sendMessage가 매번 새 연결을 만드는 패턴 지원)
-    if (!connection && this._pylons.size > 0) {
-      const firstPylon = this._pylons.values().next().value;
+    if (!connection && this._pylonRegistry.size > 0) {
+      const firstPylon = this._pylonRegistry.getAll()[0];
       if (firstPylon) {
-        connection = { socket, pylonAddress: firstPylon.pylonAddress };
+        connection = { socket, pylonId: firstPylon.pylonId };
         this._activeConnections.set(socket, connection);
       }
     }
@@ -464,8 +475,6 @@ export class ClaudeBeacon {
       });
       return;
     }
-
-    const pylonAddress = connection.pylonAddress;
 
     try {
       // canUseTool 콜백 생성 - Pylon에 권한 요청을 보내고 응답을 기다림
@@ -487,7 +496,7 @@ export class ClaudeBeacon {
           socket.write(
             JSON.stringify({
               type: 'permission_request',
-              entityId,
+              conversationId,
               toolName,
               input,
               toolUseId,
@@ -498,22 +507,43 @@ export class ClaudeBeacon {
 
       // SDK 어댑터에 쿼리 전달 (canUseTool 콜백 포함)
       const queryOptions = { ...options, canUseTool };
+      const opts = options as Record<string, unknown>;
+      console.log(`[Beacon] SDK query options:`, JSON.stringify({
+        cwd: opts.cwd,
+        env: opts.env,
+        settingSources: opts.settingSources,
+        resume: opts.resume ? '(set)' : '(none)',
+        CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+      }));
       const query = this._adapter.query(queryOptions);
 
       for await (const message of query) {
         // content_block_start 시 ToolContextMap에 등록
-        this._registerToolUse(message, pylonAddress, entityId);
+        this._registerToolUse(message, conversationId);
 
         // 이벤트 전송
-        this._sendEvent(socket, entityId, message);
+        this._sendEvent(socket, conversationId, message);
       }
     } catch (err) {
-      // 에러 이벤트 전송
+      // 에러 로깅 (상세)
       const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(`[Beacon] Query error (conversationId=${conversationId}): ${errorMessage}`);
+      if (err instanceof Error && err.stack) {
+        console.error(`[Beacon] Stack: ${err.stack}`);
+      }
+      // err 객체의 추가 속성 출력
+      const extras = Object.getOwnPropertyNames(err || {}).filter(k => k !== 'message' && k !== 'stack');
+      if (extras.length > 0) {
+        const obj: Record<string, unknown> = {};
+        for (const k of extras) { obj[k] = (err as Record<string, unknown>)[k]; }
+        console.error(`[Beacon] Error details:`, JSON.stringify(obj));
+      }
+
+      // 에러 이벤트 전송
       socket.write(
         JSON.stringify({
           type: 'error',
-          entityId,
+          conversationId,
           error: errorMessage,
         }) + '\n'
       );
@@ -525,8 +555,7 @@ export class ClaudeBeacon {
    */
   private _registerToolUse(
     message: ClaudeMessage,
-    pylonAddress: string,
-    entityId: number
+    conversationId: number
   ): void {
     if (message.type !== 'stream_event' || !message.event) {
       return;
@@ -550,15 +579,14 @@ export class ClaudeBeacon {
       input: block.input || {},
     };
 
-    const info: PylonInfo = {
-      pylonAddress,
-      entityId,
+    const context: ToolContext = {
+      conversationId,
       raw,
     };
 
-    this._toolContextMap.set(block.id, info);
+    this._toolContextMap.set(block.id, context);
     // 로깅: tool_use 등록
-    console.log(`[Beacon] ToolContextMap.set: toolUseId=${block.id}, entityId=${entityId}, name=${block.name}, mapSize=${this._toolContextMap.size}`);
+    console.log(`[Beacon] ToolContextMap.set: toolUseId=${block.id}, conversationId=${conversationId}, name=${block.name}, mapSize=${this._toolContextMap.size}`);
   }
 
   /**
@@ -598,7 +626,19 @@ export class ClaudeBeacon {
   }
 
   /**
+   * ping 처리 - pong 응답
+   */
+  private _handlePing(socket: Socket): void {
+    socket.write(JSON.stringify({ type: 'pong' }) + '\n');
+  }
+
+  /**
    * lookup 처리 - ToolContextMap에서 toolUseId로 Pylon 정보 조회
+   *
+   * 응답:
+   * - conversationId: 대화 ID
+   * - mcpHost, mcpPort: PylonRegistry에서 조회한 MCP 서버 정보
+   * - raw: 도구 호출 원본 데이터
    */
   private _handleLookup(socket: Socket, request: RequestMessage): void {
     const { toolUseId } = request;
@@ -615,8 +655,8 @@ export class ClaudeBeacon {
       return;
     }
 
-    const info = this._toolContextMap.get(toolUseId);
-    if (!info) {
+    const context = this._toolContextMap.get(toolUseId);
+    if (!context) {
       console.log(`[Beacon] lookup FAIL: toolUseId not found in map`);
       this._sendResponse(socket, {
         success: false,
@@ -625,12 +665,26 @@ export class ClaudeBeacon {
       return;
     }
 
-    console.log(`[Beacon] lookup OK: entityId=${info.entityId}, pylonAddress=${info.pylonAddress}`);
+    // conversationId에서 pylonId 추출하여 PylonRegistry에서 연결 정보 조회
+    const pylonId = extractPylonId(context.conversationId);
+    const connection = this._pylonRegistry.get(pylonId);
+
+    if (!connection) {
+      console.log(`[Beacon] lookup FAIL: pylonId=${pylonId} not found in registry`);
+      this._sendResponse(socket, {
+        success: false,
+        error: `Pylon not registered: pylonId=${pylonId}`,
+      });
+      return;
+    }
+
+    console.log(`[Beacon] lookup OK: conversationId=${context.conversationId}, pylonId=${pylonId}, mcpHost=${connection.mcpHost}, mcpPort=${connection.mcpPort}`);
     socket.write(JSON.stringify({
       success: true,
-      pylonAddress: info.pylonAddress,
-      entityId: info.entityId,
-      raw: info.raw,
+      conversationId: context.conversationId,
+      mcpHost: connection.mcpHost,
+      mcpPort: connection.mcpPort,
+      raw: context.raw,
     }) + '\n');
   }
 
@@ -650,13 +704,13 @@ export class ClaudeBeacon {
    */
   private _sendEvent(
     socket: Socket,
-    entityId: number,
+    conversationId: number,
     message: ClaudeMessage
   ): void {
     socket.write(
       JSON.stringify({
         type: 'event',
-        entityId,
+        conversationId,
         message,
       }) + '\n'
     );

@@ -94,65 +94,94 @@ function New-EcosystemConfig {
         [Parameter(Mandatory)]
         [object]$PylonConfig,
         [object]$BeaconConfig,
-        [int]$EnvId = 0
+        [int]$EnvId = 0,
+        [string]$DataDir = ""
     )
 
     $pm2Name = $PylonConfig.pm2Name
-    $relayUrl = $PylonConfig.relayUrl
-    $deviceId = $PylonConfig.deviceId
-    $mcpPort = $PylonConfig.mcpPort
 
-    # configDir: ~ 경로 확장 + JS 이스케이프
+    # configDir: ~ 경로 확장
     $configDir = Expand-TildePath $PylonConfig.configDir
-    $configDir = ConvertTo-JsString $configDir
 
-    # credentialsBackupDir: ~ 경로 확장 + JS 이스케이프
+    # credentialsBackupDir: ~ 경로 확장
     $credentialsBackupDir = Expand-TildePath $PylonConfig.credentialsBackupDir
-    $credentialsBackupDir = ConvertTo-JsString $credentialsBackupDir
 
-    # Beacon 설정
-    $beaconEnabled = if ($BeaconConfig -and $BeaconConfig.enabled) { 'true' } else { 'false' }
-    $beaconHost = if ($BeaconConfig) { $BeaconConfig.host } else { '127.0.0.1' }
-    $beaconPort = if ($BeaconConfig) { $BeaconConfig.port } else { 9875 }
-    $beaconEnv = if ($BeaconConfig) { $BeaconConfig.env } else { 'release' }
+    # dataDir: 절대 경로로 변환 (상대 경로인 경우 현재 디렉토리 기준)
+    $dataDirResolved = if ($DataDir) {
+        if ([System.IO.Path]::IsPathRooted($DataDir)) { $DataDir }
+        else { Join-Path (Get-Location) $DataDir }
+    } else { "" }
 
-    return @"
-module.exports = {
-  apps: [
-    {
-      name: '$pm2Name',
-      script: 'dist/bin.js',
-      cwd: __dirname,
-      watch: false,
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 5000,
-      env: {
-        NODE_ENV: 'production',
-        ESTELLE_ENV_CONFIG: '',
-        RELAY_URL: '$relayUrl',
-        DEVICE_ID: '$deviceId',
-        CLAUDE_CONFIG_DIR: '$configDir',
-        CREDENTIALS_BACKUP_DIR: '$credentialsBackupDir',
-        ESTELLE_MCP_PORT: '$mcpPort',
-        ENV_ID: '$EnvId',
-        BEACON_ENABLED: '$beaconEnabled',
-        BEACON_HOST: '$beaconHost',
-        BEACON_PORT: '$beaconPort',
-        BEACON_ENV: '$beaconEnv'
-      },
-      log_date_format: 'YYYY-MM-DD HH:mm:ss',
-      error_file: './logs/pm2-error.log',
-      out_file: './logs/pm2-out.log',
-      merge_logs: true
+    # ESTELLE_ENV_CONFIG JSON 구성
+    $envConfigObj = @{
+        envId = $EnvId
+        pylon = @{
+            deviceId = $PylonConfig.deviceId
+            relayUrl = $PylonConfig.relayUrl
+            configDir = $configDir
+            credentialsBackupDir = $credentialsBackupDir
+            dataDir = $dataDirResolved
+            mcpPort = $PylonConfig.mcpPort
+        }
     }
-  ]
-};
-"@
+
+    # Beacon 설정 추가
+    if ($BeaconConfig) {
+        $envConfigObj.beacon = @{
+            enabled = [bool]$BeaconConfig.enabled
+            host = if ($BeaconConfig.host) { $BeaconConfig.host } else { "127.0.0.1" }
+            port = if ($BeaconConfig.port) { $BeaconConfig.port } else { 9875 }
+            env = if ($BeaconConfig.env) { $BeaconConfig.env } else { "release" }
+            reconnect = if ($null -ne $BeaconConfig.reconnect) { [bool]$BeaconConfig.reconnect } else { $true }
+            reconnectInterval = if ($BeaconConfig.reconnectInterval) { $BeaconConfig.reconnectInterval } else { 3000 }
+        }
+    }
+
+    # JSON 문자열 생성
+    # ConvertTo-Json은 이미 백슬래시를 \\ 로 이스케이프함
+    # NOTE: 파이프라인 대신 직접 호출 방식 사용 (버퍼링 이슈 방지)
+    $envConfigJson = ConvertTo-Json -InputObject $envConfigObj -Depth 10 -Compress
+
+    # JavaScript 문자열 안에 넣기 위해 이스케이프
+    # 순서 중요: 백슬래시 먼저, 따옴표 나중에
+    # 1. \\ → \\\\ (JS 문자열에서 \\ 유지를 위해)
+    # 2. " → \" (JS 문자열 종료 방지)
+    # NOTE: PowerShell -replace 체이닝 이슈로 별도 라인 처리
+    $envConfigJsonEscaped = $envConfigJson.Replace('\', '\\').Replace('"', '\"')
+
+    # 문자열 연결 방식 (큰따옴표 사용으로 변수 확장)
+    $content = "module.exports = {`n"
+    $content += "  apps: [`n"
+    $content += "    {`n"
+    $content += "      name: `"$pm2Name`",`n"
+    $content += "      script: `"dist/bin.js`",`n"
+    $content += "      cwd: __dirname,`n"
+    $content += "      watch: false,`n"
+    $content += "      autorestart: true,`n"
+    $content += "      max_restarts: 10,`n"
+    $content += "      restart_delay: 5000,`n"
+    $content += "      env: {`n"
+    $content += "        NODE_ENV: `"production`",`n"
+    $content += "        ESTELLE_ENV_CONFIG: `"$($envConfigJsonEscaped)`"`n"
+    $content += "      },`n"
+    $content += "      log_date_format: `"YYYY-MM-DD HH:mm:ss`",`n"
+    $content += "      error_file: `"./logs/pm2-error.log`",`n"
+    $content += "      out_file: `"./logs/pm2-out.log`",`n"
+    $content += "      merge_logs: true`n"
+    $content += "    }`n"
+    $content += "  ]`n"
+    $content += "};"
+
+    return $content
 }
 
 function New-Dockerfile {
-    return @'
+    param(
+        [Parameter(Mandatory)]
+        [int]$EnvId
+    )
+
+    return @"
 FROM node:20-alpine
 
 WORKDIR /app
@@ -174,10 +203,11 @@ WORKDIR /app/relay
 RUN npm install --omit=dev
 
 ENV STATIC_DIR=/app/relay/public
+ENV ENV_ID=$EnvId
 EXPOSE 8080
 
 CMD ["node", "dist/bin.js"]
-'@
+"@
 }
 
 function New-FlyToml {
@@ -287,9 +317,9 @@ function Start-PylonPM2 {
     }
     try { pm2 save 2>&1 | Out-Null } catch { }
 
-    # PM2에 주입된 env 출력
+    # PM2에 주입된 ESTELLE_ENV_CONFIG 출력
     Write-Detail "PM2 env for $PM2Name`:"
-    $envOutput = node -e "const cp=require('child_process');const j=JSON.parse(cp.execSync('pm2 jlist',{encoding:'utf8'}));const p=j.find(x=>x.name==='$PM2Name');if(p){const e=p.pm2_env?.env||{};['NODE_ENV','RELAY_URL','DEVICE_ID','CLAUDE_CONFIG_DIR','ESTELLE_MCP_PORT'].forEach(k=>{if(e[k])console.log(k+'='+e[k])})}" 2>$null
+    $envOutput = node -e "const cp=require('child_process');const j=JSON.parse(cp.execSync('pm2 jlist',{encoding:'utf8'}));const p=j.find(x=>x.name==='$PM2Name');if(p){const e=p.pm2_env?.env||{};if(e.ESTELLE_ENV_CONFIG){try{const c=JSON.parse(e.ESTELLE_ENV_CONFIG);console.log('envId='+c.envId);console.log('relayUrl='+c.pylon?.relayUrl);console.log('configDir='+c.pylon?.configDir);console.log('dataDir='+c.pylon?.dataDir);console.log('mcpPort='+c.pylon?.mcpPort);if(c.beacon)console.log('beacon='+c.beacon.host+':'+c.beacon.port+' ('+c.beacon.env+')');}catch(e){console.log('ESTELLE_ENV_CONFIG: (parse error)');}}else{console.log('ESTELLE_ENV_CONFIG: (not set)');}}" 2>$null
     if ($envOutput) {
         $envOutput -split "`n" | ForEach-Object { Write-Detail "  $_" }
     }

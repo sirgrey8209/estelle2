@@ -106,7 +106,9 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
       resume: options.resume,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
-      env: options.env,
+      // DEPRECATED: Beacon 사용 시 env는 Beacon이 관리
+      // 직접 SDK 사용 시에만 필요하지만, 현재는 Beacon을 통해 호출됨
+      // env: options.env,
     };
 
     // SDK query 호출

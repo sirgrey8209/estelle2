@@ -1,12 +1,13 @@
 /**
  * @file tool-context-map.ts
- * @description ClaudeBeacon ToolContextMap - toolUseId -> PylonInfo 매핑 관리
+ * @description ClaudeBeacon ToolContextMap - toolUseId -> ToolContext 매핑 관리
  *
- * Pylon의 ToolContextMap과 달리, Beacon의 ToolContextMap은
- * toolUseId -> { pylonAddress, entityId, raw } 매핑을 관리한다.
+ * toolUseId -> { conversationId, raw } 매핑을 관리한다.
+ * pylonId는 conversationId에서 비트 추출로 획득 (conversationId >> 17).
+ * mcpHost/mcpPort는 PylonRegistry에서 조회.
  *
- * MCP에서 toolUseId로 조회하면 해당 도구 호출이 어느 Pylon의
- * 어느 대화에서 발생했는지 알 수 있다.
+ * MCP에서 toolUseId로 조회하면 해당 도구 호출이 어느 대화에서
+ * 발생했는지 알 수 있다.
  */
 
 // ============================================================================
@@ -31,19 +32,24 @@ export interface ToolUseRaw {
 }
 
 /**
- * Pylon 정보
+ * 도구 컨텍스트 정보
+ * pylonId는 conversationId >> 17로 추출
  */
-export interface PylonInfo {
-  pylonAddress: string;
-  entityId: number;
+export interface ToolContext {
+  conversationId: number;
   raw: ToolUseRaw;
 }
+
+/**
+ * @deprecated PylonInfo는 ToolContext로 대체됨. 하위 호환성을 위해 유지.
+ */
+export type PylonInfo = ToolContext & { pylonAddress?: string };
 
 /**
  * 내부 저장용 엔트리
  */
 interface ContextEntry {
-  info: PylonInfo;
+  context: ToolContext;
   createdAt: number;
 }
 
@@ -52,7 +58,7 @@ interface ContextEntry {
 // ============================================================================
 
 /**
- * ToolContextMap - toolUseId -> PylonInfo 매핑을 관리하는 클래스
+ * ToolContextMap - toolUseId -> ToolContext 매핑을 관리하는 클래스
  *
  * Beacon에서 여러 Pylon의 도구 호출을 추적하고,
  * MCP에서 toolUseId로 해당 도구 호출의 출처를 조회할 수 있다.
@@ -78,37 +84,37 @@ export class ToolContextMap {
   // ============================================================================
 
   /**
-   * toolUseId -> PylonInfo 저장
+   * toolUseId -> ToolContext 저장
    *
    * @param toolUseId Claude 도구 사용 ID
-   * @param info Pylon 정보
+   * @param context 도구 컨텍스트 정보
    */
-  set(toolUseId: string, info: PylonInfo): void {
+  set(toolUseId: string, context: ToolContext): void {
     // 빈 문자열은 저장하지 않음
     if (toolUseId === '') {
       return;
     }
 
     this._map.set(toolUseId, {
-      info,
+      context,
       createdAt: Date.now(),
     });
   }
 
   /**
-   * toolUseId로 PylonInfo 조회
+   * toolUseId로 ToolContext 조회
    *
    * @param toolUseId Claude 도구 사용 ID
-   * @returns PylonInfo 또는 undefined
+   * @returns ToolContext 또는 undefined
    */
-  get(toolUseId: string): PylonInfo | undefined {
+  get(toolUseId: string): ToolContext | undefined {
     // 빈 문자열은 undefined 반환
     if (toolUseId === '') {
       return undefined;
     }
 
     const entry = this._map.get(toolUseId);
-    return entry?.info;
+    return entry?.context;
   }
 
   /**

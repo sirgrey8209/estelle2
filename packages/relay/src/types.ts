@@ -165,28 +165,22 @@ export interface AuthenticatedClient extends Client {
 // ============================================================================
 
 /**
- * Relay에서 사용하는 메시지 라우팅 대상
+ * 라우팅 대상 지정 타입
  *
  * @description
  * 메시지의 to 필드에 사용되는 타입입니다.
- * 숫자(deviceId), 객체(deviceId + deviceType), 또는 배열 형태를 지원합니다.
+ * **무조건 숫자 배열** (인코딩된 deviceId 배열)
  *
  * @example
  * ```typescript
- * // deviceId만 지정
- * const target1: RouteTarget = 1;
- *
- * // deviceId + deviceType 지정
- * const target2: RouteTarget = { deviceId: 1, deviceType: 'pylon' };
+ * // 단일 대상
+ * const target1: RouteTarget = [80];
  *
  * // 다중 대상
- * const target3: RouteTarget = [1, 2, { deviceId: 3, deviceType: 'app' }];
+ * const target2: RouteTarget = [80, 81, 82];
  * ```
  */
-export type RouteTarget =
-  | number
-  | { deviceId: number; deviceType?: RelayDeviceType }
-  | Array<number | { deviceId: number; deviceType?: RelayDeviceType }>;
+export type RouteTarget = number[];
 
 /**
  * 브로드캐스트 옵션
@@ -257,7 +251,10 @@ export interface AuthResultPayload {
 
   /** 성공 시 디바이스 정보 */
   device?: {
+    /** 7비트 인코딩된 deviceId (envId + deviceType + deviceIndex) */
     deviceId: number;
+    /** 로컬 deviceIndex (0~15) - 내부 라우팅용 */
+    deviceIndex: number;
     deviceType: RelayDeviceType;
     name: string;
     icon: string;
@@ -303,14 +300,10 @@ export interface DeviceListItem {
  * 순수 함수에서 상태를 주입받을 때 사용합니다.
  *
  * @property clients - 연결된 클라이언트 맵 (clientId -> Client)
- * @property nextClientId - 다음 앱 클라이언트에 할당할 ID
  */
 export interface RelayState {
   /** 연결된 클라이언트 맵 (clientId -> Client) */
   clients: Map<string, Client>;
-
-  /** 다음 앱 클라이언트에 할당할 ID */
-  nextClientId: number;
 }
 
 // ============================================================================
@@ -360,25 +353,25 @@ export interface UpdateClientAction {
 }
 
 /**
- * nextClientId 증가 액션
+ * clientIndex 할당 액션
  *
  * @description
- * 다음 클라이언트 ID를 증가시키는 액션입니다.
+ * ClientIndexAllocator에서 새 clientIndex를 할당했음을 나타내는 액션입니다.
  */
-export interface IncrementNextClientIdAction {
-  type: 'increment_next_client_id';
+export interface AllocateClientIndexAction {
+  type: 'allocate_client_index';
 }
 
 /**
- * nextClientId 리셋 액션
+ * clientIndex 해제 액션
  *
  * @description
- * 모든 앱 클라이언트가 연결 해제되었을 때 ID를 리셋하는 액션입니다.
+ * App 클라이언트 연결 해제 시 할당된 deviceIndex를 해제하는 액션입니다.
  */
-export interface ResetNextClientIdAction {
-  type: 'reset_next_client_id';
-  /** 리셋할 값 */
-  value: number;
+export interface ReleaseClientIndexAction {
+  type: 'release_client_index';
+  /** 해제할 deviceIndex */
+  deviceIndex: number;
 }
 
 /**
@@ -388,8 +381,8 @@ export type RelayAction =
   | SendAction
   | BroadcastAction
   | UpdateClientAction
-  | IncrementNextClientIdAction
-  | ResetNextClientIdAction;
+  | AllocateClientIndexAction
+  | ReleaseClientIndexAction;
 
 // ============================================================================
 // 타입 가드 함수

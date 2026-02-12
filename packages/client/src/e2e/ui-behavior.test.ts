@@ -40,27 +40,27 @@ const mockConversationState = {
 
 const mockConversationStore = {
   states: new Map<number, typeof mockConversationState>(),
-  currentEntityId: 1001 as number | null,
-  getState: vi.fn((entityId: number) => mockConversationState),
+  currentConversationId: 1001 as number | null,
+  getState: vi.fn((conversationId: number) => mockConversationState),
   getCurrentState: vi.fn(() => mockConversationState),
-  hasPendingRequests: vi.fn((_entityId?: number) => mockConversationState.pendingRequests.length > 0),
-  setStatus: vi.fn((entityId: number, status: string) => {
+  hasPendingRequests: vi.fn((_conversationId?: number) => mockConversationState.pendingRequests.length > 0),
+  setStatus: vi.fn((conversationId: number, status: string) => {
     mockConversationState.status = status as any;
   }),
-  addMessage: vi.fn((entityId: number, msg: unknown) => {
+  addMessage: vi.fn((conversationId: number, msg: unknown) => {
     mockConversationState.messages.push(msg);
   }),
-  setMessages: vi.fn((entityId: number, msgs: unknown[]) => {
+  setMessages: vi.fn((conversationId: number, msgs: unknown[]) => {
     mockConversationState.messages = [...msgs];
   }),
-  clearMessages: vi.fn((entityId: number) => {
+  clearMessages: vi.fn((conversationId: number) => {
     mockConversationState.messages = [];
     mockConversationState.pendingRequests = [];
   }),
-  appendTextBuffer: vi.fn((entityId: number, text: string) => {
+  appendTextBuffer: vi.fn((conversationId: number, text: string) => {
     mockConversationState.textBuffer += text;
   }),
-  flushTextBuffer: vi.fn((entityId: number) => {
+  flushTextBuffer: vi.fn((conversationId: number) => {
     if (mockConversationState.textBuffer) {
       mockConversationState.messages.push({
         role: 'assistant',
@@ -70,10 +70,10 @@ const mockConversationStore = {
       mockConversationState.textBuffer = '';
     }
   }),
-  addPendingRequest: vi.fn((entityId: number, req: unknown) => {
+  addPendingRequest: vi.fn((conversationId: number, req: unknown) => {
     mockConversationState.pendingRequests.push(req);
   }),
-  removePendingRequest: vi.fn((entityId: number, id: string) => {
+  removePendingRequest: vi.fn((conversationId: number, id: string) => {
     mockConversationState.pendingRequests = mockConversationState.pendingRequests.filter(
       (r: any) => r.toolUseId !== id
     );
@@ -88,8 +88,7 @@ const mockWorkspaceStore = {
     workspaceId: 'ws-1',
     workspaceName: 'Test Workspace',
     workingDir: '/test',
-    entityId: 1001,
-    conversationId: 'conv-1',
+    conversationId: 1001,
     conversationName: 'Main',
     status: 'idle',
     unread: false,
@@ -109,7 +108,7 @@ const mockWorkspaceStore = {
           workingDir: '/test',
           isActive: true,
           conversations: [
-            { entityId: 1001, conversationId: 'conv-1', name: 'Main', status: 'idle', unread: false },
+            { conversationId: 1001, name: 'Main', status: 'idle', unread: false },
           ],
         },
       ],
@@ -140,14 +139,17 @@ describe('InputBar 동작', () => {
       sendClaudeMessage(1001, 'Hello, Claude!');
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]).toEqual({
+      // to 필드는 pylonId 기반으로 동적 생성되므로 toMatchObject 사용
+      expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_SEND,
         payload: {
-          entityId: 1001,
+          conversationId: 1001,
           message: 'Hello, Claude!',
-          attachments: undefined,
         },
       });
+      // to 필드가 숫자 배열임을 검증
+      expect(sentMessages[0].to).toBeDefined();
+      expect(Array.isArray(sentMessages[0].to)).toBe(true);
     });
 
     it('이미지 첨부 시 attachments가 포함되어야 한다', () => {
@@ -173,10 +175,11 @@ describe('InputBar 동작', () => {
       sendClaudeControl(1001, 'stop');
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]).toEqual({
+      // to 필드는 pylonId 기반으로 동적 생성되므로 toMatchObject 사용
+      expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_CONTROL,
         payload: {
-          entityId: 1001,
+          conversationId: 1001,
           action: 'stop',
         },
       });
@@ -277,10 +280,11 @@ describe('WorkspaceSidebar 동작', () => {
       selectConversation(1001);
 
       expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]).toEqual({
+      // to 필드는 pylonId 기반으로 동적 생성되므로 toMatchObject 사용
+      expect(sentMessages[0]).toMatchObject({
         type: MessageType.CONVERSATION_SELECT,
         payload: {
-          entityId: 1001,
+          conversationId: 1001,
         },
       });
     });
@@ -318,7 +322,7 @@ describe('RequestBar 동작', () => {
       expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_PERMISSION,
         payload: {
-          entityId: 1001,
+          conversationId: 1001,
           toolUseId: 'tool-123',
           decision: 'allow',
         },
@@ -342,7 +346,7 @@ describe('RequestBar 동작', () => {
       expect(sentMessages[0]).toMatchObject({
         type: MessageType.CLAUDE_ANSWER,
         payload: {
-          entityId: 1001,
+          conversationId: 1001,
           toolUseId: 'tool-456',
           answer: 'React',
         },

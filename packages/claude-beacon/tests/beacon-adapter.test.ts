@@ -6,9 +6,9 @@
  * ClaudeAdapter 인터페이스를 구현하여 ClaudeManager에 주입 가능.
  *
  * 통신 프로토콜:
- * - 연결 시: { "action": "register", "pylonAddress": "127.0.0.1:9876", "env": "dev" }
- * - 쿼리 요청: { "action": "query", "entityId": 2049, "options": { "prompt": "...", "cwd": "..." } }
- * - 이벤트 스트림: { "type": "event", "entityId": 2049, "message": { ... } }
+ * - 연결 시: { "action": "register", "pylonId": 65, "mcpHost": "127.0.0.1", "mcpPort": 9878, "env": "dev" }
+ * - 쿼리 요청: { "action": "query", "conversationId": 2049, "options": { "prompt": "...", "cwd": "..." } }
+ * - 이벤트 스트림: { "type": "event", "conversationId": 2049, "message": { ... } }
  *
  * 테스트 케이스:
  * - 생성자: ClaudeBeacon 연결 정보로 생성
@@ -139,10 +139,12 @@ describe('ClaudeBeaconAdapter', () => {
       expect(adapter.port).toBe(9877);
     });
 
-    it('should_store_pylon_address_for_registration', () => {
+    it('should_store_pylon_info_for_registration', () => {
       // Arrange
       const options: BeaconAdapterOptions = {
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       };
 
@@ -150,7 +152,9 @@ describe('ClaudeBeaconAdapter', () => {
       adapter = new ClaudeBeaconAdapter(options);
 
       // Assert
-      expect(adapter.pylonAddress).toBe('127.0.0.1:9878');
+      expect(adapter.pylonId).toBe(33);
+      expect(adapter.mcpHost).toBe('127.0.0.1');
+      expect(adapter.mcpPort).toBe(9877);
       expect(adapter.env).toBe('stage');
     });
   });
@@ -164,7 +168,9 @@ describe('ClaudeBeaconAdapter', () => {
       mockServer = await createMockBeaconServer(TEST_PORT, () => {});
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -179,7 +185,9 @@ describe('ClaudeBeaconAdapter', () => {
       // Arrange - 서버 없이 연결 시도
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -192,7 +200,9 @@ describe('ClaudeBeaconAdapter', () => {
       mockServer = await createMockBeaconServer(TEST_PORT, () => {});
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -221,7 +231,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
         connectTimeout: 100, // 100ms 타임아웃
       });
@@ -248,7 +260,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
 
@@ -260,7 +274,9 @@ describe('ClaudeBeaconAdapter', () => {
       // Assert
       expect(receivedData).toEqual({
         action: 'register',
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 33,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9877,
         env: 'stage',
       });
     });
@@ -274,7 +290,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9876',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'dev',
       });
 
@@ -285,7 +303,9 @@ describe('ClaudeBeaconAdapter', () => {
       // Assert
       expect(receivedData).toEqual({
         action: 'register',
-        pylonAddress: '127.0.0.1:9876',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'dev',
       });
     });
@@ -299,7 +319,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9879',
+        pylonId: 1,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'release',
       });
 
@@ -310,7 +332,9 @@ describe('ClaudeBeaconAdapter', () => {
       // Assert
       expect(receivedData).toEqual({
         action: 'register',
-        pylonAddress: '127.0.0.1:9879',
+        pylonId: 1,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9876,
         env: 'release',
       });
     });
@@ -334,7 +358,7 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'result', subtype: 'success' },
             }) + '\n'
           );
@@ -343,7 +367,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -353,6 +379,7 @@ describe('ClaudeBeaconAdapter', () => {
         prompt: 'Hello, Claude!',
         cwd: 'C:\\WorkSpace\\project',
         abortController: new AbortController(),
+        conversationId: 2049,
       };
 
       // AsyncIterable을 소비해야 쿼리가 전송됨
@@ -382,21 +409,21 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'system', subtype: 'init', session_id: 'sess-123' },
             }) + '\n'
           );
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'stream_event', event: { type: 'content_block_start' } },
             }) + '\n'
           );
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'result', subtype: 'success' },
             }) + '\n'
           );
@@ -405,7 +432,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -416,6 +445,7 @@ describe('ClaudeBeaconAdapter', () => {
         prompt: 'Test',
         cwd: '/test',
         abortController: new AbortController(),
+        conversationId: 2049,
       })) {
         messages.push(msg);
       }
@@ -427,19 +457,19 @@ describe('ClaudeBeaconAdapter', () => {
       expect(messages[2].type).toBe('result');
     });
 
-    it('should_include_entity_id_in_query_request', async () => {
+    it('should_include_conversation_id_in_query_request', async () => {
       // Arrange
-      let receivedEntityId: number | undefined;
+      let receivedConversationId: number | undefined;
       mockServer = await createMockBeaconServer(TEST_PORT, (socket, data) => {
         const parsed = JSON.parse(data);
         if (parsed.action === 'register') {
           socket.write(JSON.stringify({ success: true }) + '\n');
         } else if (parsed.action === 'query') {
-          receivedEntityId = parsed.entityId;
+          receivedConversationId = parsed.conversationId;
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'result' },
             }) + '\n'
           );
@@ -448,9 +478,11 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
-        entityId: 2049,
+        conversationId: 2049,
       });
       await adapter.connect();
 
@@ -464,14 +496,16 @@ describe('ClaudeBeaconAdapter', () => {
       }
 
       // Assert
-      expect(receivedEntityId).toBe(2049);
+      expect(receivedConversationId).toBe(2049);
     });
 
     it('should_throw_when_not_connected', async () => {
       // Arrange
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -500,7 +534,7 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'stream_event' },
             }) + '\n'
           );
@@ -510,7 +544,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -524,6 +560,7 @@ describe('ClaudeBeaconAdapter', () => {
           prompt: 'Test',
           cwd: '/test',
           abortController,
+          conversationId: 2049,
         })) {
           messages.push(msg);
           // 첫 메시지 후 abort
@@ -549,7 +586,7 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'result' },
             }) + '\n'
           );
@@ -558,7 +595,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -568,6 +607,7 @@ describe('ClaudeBeaconAdapter', () => {
         prompt: 'Test',
         cwd: '/test',
         abortController: new AbortController(),
+        conversationId: 2049,
         mcpServers: {
           myServer: { command: 'node', args: ['server.js'] },
         },
@@ -591,7 +631,7 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'error',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               error: 'SDK connection failed',
             }) + '\n'
           );
@@ -600,7 +640,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -611,6 +653,7 @@ describe('ClaudeBeaconAdapter', () => {
           prompt: 'Test',
           cwd: '/test',
           abortController: new AbortController(),
+          conversationId: 2049,
         })) {
           // consume
         }
@@ -629,7 +672,9 @@ describe('ClaudeBeaconAdapter', () => {
       mockServer = await createMockBeaconServer(TEST_PORT, () => {});
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -646,7 +691,9 @@ describe('ClaudeBeaconAdapter', () => {
       // Arrange
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
 
@@ -659,7 +706,9 @@ describe('ClaudeBeaconAdapter', () => {
       mockServer = await createMockBeaconServer(TEST_PORT, () => {});
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -690,7 +739,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -722,7 +773,9 @@ describe('ClaudeBeaconAdapter', () => {
       let disconnectCalled = false;
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
         onDisconnect: () => {
           disconnectCalled = true;
@@ -747,8 +800,8 @@ describe('ClaudeBeaconAdapter', () => {
   // 자동 재연결 테스트 (기본 동작만)
   // ============================================================================
   describe('auto reconnection', () => {
-    it('should_not_reconnect_when_reconnect_disabled', async () => {
-      // Arrange: reconnect: false (기본값)
+    it('should_auto_reconnect_when_connection_lost', async () => {
+      // Arrange: 항상 재연결 시도
       let clientSocket: Socket | null = null;
       const server = createServer((socket) => {
         clientSocket = socket;
@@ -760,9 +813,10 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
-        // reconnect: false (기본값)
       });
       await adapter.connect();
       expect(adapter.isConnected).toBe(true);
@@ -775,31 +829,28 @@ describe('ClaudeBeaconAdapter', () => {
       clientSocket?.destroy();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Assert: 재연결 시도 안 함 (isConnected === false 유지)
+      // Assert: 재연결 시도 중
       expect(adapter.isConnected).toBe(false);
-      expect(adapter.isReconnecting).toBe(false);
+      expect(adapter.isReconnecting).toBe(true);
     });
 
     it('should_have_isReconnecting_property', () => {
       // Arrange & Act
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        reconnect: true,
       });
 
       // Assert: isReconnecting 속성 존재
       expect(adapter.isReconnecting).toBe(false);
     });
 
-    it('should_accept_reconnect_options', () => {
+    it('should_accept_ping_options', () => {
       // Arrange & Act
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        reconnect: true,
-        reconnectInterval: 1000,
-        maxReconnectAttempts: 5,
+        pingInterval: 5000,
+        pingTimeout: 15000,
         onReconnect: () => {},
-        onReconnectFailed: () => {},
       });
 
       // Assert: 생성 성공 (옵션이 유효함)
@@ -822,17 +873,17 @@ describe('ClaudeBeaconAdapter', () => {
           socket.write(
             JSON.stringify({
               type: 'permission_request',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               toolName: 'Bash',
               input: { command: 'rm -rf /' },
             }) + '\n'
           );
         } else if (parsed.action === 'permission_response') {
-          // 권한 응답 후 결과 전송
+          // 권한 응답 후 결과 전송 (응답에 포함된 conversationId 사용)
           socket.write(
             JSON.stringify({
               type: 'event',
-              entityId: parsed.entityId,
+              conversationId: parsed.conversationId,
               message: { type: 'result' },
             }) + '\n'
           );
@@ -846,7 +897,9 @@ describe('ClaudeBeaconAdapter', () => {
 
       adapter = new ClaudeBeaconAdapter({
         port: TEST_PORT,
-        pylonAddress: '127.0.0.1:9878',
+        pylonId: 65,
+        mcpHost: '127.0.0.1',
+        mcpPort: 9878,
         env: 'dev',
       });
       await adapter.connect();
@@ -860,6 +913,7 @@ describe('ClaudeBeaconAdapter', () => {
         prompt: 'Test',
         cwd: '/test',
         abortController: new AbortController(),
+        conversationId: 2049,
         canUseTool: async (toolName, input) => {
           callbackCalled = true;
           receivedToolName = toolName;

@@ -802,7 +802,7 @@ describe('ClaudeManager', () => {
             async *query(options) {
               // canUseTool에서 AskUserQuestion 호출 시뮬레이션
               if (options.canUseTool) {
-                const sessionId = options.entityId as number;
+                const sessionId = options.conversationId as number;
                 const result = options.canUseTool('AskUserQuestion', {
                   questions: [`Question for session ${sessionId}`],
                 });
@@ -848,7 +848,7 @@ describe('ClaudeManager', () => {
           adapter: {
             async *query(options) {
               if (options.canUseTool) {
-                const sessionId = options.entityId as number;
+                const sessionId = options.conversationId as number;
                 const result = await options.canUseTool('AskUserQuestion', {
                   questions: ['Test question'],
                 });
@@ -890,7 +890,7 @@ describe('ClaudeManager', () => {
           adapter: {
             async *query(options) {
               if (options.canUseTool) {
-                const sessionId = options.entityId as number;
+                const sessionId = options.conversationId as number;
                 options.canUseTool('AskUserQuestion', {
                   questions: ['Test question'],
                 }).then(() => resolvedSessions.push(sessionId));
@@ -928,7 +928,7 @@ describe('ClaudeManager', () => {
           adapter: {
             async *query(options) {
               if (options.canUseTool) {
-                const sessionId = options.entityId as number;
+                const sessionId = options.conversationId as number;
                 const promise = options.canUseTool('AskUserQuestion', {
                   questions: ['Test'],
                 }).then((result) => {
@@ -968,7 +968,7 @@ describe('ClaudeManager', () => {
           adapter: {
             async *query(options) {
               if (options.canUseTool) {
-                const sessionId = options.entityId as number;
+                const sessionId = options.conversationId as number;
                 const result = await options.canUseTool('AskUserQuestion', {
                   questions: ['Test'],
                 });

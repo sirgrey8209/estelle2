@@ -24,9 +24,8 @@ export interface SelectedConversation {
   workspaceId: string;
   workspaceName: string;
   workingDir: string;
-  /** 엔티티 고유 식별자 (숫자) - Pylon과 통신 시 사용 */
-  entityId: number;
-  conversationId: string;
+  /** 대화 고유 식별자 (숫자) - Pylon과 통신 시 사용 */
+  conversationId: number;
   conversationName: string;
   status: ConversationStatusValue;
   unread: boolean;
@@ -52,35 +51,35 @@ export interface WorkspaceState {
   setWorkspaces: (
     pylonId: number,
     workspaces: WorkspaceWithActive[],
-    activeInfo?: { workspaceId: string; conversationId: string }
+    activeInfo?: { workspaceId: string; conversationId: number }
   ) => void;
   clearWorkspaces: (pylonId: number) => void;
   addConnectedPylon: (pylon: ConnectedPylon) => void;
   removeConnectedPylon: (deviceId: number) => void;
   updateConversationStatus: (
     pylonId: number,
-    entityId: number,
+    conversationId: number,
     status?: ConversationStatusValue,
     unread?: boolean
   ) => void;
   updatePermissionMode: (
-    entityId: number,
+    conversationId: number,
     mode: PermissionModeValue
   ) => void;
   selectConversation: (
     pylonId: number,
-    entityId: number
+    conversationId: number
   ) => void;
   clearSelection: () => void;
   reorderWorkspaces: (pylonId: number, workspaceIds: string[]) => void;
-  reorderConversations: (pylonId: number, workspaceId: string, conversationIds: string[]) => void;
+  reorderConversations: (pylonId: number, workspaceId: string, conversationIds: number[]) => void;
 
   // Getters
   getWorkspacesByPylon: (pylonId: number) => WorkspaceWithActive[];
   getAllWorkspaces: () => { pylonId: number; workspaces: WorkspaceWithActive[] }[];
   getConversation: (
     pylonId: number,
-    entityId: number
+    conversationId: number
   ) => Conversation | null;
 
   reset: () => void;
@@ -112,10 +111,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     let updatedSelected = selected;
 
     if (selected) {
-      // 선택된 대화가 여전히 유효한지 확인 (entityId로 매칭)
+      // 선택된 대화가 여전히 유효한지 확인 (conversationId로 매칭)
       for (const workspace of workspaces) {
         const conversation = workspace.conversations.find(
-          (c) => c.entityId === selected.entityId
+          (c) => c.conversationId === selected.conversationId
         );
         if (conversation) {
           // 상태 업데이트
@@ -161,8 +160,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           workspaceId: String(targetWorkspace.workspaceId),
           workspaceName: targetWorkspace.name,
           workingDir: targetWorkspace.workingDir,
-          entityId: targetConversation.entityId,
-          conversationId: String(targetConversation.entityId),
+          conversationId: targetConversation.conversationId,
           conversationName: targetConversation.name,
           status: targetConversation.status,
           unread: targetConversation.unread,
@@ -215,7 +213,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  updateConversationStatus: (pylonId, entityId, status, unread) => {
+  updateConversationStatus: (pylonId, conversationId, status, unread) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return;
 
@@ -225,7 +223,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const updatedWorkspaces = workspaces.map((workspace) => ({
       ...workspace,
       conversations: workspace.conversations.map((conv) => {
-        if (conv.entityId !== entityId) return conv;
+        if (conv.conversationId !== conversationId) return conv;
         return {
           ...conv,
           status: status !== undefined ? status : conv.status,
@@ -240,7 +238,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     // 선택된 대화 상태도 업데이트
     const selected = get().selectedConversation;
     const updatedSelected =
-      selected?.entityId === entityId
+      selected?.conversationId === conversationId
         ? {
             ...selected,
             status: status !== undefined ? status : selected.status,
@@ -254,10 +252,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  updatePermissionMode: (entityId, mode) => {
+  updatePermissionMode: (conversationId, mode) => {
     // 선택된 대화의 permissionMode 즉시 업데이트
     const selected = get().selectedConversation;
-    if (selected?.entityId === entityId) {
+    if (selected?.conversationId === conversationId) {
       set({
         selectedConversation: {
           ...selected,
@@ -267,13 +265,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  selectConversation: (pylonId, entityId) => {
+  selectConversation: (pylonId, conversationId) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return;
 
     for (const workspace of workspaces) {
       const conversation = workspace.conversations.find(
-        (c) => c.entityId === entityId
+        (c) => c.conversationId === conversationId
       );
       if (conversation) {
         set({
@@ -282,8 +280,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             workspaceId: String(workspace.workspaceId),
             workspaceName: workspace.name,
             workingDir: workspace.workingDir,
-            entityId: conversation.entityId,
-            conversationId: String(conversation.entityId),
+            conversationId: conversation.conversationId,
             conversationName: conversation.name,
             status: conversation.status,
             unread: conversation.unread,
@@ -354,13 +351,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return result;
   },
 
-  getConversation: (pylonId, entityId) => {
+  getConversation: (pylonId, conversationId) => {
     const workspaces = get().workspacesByPylon.get(pylonId);
     if (!workspaces) return null;
 
     for (const workspace of workspaces) {
       const conversation = workspace.conversations.find(
-        (c) => c.entityId === entityId
+        (c) => c.conversationId === conversationId
       );
       if (conversation) return conversation;
     }

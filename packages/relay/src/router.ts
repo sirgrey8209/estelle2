@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import { isAuthenticatedClient } from './types.js';
 import { parseDeviceId } from './utils.js';
+import { decodeDeviceId } from '@estelle/core';
 
 // ============================================================================
 // 라우팅 결과 타입
@@ -109,12 +110,18 @@ export function routeToDevice(
 ): RouteResult {
   const targetClientIds: string[] = [];
 
+  // 인코딩된 deviceId를 디코딩하여 deviceIndex 추출
+  // deviceId가 7비트 인코딩 값(예: 80)이면 디코딩, 아니면 그대로 사용
+  const decoded = decodeDeviceId(deviceId as import('@estelle/core').NumericDeviceId);
+  const targetDeviceIndex = decoded.deviceIndex;
+
   for (const [clientId, client] of clients) {
     if (!isAuthenticatedClient(client)) {
       continue;
     }
 
-    if (client.deviceId !== deviceId) {
+    // client.deviceId는 내부 deviceIndex (0~15)
+    if (client.deviceId !== targetDeviceIndex) {
       continue;
     }
 
@@ -133,32 +140,26 @@ export function routeToDevice(
 }
 
 // ============================================================================
-// 다중 대상 라우팅 (to 필드 처리)
+// to 필드 라우팅 (숫자 배열만 허용)
 // ============================================================================
 
 /**
  * to 필드를 기반으로 라우팅합니다.
  *
  * @description
- * to 필드의 다양한 형태를 처리합니다:
- * - 숫자: deviceId로 처리
- * - 객체: { deviceId, deviceType? }
- * - 배열: 위 형태들의 배열
+ * to 필드는 **무조건 숫자 배열**입니다. (인코딩된 deviceId 배열)
  *
- * @param to - 라우팅 대상 (숫자, 객체, 또는 배열)
+ * @param to - 라우팅 대상 (숫자 배열)
  * @param clients - 클라이언트 맵
  * @returns 라우팅 결과
  *
  * @example
  * ```typescript
- * // 단일 deviceId
- * routeByTo(1, clients);
+ * // 단일 대상
+ * routeByTo([80], clients);
  *
- * // 객체 형태
- * routeByTo({ deviceId: 1, deviceType: 'pylon' }, clients);
- *
- * // 배열 형태
- * routeByTo([1, 2, { deviceId: 100, deviceType: 'app' }], clients);
+ * // 다중 대상
+ * routeByTo([80, 81, 82], clients);
  * ```
  */
 export function routeByTo(
@@ -167,30 +168,8 @@ export function routeByTo(
 ): RouteResult {
   const allTargetIds = new Set<string>();
 
-  // 배열로 정규화
-  const targets = Array.isArray(to) ? to : [to];
-
-  for (const target of targets) {
-    let deviceId: number | null;
-    let deviceType: RelayDeviceType | null = null;
-
-    // 숫자만 오면 deviceId로 처리
-    if (typeof target === 'number') {
-      deviceId = target;
-    } else if (typeof target === 'object' && target !== null) {
-      // 객체 형태
-      deviceId = parseDeviceId(target.deviceId);
-      deviceType = target.deviceType ?? null;
-    } else {
-      // 유효하지 않은 형태는 건너뜀
-      continue;
-    }
-
-    if (deviceId === null) {
-      continue;
-    }
-
-    const result = routeToDevice(deviceId, deviceType, clients);
+  for (const encodedDeviceId of to) {
+    const result = routeToDevice(encodedDeviceId, null, clients);
     for (const clientId of result.targetClientIds) {
       allTargetIds.add(clientId);
     }
@@ -481,8 +460,8 @@ export function routeMessage(
   senderDeviceType: RelayDeviceType,
   clients: Map<string, Client>
 ): RouteResult {
-  // 1. to가 있으면 해당 대상으로 전달
-  if (message.to !== undefined) {
+  // 1. to가 있으면 해당 대상으로 전달 (숫자 배열)
+  if (message.to !== undefined && Array.isArray(message.to)) {
     return routeByTo(message.to, clients);
   }
 
@@ -491,8 +470,13 @@ export function routeMessage(
     return routeByBroadcast(message.broadcast, clients, senderClientId);
   }
 
-  // 3. 기본 라우팅 규칙
-  return routeByDefault(senderDeviceType, clients, senderClientId);
+  // 3. to도 broadcast도 없으면 에러 (라우팅 안 함)
+  // 모든 메시지는 명시적으로 to 또는 broadcast를 지정해야 함
+  console.error(`[ROUTE ERROR] No routing target for message type: ${message.type} from ${senderDeviceType}`);
+  return {
+    targetClientIds: [],
+    success: false,
+  };
 }
 
 // ============================================================================
@@ -529,7 +513,7 @@ export function hasConnectedDeviceType(
  * app 타입 클라이언트(pylon 제외)가 있는지 확인합니다.
  *
  * @description
- * 모든 앱 클라이언트 연결 해제 시 nextClientId 리셋 판단에 사용됩니다.
+ * 앱 클라이언트 연결 상태를 확인합니다.
  *
  * @param clients - 클라이언트 맵
  * @returns app 클라이언트 존재 여부
@@ -538,7 +522,6 @@ export function hasConnectedDeviceType(
  * ```typescript
  * if (!hasAppClients(clients)) {
  *   // 모든 앱 클라이언트 연결 해제됨
- *   nextClientId = DYNAMIC_DEVICE_ID_START;
  * }
  * ```
  */

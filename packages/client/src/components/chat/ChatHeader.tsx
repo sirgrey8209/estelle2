@@ -6,7 +6,7 @@ import { SessionMenuButton } from '../common/SessionMenuButton';
 import { BugReportDialog } from '../common/BugReportDialog';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
 import { getDeviceIcon } from '../../utils/device-icons';
-import { setPermissionMode, renameConversation, deleteConversation, sendBugReport, blobService } from '../../services';
+import { setPermissionMode, renameConversation, deleteConversation, sendBugReport, sendClaudeControl, blobService } from '../../services';
 import { Button } from '../ui/button';
 import { FileViewer } from '../viewers/FileViewer';
 
@@ -33,27 +33,31 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   const { openSidebar } = useContext(MobileLayoutContext);
 
   // 문서 클릭 핸들러
-  const handleDocumentClick = useCallback((path: string) => {
+  const handleDocumentClick = useCallback((docPath: string) => {
     if (!selectedConversation) return;
 
     // 뷰어 열기 (로딩 상태)
-    setViewingDocument({ path, content: null });
+    setViewingDocument({ path: docPath, content: null });
 
     // 파일 요청
     const unsubscribe = blobService.onDownloadComplete((event) => {
-      if (event.filename === path || event.filename.endsWith(path.replace(/\\/g, '/'))) {
+      if (event.filename === docPath || event.filename.endsWith(docPath.replace(/\\/g, '/'))) {
         const decoder = new TextDecoder('utf-8');
         const content = decoder.decode(event.bytes);
-        setViewingDocument({ path, content });
+        setViewingDocument({ path: docPath, content });
         unsubscribe();
       }
     });
 
+    // 절대경로 여부 확인 (Windows: C:\..., Unix: /...)
+    const isAbsolute = /^[A-Za-z]:[\\/]/.test(docPath) || docPath.startsWith('/');
+    const filePath = isAbsolute ? docPath : `${selectedConversation.workingDir}\\${docPath}`;
+
     blobService.requestFile({
       targetDeviceId: selectedConversation.pylonId,
-      entityId: selectedConversation.entityId,
-      filename: path,
-      filePath: `${selectedConversation.workingDir}\\${path}`,
+      conversationId: selectedConversation.conversationId,
+      filename: docPath,
+      filePath,
     });
   }, [selectedConversation]);
 
@@ -73,7 +77,7 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   // 대화가 바뀌면 편집 모드 해제
   useEffect(() => {
     setIsRenaming(false);
-  }, [selectedConversation?.entityId]);
+  }, [selectedConversation?.conversationId]);
 
   const startRename = useCallback(() => {
     if (!selectedConversation) return;
@@ -86,7 +90,7 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== selectedConversation.conversationName) {
       renameConversation(
-        selectedConversation.entityId,
+        selectedConversation.conversationId,
         trimmed
       );
     }
@@ -107,11 +111,11 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
 
   const handleDelete = useCallback(() => {
     if (!selectedConversation) return;
-    deleteConversation(selectedConversation.entityId);
+    deleteConversation(selectedConversation.conversationId);
     // 선택 해제
     useWorkspaceStore.getState().clearSelection();
     // conversationStore에서 대화 상태 삭제
-    useConversationStore.getState().deleteConversation(selectedConversation.entityId);
+    useConversationStore.getState().deleteConversation(selectedConversation.conversationId);
   }, [selectedConversation]);
 
   if (!selectedConversation) {
@@ -199,8 +203,11 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
           <SessionMenuButton
             permissionMode={selectedConversation.permissionMode}
             onPermissionModeChange={(mode) => {
-              setPermissionMode(selectedConversation.entityId, mode);
-              updatePermissionMode(selectedConversation.entityId, mode);
+              setPermissionMode(selectedConversation.conversationId, mode);
+              updatePermissionMode(selectedConversation.conversationId, mode);
+            }}
+            onNewSession={() => {
+              sendClaudeControl(selectedConversation.conversationId, 'new_session');
             }}
             onBugReport={() => setShowBugReport(true)}
             onRename={startRename}
@@ -234,8 +241,8 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
         onSubmit={async (message) => {
           const sent = sendBugReport(
             message,
-            selectedConversation?.entityId,
-            selectedConversation?.workspaceId
+            selectedConversation?.conversationId,
+            selectedConversation?.workspaceId ? Number(selectedConversation.workspaceId) : undefined
           );
           if (!sent) throw new Error('WebSocket 연결 안 됨');
         }}

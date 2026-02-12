@@ -21,12 +21,10 @@
       "dataDir": "./dev-data"
     },
     "beacon": {
-      "enabled": true,
       "host": "127.0.0.1",
       "port": 9875,
       "env": "dev",
-      "reconnect": true,
-      "reconnectInterval": 3000
+      "pingInterval": 10000
     },
     "client": {
       "port": 5173,
@@ -48,15 +46,14 @@
       "pm2Name": "estelle-pylon-stage",
       "configDir": "~/.claude-stage",
       "credentialsBackupDir": "~/.claude-credentials/stage",
-      "mcpPort": 9877
+      "mcpPort": 9877,
+      "dataDir": "./stage-data"
     },
     "beacon": {
-      "enabled": true,
       "host": "127.0.0.1",
       "port": 9875,
       "env": "stage",
-      "reconnect": true,
-      "reconnectInterval": 3000
+      "pingInterval": 10000
     },
     "client": {
       "title": "Estelle"
@@ -76,7 +73,14 @@
       "pm2Name": "estelle-pylon",
       "configDir": "~/.claude-release",
       "credentialsBackupDir": "~/.claude-credentials/release",
-      "mcpPort": 9876
+      "mcpPort": 9876,
+      "dataDir": "./release-data"
+    },
+    "beacon": {
+      "host": "127.0.0.1",
+      "port": 9875,
+      "env": "release",
+      "pingInterval": 10000
     },
     "client": {
       "title": "Estelle"

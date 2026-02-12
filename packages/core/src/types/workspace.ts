@@ -50,7 +50,7 @@ export interface LinkedDocument {
  * @example
  * ```typescript
  * const conversation: Conversation = {
- *   conversationId: 'conv-001',
+ *   conversationId: 132097,  // 24비트 ConversationId
  *   name: '로그인 기능 구현',
  *   claudeSessionId: 'session-uuid',
  *   status: 'idle',
@@ -61,11 +61,8 @@ export interface LinkedDocument {
  * ```
  */
 export interface Conversation {
-  /** 엔티티 고유 식별자 (숫자) - Pylon의 EntityId */
-  entityId: number;
-
-  /** 대화 고유 식별자 (UUID) - 하위 호환용 */
-  conversationId: string;
+  /** 대화 고유 식별자 (24비트 ConversationId) */
+  conversationId: number;
 
   /** 대화 이름 (표시용) */
   name: string;
@@ -264,10 +261,10 @@ export interface ConversationCreateResultPayload {
  */
 export interface ConversationSelectPayload {
   /** 워크스페이스 ID */
-  workspaceId: string;
+  workspaceId: number;
 
-  /** 선택할 대화 ID */
-  conversationId: string;
+  /** 선택할 대화 ID (24비트 ConversationId) */
+  conversationId: number;
 }
 
 /**
@@ -278,10 +275,10 @@ export interface ConversationSelectPayload {
  */
 export interface ConversationStatusPayload {
   /** 워크스페이스 ID */
-  workspaceId: string;
+  workspaceId: number;
 
-  /** 대화 ID */
-  conversationId: string;
+  /** 대화 ID (24비트 ConversationId) */
+  conversationId: number;
 
   /** 새 상태 */
   status: ConversationStatusValue;
@@ -298,8 +295,8 @@ export interface ConversationStatusPayload {
  */
 export interface ConversationReorderPayload {
   /** 워크스페이스 ID */
-  workspaceId: string;
+  workspaceId: number;
 
-  /** 새 순서의 대화 ID 배열 */
-  conversationIds: string[];
+  /** 새 순서의 대화 ID 배열 (24비트 ConversationId) */
+  conversationIds: number[];
 }

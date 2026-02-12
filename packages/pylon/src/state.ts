@@ -16,7 +16,7 @@ export interface ConversationMessage {
  * 대화 상태
  */
 export interface Conversation {
-  id: string;
+  id: number;
   workspaceId: string;
   messages: ConversationMessage[];
   isStreaming: boolean;
@@ -29,7 +29,7 @@ export interface Conversation {
  */
 export interface ClaudeEvent {
   type: 'message' | 'stream_start' | 'stream_chunk' | 'stream_end' | 'error';
-  conversationId: string;
+  conversationId: number;
   content?: string;
   error?: string;
 }
@@ -56,7 +56,7 @@ export interface OutputEvent {
  * - pendingEvents: 외부로 보낼 이벤트 큐
  */
 export class PylonState {
-  conversations = new Map<string, Conversation>();
+  conversations = new Map<number, Conversation>();
   pendingEvents: OutputEvent[] = [];
 
   /**

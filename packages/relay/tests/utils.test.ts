@@ -61,16 +61,16 @@ describe('getDeviceInfo', () => {
     });
   });
 
-  it('should return dynamic client info for 100+', () => {
-    const info = getDeviceInfo(105, testDevices);
+  it('should return dynamic client info for 0~15 range', () => {
+    const info = getDeviceInfo(5, testDevices);
     expect(info).toEqual({
-      name: 'Client 105',
+      name: 'Client 5',
       icon: '📱',
       role: 'client',
     });
   });
 
-  it('should return unknown device info for unregistered < 100', () => {
+  it('should return unknown device info for out of range', () => {
     const info = getDeviceInfo(50, testDevices);
     expect(info).toEqual({
       name: 'Device 50',
@@ -121,5 +121,73 @@ describe('parseDeviceId', () => {
   it('should return null for null/undefined', () => {
     expect(parseDeviceId(null)).toBe(null);
     expect(parseDeviceId(undefined)).toBe(null);
+  });
+});
+
+// ============================================================================
+// 새 체계 테스트 (ClientIndexAllocator 기반 마이그레이션)
+// ============================================================================
+
+describe('[새 체계] getDeviceInfo - isValidClientIndex 기반', () => {
+  const testDevices: Record<number, DeviceConfig> = {
+    1: { name: 'Office', icon: '🏢', role: 'office', allowedIps: ['*'] },
+    2: { name: 'Home', icon: '🏠', role: 'home', allowedIps: ['*'] },
+  };
+
+  it('should_return_client_info_when_deviceId_is_0', () => {
+    // Arrange & Act
+    const info = getDeviceInfo(0, testDevices);
+
+    // Assert — 새 체계: deviceId 0은 동적 클라이언트
+    expect(info.role).toBe('client');
+    expect(info.name).toBe('Client 0');
+    expect(info.icon).toBe('📱');
+  });
+
+  it('should_return_client_info_when_deviceId_is_5', () => {
+    // Arrange & Act
+    const info = getDeviceInfo(5, testDevices);
+
+    // Assert — 새 체계: deviceId 5는 동적 클라이언트 (등록된 디바이스가 아닌 경우)
+    expect(info.role).toBe('client');
+    expect(info.name).toBe('Client 5');
+  });
+
+  it('should_return_client_info_when_deviceId_is_15', () => {
+    // Arrange & Act
+    const info = getDeviceInfo(15, testDevices);
+
+    // Assert — 새 체계: deviceId 15는 동적 클라이언트
+    expect(info.role).toBe('client');
+    expect(info.name).toBe('Client 15');
+  });
+
+  it('should_return_unknown_when_deviceId_is_16', () => {
+    // Arrange & Act
+    const info = getDeviceInfo(16, testDevices);
+
+    // Assert — 새 체계: 16은 유효한 clientIndex가 아니므로 unknown
+    expect(info.role).toBe('unknown');
+  });
+
+  it('should_return_unknown_when_deviceId_is_100', () => {
+    // Arrange & Act
+    const info = getDeviceInfo(100, testDevices);
+
+    // Assert — 새 체계: 100은 유효한 clientIndex가 아니므로 unknown
+    // (현재 구체계에서는 100이 client로 반환되므로 이 테스트는 실패해야 함)
+    expect(info.role).toBe('unknown');
+  });
+
+  it('should_still_return_registered_device_info', () => {
+    // Arrange & Act — 등록된 디바이스는 여전히 정상 반환
+    const info = getDeviceInfo(1, testDevices);
+
+    // Assert
+    expect(info).toEqual({
+      name: 'Office',
+      icon: '🏢',
+      role: 'office',
+    });
   });
 });

@@ -121,14 +121,15 @@ try {
     # Data/Uploads junction -> release-data (공통 함수 사용)
     New-DataJunctions -PylonDir (Join-Path $ReleaseDir "pylon") -DataDir $ReleaseDataDir
 
-    # ecosystem.config.cjs (공통 함수 — 환경변수 누락 방지)
-    $ecosystemConfig = New-EcosystemConfig -PylonConfig $ReleaseConfig.pylon -BeaconConfig $ReleaseConfig.beacon -EnvId $ReleaseConfig.envId
+    # ecosystem.config.cjs (공통 함수 — ESTELLE_ENV_CONFIG JSON 방식)
+    $dataSubDir = Join-Path $ReleaseDataDir "data"
+    $ecosystemConfig = New-EcosystemConfig -PylonConfig $ReleaseConfig.pylon -BeaconConfig $ReleaseConfig.beacon -EnvId $ReleaseConfig.envId -DataDir $dataSubDir
     Write-Utf8File -Path (Join-Path $ReleaseDir "pylon\ecosystem.config.cjs") -Content $ecosystemConfig
 
     # fly.toml & Dockerfile (공통 함수 사용)
     $flyApp = $ReleaseConfig.relay.flyApp
     Write-Utf8File -Path (Join-Path $ReleaseDir "relay\fly.toml") -Content (New-FlyToml -FlyApp $flyApp)
-    Write-Utf8File -Path (Join-Path $ReleaseDir "relay\Dockerfile") -Content (New-Dockerfile)
+    Write-Utf8File -Path (Join-Path $ReleaseDir "relay\Dockerfile") -Content (New-Dockerfile -EnvId $ReleaseConfig.envId)
 
     Write-Ok "Release configs generated"
 

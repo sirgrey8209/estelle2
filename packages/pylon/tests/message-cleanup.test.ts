@@ -166,8 +166,8 @@ describe('메시지 정리', () => {
       const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
 
       // 각 대화에 메시지 추가
-      deps.messageStore.addUserMessage(conv1.entityId, 'Message 1');
-      deps.messageStore.addUserMessage(conv2.entityId, 'Message 2');
+      deps.messageStore.addUserMessage(conv1.conversationId, 'Message 1');
+      deps.messageStore.addUserMessage(conv2.conversationId, 'Message 2');
 
       mockPersistence.deleteMessageSession.mockClear();
 
@@ -181,8 +181,8 @@ describe('메시지 정리', () => {
       // Assert: 두 대화의 메시지 파일이 모두 삭제되어야 함
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(mockPersistence.deleteMessageSession).toHaveBeenCalledTimes(2);
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv1.entityId));
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv2.entityId));
+      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv1.conversationId));
+      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv2.conversationId));
     });
 
     it('should_clear_message_cache_when_workspace_deleted', () => {
@@ -191,8 +191,8 @@ describe('메시지 정리', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
 
       // 메시지 추가
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(1);
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(1);
 
       // Act: 워크스페이스 삭제
       pylon.handleMessage({
@@ -203,7 +203,7 @@ describe('메시지 정리', () => {
 
       // Assert: 메시지 캐시도 클리어되어야 함
       // messageStore.clear() 또는 unloadCache()가 호출되어야 함
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(0);
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
   });
 
@@ -231,7 +231,7 @@ describe('메시지 정리', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
 
       // 메시지 추가
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
 
       mockPersistence.deleteMessageSession.mockClear();
 
@@ -239,13 +239,13 @@ describe('메시지 정리', () => {
       pylon.handleMessage({
         type: 'conversation_delete',
         from: { deviceId: 'client-1' },
-        payload: { entityId: conversation.entityId },
+        payload: { conversationId: conversation.conversationId },
       });
 
       // Assert: 메시지 파일이 삭제되어야 함
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(mockPersistence.deleteMessageSession).toHaveBeenCalledTimes(1);
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conversation.entityId));
+      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conversation.conversationId));
     });
 
     it('should_clear_message_cache_when_conversation_deleted', () => {
@@ -254,18 +254,18 @@ describe('메시지 정리', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
 
       // 메시지 추가
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(1);
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(1);
 
       // Act: 대화 삭제
       pylon.handleMessage({
         type: 'conversation_delete',
         from: { deviceId: 'client-1' },
-        payload: { entityId: conversation.entityId },
+        payload: { conversationId: conversation.conversationId },
       });
 
       // Assert: 메시지 캐시도 클리어되어야 함
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(0);
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
   });
 
@@ -297,7 +297,7 @@ describe('메시지 정리', () => {
       // 워크스페이스 생성 + 대화 생성 후 삭제 (ID 1이 재사용 가능해짐)
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const firstConv = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.workspaceStore.deleteConversation(firstConv.entityId);
+      deps.workspaceStore.deleteConversation(firstConv.conversationId);
 
       // Act: 새 대화 생성 (ID 재사용됨)
       pylon.handleMessage({
@@ -311,7 +311,7 @@ describe('메시지 정리', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const newConv = deps.workspaceStore.getWorkspace(workspace.workspaceId)!.conversations[0];
-      const messages = deps.messageStore.getMessages(newConv.entityId);
+      const messages = deps.messageStore.getMessages(newConv.conversationId);
       expect(messages).toHaveLength(0);
     });
 
@@ -341,13 +341,13 @@ describe('메시지 정리', () => {
         payload: { workspaceId: workspace.workspaceId, name: 'New Conv' },
       });
 
-      // Assert: 생성된 entityId에 대해 기존 메시지 파일이 있으면 삭제해야 함
+      // Assert: 생성된 conversationId에 대해 기존 메시지 파일이 있으면 삭제해야 함
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const newConv = deps.workspaceStore.getWorkspace(workspace.workspaceId)!.conversations.find(
         (c) => c.name === 'New Conv'
       );
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(newConv!.entityId));
+      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(newConv!.conversationId));
     });
   });
 
@@ -373,7 +373,7 @@ describe('메시지 정리', () => {
       // 1단계: 워크스페이스 생성 및 메시지 추가
       const { workspace: ws1 } = deps.workspaceStore.createWorkspace('Test1', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(ws1.workspaceId)!;
-      deps.messageStore.addUserMessage(conv1.entityId, 'Old message from deleted workspace');
+      deps.messageStore.addUserMessage(conv1.conversationId, 'Old message from deleted workspace');
 
       // 2단계: 워크스페이스 삭제
       pylon.handleMessage({
@@ -400,7 +400,7 @@ describe('메시지 정리', () => {
       // 새 워크스페이스의 대화 (있다면)에 이전 메시지가 없어야 함
       const newWs = workspaces[0];
       for (const conv of newWs.conversations) {
-        const messages = deps.messageStore.getMessages(conv.entityId);
+        const messages = deps.messageStore.getMessages(conv.conversationId);
         expect(messages).toHaveLength(0);
       }
     });
@@ -428,16 +428,16 @@ describe('메시지 정리', () => {
       // 1단계: 워크스페이스 생성
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      const originalEntityId = conv1.entityId;
+      const originalConversationId = conv1.conversationId;
 
       // 메시지 추가
-      deps.messageStore.addUserMessage(originalEntityId, 'Old message from deleted conversation');
+      deps.messageStore.addUserMessage(originalConversationId, 'Old message from deleted conversation');
 
       // 2단계: 대화 삭제
       pylon.handleMessage({
         type: 'conversation_delete',
         from: { deviceId: 'client-1' },
-        payload: { entityId: originalEntityId },
+        payload: { conversationId: originalConversationId },
       });
 
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -456,10 +456,10 @@ describe('메시지 정리', () => {
       const newConv = updatedWs.conversations[0];
 
       // ID가 재사용되었을 것임 (localId=1)
-      expect(newConv.entityId).toBe(originalEntityId);
+      expect(newConv.conversationId).toBe(originalConversationId);
 
       // 하지만 이전 메시지가 없어야 함
-      const messages = deps.messageStore.getMessages(newConv.entityId);
+      const messages = deps.messageStore.getMessages(newConv.conversationId);
       expect(messages).toHaveLength(0);
     });
   });
@@ -473,7 +473,7 @@ describe('메시지 정리', () => {
       // Arrange: 영속성 어댑터 없음
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
 
       // Act: 워크스페이스 삭제 (영속성 어댑터 없음)
       pylon.handleMessage({
@@ -483,24 +483,24 @@ describe('메시지 정리', () => {
       });
 
       // Assert: 에러 없이 정상 처리 (메모리 캐시만 클리어)
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(0);
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
 
     it('should_handle_conversation_delete_without_persistence_adapter', () => {
       // Arrange: 영속성 어댑터 없음
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.messageStore.addUserMessage(conversation.entityId, 'Hello');
+      deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
 
       // Act: 대화 삭제 (영속성 어댑터 없음)
       pylon.handleMessage({
         type: 'conversation_delete',
         from: { deviceId: 'client-1' },
-        payload: { entityId: conversation.entityId },
+        payload: { conversationId: conversation.conversationId },
       });
 
       // Assert: 에러 없이 정상 처리 (메모리 캐시만 클리어)
-      expect(deps.messageStore.getMessages(conversation.entityId)).toHaveLength(0);
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
   });
 });

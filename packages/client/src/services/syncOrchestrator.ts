@@ -17,7 +17,7 @@ import { requestWorkspaceList, selectConversation } from './relaySender';
 
 export interface SyncDeps {
   requestWorkspaceList: () => boolean;
-  selectConversation: (entityId: number) => boolean;
+  selectConversation: (conversationId: number) => boolean;
 }
 
 // ============================================================================
@@ -46,18 +46,22 @@ export class SyncOrchestrator {
 
   /**
    * workspace 목록 수신 처리
-   * requesting 상태일 때만 동작 (push 방어)
+   * idle, requesting, failed 상태에서 동작 (synced일 때만 무시)
+   *
+   * idle 상태 허용 이유: full refresh 시 workspace_list_result가
+   * auth_result보다 먼저 도착할 수 있음 (race condition)
    */
-  onWorkspaceListReceived(selectedEntityId: number | null): void {
+  onWorkspaceListReceived(selectedConversationId: number | null): void {
     const syncStore = useSyncStore.getState();
-    if (syncStore.workspaceSync !== 'requesting') return;
+    // synced 상태일 때만 무시 (중복 push 방어)
+    if (syncStore.workspaceSync === 'synced') return;
 
     this.clearWorkspaceTimer();
     syncStore.setWorkspaceSync('synced');
 
-    if (selectedEntityId !== null) {
-      syncStore.setConversationPhase(selectedEntityId, 'requesting');
-      this.deps.selectConversation(selectedEntityId);
+    if (selectedConversationId !== null) {
+      syncStore.setConversationPhase(selectedConversationId, 'requesting');
+      this.deps.selectConversation(selectedConversationId);
     }
   }
 
@@ -66,10 +70,10 @@ export class SyncOrchestrator {
    * 현재는 useMessageRouter에서 직접 syncStore를 업데이트하므로,
    * 이 메서드는 추가적인 조율이 필요할 때만 사용
    */
-  onHistoryReceived(entityId: number, syncedFrom: number, syncedTo: number, totalCount: number): void {
+  onHistoryReceived(conversationId: number, syncedFrom: number, syncedTo: number, totalCount: number): void {
     const syncStore = useSyncStore.getState();
-    syncStore.setConversationSync(entityId, syncedFrom, syncedTo, totalCount);
-    syncStore.setConversationPhase(entityId, 'synced');
+    syncStore.setConversationSync(conversationId, syncedFrom, syncedTo, totalCount);
+    syncStore.setConversationPhase(conversationId, 'synced');
   }
 
   /**

@@ -285,7 +285,7 @@ pnpm dev:restart  # 재시작
 
 | 환경 | 데이터 경로 |
 |------|------------|
-| Dev | `packages/pylon/data/` |
+| Dev | `dev-data/` |
 | Stage | `stage-data/data/` (실제), `release-stage/pylon/data/` (junction) |
 | Release | `release-data/data/` (실제), `release/pylon/data/` (junction) |
 

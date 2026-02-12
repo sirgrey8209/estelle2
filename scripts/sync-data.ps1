@@ -23,7 +23,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $DataPaths = @{
     'release' = Join-Path $RepoRoot "release-data\data"
     'stage'   = Join-Path $RepoRoot "stage-data\data"
-    'dev'     = Join-Path $RepoRoot "packages\pylon\data"
+    'dev'     = Join-Path $RepoRoot "dev-data"
 }
 
 # 검증

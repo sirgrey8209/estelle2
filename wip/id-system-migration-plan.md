@@ -539,13 +539,48 @@ Copy-Item -Recurse release-data-backup-xxx/ release-data/
 
 ---
 
-## 다음 단계
+## 진행 상태
 
-1. ~~이 플랜 검토 및 승인~~ ✅
-2. `wip/id-system-migration-tdd.md` 작성 (TDD 테스트 케이스)
-3. Phase 1부터 순차 진행 (TDD)
+### ✅ Phase 1: Core 패키지 완료 (260212)
+
+- `packages/core/src/utils/id-system.ts` 신규 작성 (24비트 통합 ID)
+- `packages/core/tests/utils/id-system.test.ts` 80개 테스트 통과
+- `packages/core/src/utils/index.ts` export 정리 (레거시 충돌 해결)
+- 타입 충돌 해결: `DeviceType` → `NumericDeviceType`, `DeviceId` → `NumericDeviceId`
+
+### ✅ Phase 2: Pylon WorkspaceStore 완료 (260212)
+
+- `packages/pylon/src/stores/workspace-store.ts` 마이그레이션
+  - `_envId` + `_pylonId: number` → `_pylonId: PylonId` (7비트)
+  - `encodeEntityIdWithEnv` → `encodeConversationId` + `encodeWorkspaceId`
+  - `decodeEntityIdWithEnv` → `decodeConversationId` + `decodeWorkspaceId`
+- `packages/pylon/tests/stores/workspace-store.test.ts` 업데이트
+  - 79개 테스트 통과
+- Core 598개 테스트 통과
+
+### ✅ Phase 3: Relay deviceId 체계 변경 완료 (260212)
+
+- `packages/core/src/utils/deviceId.ts` 마이그레이션
+  - 새 상수: `PYLON_INDEX_MIN/MAX` (1~15), `CLIENT_INDEX_MIN/MAX` (0~15)
+  - 새 함수: `isValidPylonIndex`, `isValidClientIndex`
+  - 레거시 함수 deprecated 처리
+- `packages/relay/src/device-id-validation.ts` 재작성
+  - `DeviceIdAssigner` → `ClientIndexAllocator`
+  - 순차 증가 → **빈 번호 재활용** 방식
+  - 범위: 100+ → 0~15
+- `packages/relay/tests/device-id-validation.test.ts` 업데이트
+  - 30개 테스트 통과
+- `packages/core/tests/types/deviceId.test.ts` 업데이트
+  - 22개 테스트 통과
+- Core 601개 + Relay 165개 테스트 통과
+
+### ⏳ Phase 4: Client conversationId 적용 (미진행)
+
+### ⏳ Phase 5: dev/stage 테스트 (미진행)
+
+### ⏳ Phase 6: Release 데이터 마이그레이션 (미진행)
 
 ---
 
 *작성일: 2026-02-11*
-*갱신일: 2026-02-11*
+*갱신일: 2026-02-12*

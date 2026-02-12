@@ -121,14 +121,16 @@ describe('RelayService', () => {
       service.connect();
       await new Promise((r) => setTimeout(r, 10));
 
+      // Relay는 payload.device.deviceId로 인코딩된 deviceId를 전송
       mockAdapter.simulateMessage(
         JSON.stringify({
           type: 'auth_result',
-          payload: { success: true, deviceId: 'device-123' },
+          payload: { success: true, device: { deviceId: 123 } },
         })
       );
 
-      expect(onAuthenticated).toHaveBeenCalledWith('device-123');
+      // deviceId는 숫자로 오므로 문자열로 변환되어 emit됨
+      expect(onAuthenticated).toHaveBeenCalledWith('123');
     });
   });
 
@@ -166,7 +168,7 @@ describe('RelayService', () => {
 
       const lastMessage = JSON.parse(mockAdapter.sentMessages[1]);
       expect(lastMessage.type).toBe('claude_send');
-      expect(lastMessage.payload.entityId).toBe(1001);
+      expect(lastMessage.payload.conversationId).toBe(1001);
       expect(lastMessage.payload.content).toBe('Hello Claude');
     });
 

@@ -17,7 +17,7 @@ import type { UserTextMessage } from '@estelle/core';
  */
 export function ChatArea() {
   // conversationStore에서 현재 대화의 상태 가져오기
-  const currentEntityId = useConversationStore((s) => s.currentEntityId);
+  const currentConversationId = useConversationStore((s) => s.currentConversationId);
   const currentState = useCurrentConversationState();
   const status = currentState?.status ?? 'idle';
   const hasPendingRequests = (currentState?.pendingRequests?.length ?? 0) > 0;
@@ -29,7 +29,7 @@ export function ChatArea() {
   // 업로드 완료 후 메시지 전송을 위한 ref
   const pendingMessageRef = useRef<{
     text: string;
-    entityId: number;
+    conversationId: number;
     workspaceId: string;
     pylonPaths: string[];
     thumbnails: (string | undefined)[];
@@ -86,13 +86,13 @@ export function ChatArea() {
           })),
         };
         // conversationStore에 메시지 추가
-        if (pending.entityId) {
-          useConversationStore.getState().addMessage(pending.entityId, userMessage);
+        if (pending.conversationId) {
+          useConversationStore.getState().addMessage(pending.conversationId, userMessage);
         }
 
-        // Relay로 메시지 전송 (entityId + pylonPath 사용)
+        // Relay로 메시지 전송 (conversationId + pylonPath 사용)
         sendClaudeMessage(
-          pending.entityId,
+          pending.conversationId,
           pending.text,
           pending.pylonPaths
         );
@@ -110,7 +110,7 @@ export function ChatArea() {
   const handleSend = useCallback(async (text: string, attachments?: AttachedImage[]) => {
     if (!selectedConversation) return;
 
-    const entityId = selectedConversation.entityId;
+    const conversationId = selectedConversation.conversationId;
     const workspaceId = selectedConversation.workspaceId;
 
     // 첨부파일이 있고 File 객체가 있으면 업로드 플로우 실행
@@ -129,7 +129,7 @@ export function ChatArea() {
       // pending 상태 설정
       pendingMessageRef.current = {
         text,
-        entityId,
+        conversationId,
         workspaceId,
         pylonPaths: [],
         thumbnails: [],
@@ -147,7 +147,7 @@ export function ChatArea() {
             filename: attachment.fileName,
             targetDeviceId: targetPylon.deviceId,
             workspaceId,
-            entityId,
+            conversationId,
             message: text,
             mimeType: attachment.mimeType,
           });
@@ -176,40 +176,40 @@ export function ChatArea() {
       })),
     };
     // conversationStore에 메시지 추가
-    useConversationStore.getState().addMessage(entityId, userMessage);
+    useConversationStore.getState().addMessage(conversationId, userMessage);
 
     // Relay로 메시지 전송
-    sendClaudeMessage(entityId, text, attachments?.map(a => a.uri));
+    sendClaudeMessage(conversationId, text, attachments?.map(a => a.uri));
   }, [selectedConversation, connectedPylons, queueMessage, dequeueMessage]);
 
   // 중지 핸들러
   const handleStop = useCallback(() => {
     if (!selectedConversation) return;
 
-    sendClaudeControl(selectedConversation.entityId, 'stop');
+    sendClaudeControl(selectedConversation.conversationId, 'stop');
   }, [selectedConversation]);
 
   const isWorking = status === 'working';
   const showRequestBar = hasPendingRequests;
 
   // 페이징 상태 (syncStore에서 가져옴)
-  const syncInfo = useSyncStore((s) => currentEntityId ? s.getConversationSync(currentEntityId) : null);
-  const hasMoreBefore = useSyncStore((s) => currentEntityId ? s.hasMoreBefore(currentEntityId) : false);
-  const isLoadingMore = useSyncStore((s) => currentEntityId ? s.isLoadingMore(currentEntityId) : false);
+  const syncInfo = useSyncStore((s) => currentConversationId ? s.getConversationSync(currentConversationId) : null);
+  const hasMoreBefore = useSyncStore((s) => currentConversationId ? s.hasMoreBefore(currentConversationId) : false);
+  const isLoadingMore = useSyncStore((s) => currentConversationId ? s.isLoadingMore(currentConversationId) : false);
 
   // 추가 히스토리 로드 핸들러
   const handleLoadMoreHistory = useCallback(() => {
     if (!selectedConversation || isLoadingMore || !hasMoreBefore) return;
 
-    const entityId = selectedConversation.entityId;
+    const conversationId = selectedConversation.conversationId;
 
     // 로딩 상태 설정
-    useSyncStore.getState().setLoadingMore(entityId, true);
+    useSyncStore.getState().setLoadingMore(conversationId, true);
 
     // loadBefore = syncedFrom (이 인덱스 이전의 메시지를 로드)
-    const currentSyncInfo = useSyncStore.getState().getConversationSync(entityId);
+    const currentSyncInfo = useSyncStore.getState().getConversationSync(conversationId);
     const loadBefore = currentSyncInfo?.syncedFrom ?? 0;
-    requestMoreHistory(entityId, loadBefore);
+    requestMoreHistory(conversationId, loadBefore);
   }, [selectedConversation, isLoadingMore, hasMoreBefore]);
 
   return (

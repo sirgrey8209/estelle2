@@ -36,7 +36,8 @@ function useRelayConnection() {
           success: boolean;
           device?: { deviceId: number };
         };
-        if (payload.success && payload.device?.deviceId) {
+        // deviceId가 0일 수 있으므로 !== undefined로 체크
+        if (payload.success && payload.device?.deviceId !== undefined) {
           setAuthenticated(true);
           setDeviceId(String(payload.device.deviceId));
 
@@ -64,11 +65,12 @@ function useRelayConnection() {
     console.log('[Relay] Connecting to:', wsUrl);
 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let intentionalClose = false; // cleanup에서 닫는 경우
 
     const connect = () => {
       try {
         const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        wsRef.current = ws; // 새 연결을 현재 활성 연결로 지정
         setWebSocket(ws);
 
         ws.onopen = () => {
@@ -94,12 +96,20 @@ function useRelayConnection() {
 
         ws.onclose = () => {
           console.log('[Relay] Disconnected');
+
+          // 이 연결이 현재 활성 연결인 경우에만 처리
+          // (HMR 등으로 새 연결이 이미 만들어진 경우 무시)
+          if (wsRef.current !== ws) {
+            console.log('[Relay] Ignoring close from stale connection');
+            return;
+          }
+
           syncOrchestrator.cleanup();
           setConnected(false);
           setWebSocket(null);
 
-          // 재연결 시도
-          if (!reconnectTimer) {
+          // 의도적 종료(cleanup)가 아닌 경우에만 재연결
+          if (!intentionalClose && !reconnectTimer) {
             reconnectTimer = setTimeout(() => {
               reconnectTimer = null;
               connect();
@@ -127,8 +137,10 @@ function useRelayConnection() {
     connect();
 
     return () => {
+      intentionalClose = true; // cleanup에서 닫는 것임을 표시
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
       if (wsRef.current) {
         wsRef.current.close();

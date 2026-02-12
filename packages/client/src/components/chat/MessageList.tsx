@@ -98,8 +98,8 @@ export function MessageList({
   const handleAttachmentPress = useCallback((attachment: Attachment) => {
     const { filename, path: filePath } = attachment;
     const pylonId = selectedConversation?.pylonId;
-    const entityId = selectedConversation?.entityId;
-    if (!pylonId || !entityId) return;
+    const conversationId = selectedConversation?.conversationId;
+    if (!pylonId || !conversationId) return;
 
     // 캐시에 있으면 바로 표시
     const cached = blobService.getCachedImage(filename);
@@ -127,7 +127,7 @@ export function MessageList({
 
     blobService.requestFile({
       targetDeviceId: pylonId,
-      entityId,
+      conversationId,
       filename,
       filePath,
     });

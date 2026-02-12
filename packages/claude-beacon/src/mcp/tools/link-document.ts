@@ -3,13 +3,13 @@
  * @description link/unlink/list MCP 도구 구현
  *
  * Claude가 문서를 현재 대화에 연결/해제하거나 연결된 문서 목록을 조회할 때 사용하는 MCP 도구.
- * - BeaconClient로 toolUseId에서 entityId 조회
- * - PylonClient로 link/unlink/list 요청 수행
+ * - BeaconClient로 toolUseId에서 conversationId, mcpHost, mcpPort 조회
+ * - PylonClient로 link/unlink/list 요청 수행 (동적 host:port)
  * - MCP 표준 응답 포맷 반환
  */
 
 import fs from 'fs';
-import { BeaconClient } from '../beacon-client.js';
+import { BeaconClient, type LookupSuccessResult } from '../beacon-client.js';
 import { PylonClient } from '../pylon-client.js';
 
 // 디버그 로그 파일
@@ -49,6 +49,14 @@ interface ToolDefinition {
   };
 }
 
+/** Beacon lookup 결과 (성공 시) */
+interface LookupOkResult {
+  success: true;
+  conversationId: number;
+  mcpHost: string;
+  mcpPort: number;
+}
+
 // ============================================================================
 // 헬퍼 함수
 // ============================================================================
@@ -73,12 +81,12 @@ function createErrorResponse(message: string): ToolResult {
 }
 
 /**
- * BeaconClient로 entityId 조회
+ * BeaconClient로 conversationId, mcpHost, mcpPort 조회
  */
-async function lookupEntityId(
+async function lookupPylonInfo(
   toolUseId: string,
-): Promise<{ success: true; entityId: number } | { success: false; error: string }> {
-  debugLog(`lookupEntityId called: toolUseId=${toolUseId}`);
+): Promise<LookupOkResult | { success: false; error: string }> {
+  debugLog(`lookupPylonInfo called: toolUseId=${toolUseId}`);
   try {
     const beaconClient = BeaconClient.getInstance();
     debugLog(`BeaconClient.lookup starting: port=${beaconClient.port}`);
@@ -89,7 +97,13 @@ async function lookupEntityId(
       return { success: false, error: lookupResult.error };
     }
 
-    return { success: true, entityId: lookupResult.entityId };
+    const result = lookupResult as LookupSuccessResult;
+    return {
+      success: true,
+      conversationId: result.conversationId,
+      mcpHost: result.mcpHost,
+      mcpPort: result.mcpPort,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     debugLog(`BeaconClient.lookup error: ${message}`);
@@ -117,17 +131,20 @@ export async function executeLinkDoc(
     return createErrorResponse('path is required');
   }
 
-  // 2. BeaconClient로 entityId 조회
-  const lookupResult = await lookupEntityId(meta.toolUseId);
+  // 2. BeaconClient로 conversationId, mcpHost, mcpPort 조회
+  const lookupResult = await lookupPylonInfo(meta.toolUseId);
   if (!lookupResult.success) {
-    return createErrorResponse(`Lookup failed: entityId not found - ${lookupResult.error}`);
+    return createErrorResponse(`Lookup failed: conversationId not found - ${lookupResult.error}`);
   }
 
-  // 3. PylonClient로 link 요청
+  // 3. PylonClient로 link 요청 (동적 host:port)
   try {
-    const pylonClient = PylonClient.getInstance();
-    debugLog(`PylonClient.link: port=${pylonClient.port}, entityId=${lookupResult.entityId}, ESTELLE_MCP_PORT=${process.env['ESTELLE_MCP_PORT']}`);
-    const linkResult = await pylonClient.link(lookupResult.entityId, args.path);
+    const pylonClient = new PylonClient({
+      host: lookupResult.mcpHost,
+      port: lookupResult.mcpPort,
+    });
+    debugLog(`PylonClient.link: host=${lookupResult.mcpHost}, port=${lookupResult.mcpPort}, conversationId=${lookupResult.conversationId}`);
+    const linkResult = await pylonClient.link(lookupResult.conversationId, args.path);
 
     if (!linkResult.success) {
       return createErrorResponse(linkResult.error ?? 'File not found');
@@ -164,16 +181,19 @@ export async function executeUnlinkDoc(
     return createErrorResponse('path is required');
   }
 
-  // 2. BeaconClient로 entityId 조회
-  const lookupResult = await lookupEntityId(meta.toolUseId);
+  // 2. BeaconClient로 conversationId, mcpHost, mcpPort 조회
+  const lookupResult = await lookupPylonInfo(meta.toolUseId);
   if (!lookupResult.success) {
-    return createErrorResponse(`Lookup failed: entityId not found - ${lookupResult.error}`);
+    return createErrorResponse(`Lookup failed: conversationId not found - ${lookupResult.error}`);
   }
 
-  // 3. PylonClient로 unlink 요청
+  // 3. PylonClient로 unlink 요청 (동적 host:port)
   try {
-    const pylonClient = PylonClient.getInstance();
-    const unlinkResult = await pylonClient.unlink(lookupResult.entityId, args.path);
+    const pylonClient = new PylonClient({
+      host: lookupResult.mcpHost,
+      port: lookupResult.mcpPort,
+    });
+    const unlinkResult = await pylonClient.unlink(lookupResult.conversationId, args.path);
 
     if (!unlinkResult.success) {
       return createErrorResponse(unlinkResult.error ?? 'Document not found');
@@ -204,16 +224,19 @@ export async function executeListDocs(
   _args: Record<string, unknown>,
   meta: ToolMeta,
 ): Promise<ToolResult> {
-  // 1. BeaconClient로 entityId 조회
-  const lookupResult = await lookupEntityId(meta.toolUseId);
+  // 1. BeaconClient로 conversationId, mcpHost, mcpPort 조회
+  const lookupResult = await lookupPylonInfo(meta.toolUseId);
   if (!lookupResult.success) {
-    return createErrorResponse(`Lookup failed: entityId not found - ${lookupResult.error}`);
+    return createErrorResponse(`Lookup failed: conversationId not found - ${lookupResult.error}`);
   }
 
-  // 2. PylonClient로 list 요청
+  // 2. PylonClient로 list 요청 (동적 host:port)
   try {
-    const pylonClient = PylonClient.getInstance();
-    const listResult = await pylonClient.list(lookupResult.entityId);
+    const pylonClient = new PylonClient({
+      host: lookupResult.mcpHost,
+      port: lookupResult.mcpPort,
+    });
+    const listResult = await pylonClient.list(lookupResult.conversationId);
 
     if (!listResult.success) {
       return createErrorResponse(listResult.error ?? 'List failed');

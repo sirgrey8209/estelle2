@@ -9,7 +9,7 @@
  * @see https://github.com/anthropics/claude-code-sdk
  */
 
-import type { EntityId } from '../utils/entity-id.js';
+import type { ConversationId } from '../utils/id-system.js';
 
 /**
  * Claude 상태 변경 이벤트
@@ -305,16 +305,19 @@ export type ClaudeEvent =
  * 특정 대화에서 발생한 Claude 이벤트를 래핑하는 페이로드입니다.
  * 이벤트가 어떤 대화에서 발생했는지 식별하기 위해 사용됩니다.
  *
- * @property entityId - 이벤트가 발생한 엔티티의 고유 식별자 (비트 패킹된 숫자)
- * @property conversationId - @deprecated entityId를 사용하세요. 레거시 호환용
+ * @property conversationId - 이벤트가 발생한 대화의 고유 식별자 (24비트 ConversationId)
  * @property event - 발생한 Claude 이벤트
  *
  * @example
  * ```typescript
- * import { encodeEntityId } from '../utils/entity-id.js';
+ * import { encodePylonId, encodeWorkspaceId, encodeConversationId } from '../utils/id-system.js';
+ *
+ * const pylonId = encodePylonId(0, 1);
+ * const workspaceId = encodeWorkspaceId(pylonId, 2);
+ * const conversationId = encodeConversationId(workspaceId, 3);
  *
  * const payload: ClaudeEventPayload = {
- *   entityId: encodeEntityId(1, 2, 3),  // pylonId:1, workspaceId:2, conversationId:3
+ *   conversationId: conversationId,
  *   event: {
  *     type: 'text',
  *     content: 'Working on your request...'
@@ -323,14 +326,8 @@ export type ClaudeEvent =
  * ```
  */
 export interface ClaudeEventPayload {
-  /** 이벤트가 발생한 엔티티의 고유 식별자 (비트 패킹된 숫자) */
-  entityId: EntityId;
-
-  /**
-   * @deprecated entityId를 사용하세요. 레거시 호환용
-   * 이벤트가 발생한 대화의 고유 식별자 (문자열)
-   */
-  conversationId?: string;
+  /** 이벤트가 발생한 대화의 고유 식별자 (24비트 ConversationId) */
+  conversationId: ConversationId;
 
   /** 발생한 Claude 이벤트 */
   event: ClaudeEvent;

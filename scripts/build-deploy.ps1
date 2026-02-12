@@ -226,8 +226,9 @@ function Build-TargetFolder {
     Write-Utf8File -Path $pylonPkgPath -Content $pylonPkgContent
     Write-Detail "  Fixed workspace:* -> file:../core (pylon)"
 
-    # ecosystem.config.cjs (공통 함수 사용)
-    $ecosystemConfig = New-EcosystemConfig -PylonConfig $TargetConfig.pylon -BeaconConfig $TargetConfig.beacon -EnvId $TargetConfig.envId
+    # ecosystem.config.cjs (공통 함수 사용) - DataDir은 junction target의 data 하위 폴더
+    $dataSubDir = Join-Path $DataDir "data"
+    $ecosystemConfig = New-EcosystemConfig -PylonConfig $TargetConfig.pylon -BeaconConfig $TargetConfig.beacon -EnvId $TargetConfig.envId -DataDir $dataSubDir
     Write-Utf8File -Path (Join-Path $PylonDst "ecosystem.config.cjs") -Content $ecosystemConfig
 
     # Data/Uploads junction
@@ -260,7 +261,7 @@ function Build-TargetFolder {
     }
 
     # Dockerfile & fly.toml (공통 함수 사용)
-    Write-Utf8File -Path (Join-Path $RelayDst "Dockerfile") -Content (New-Dockerfile)
+    Write-Utf8File -Path (Join-Path $RelayDst "Dockerfile") -Content (New-Dockerfile -EnvId $TargetConfig.envId)
     Write-Utf8File -Path (Join-Path $RelayDst "fly.toml") -Content (New-FlyToml -FlyApp $TargetConfig.relay.flyApp)
 
     Write-Ok "Target folder built: $TargetDirName/"
