@@ -19,7 +19,7 @@ import { MessageType } from '@estelle/core';
 // =========================================
 
 // WebSocket mock
-let sentMessages: Array<{ type: string; payload: unknown }> = [];
+let sentMessages: Array<{ type: string; payload: unknown; to?: number[] }> = [];
 const WS_OPEN = 1;
 const mockWebSocket = {
   readyState: WS_OPEN,
