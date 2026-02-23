@@ -167,15 +167,7 @@ New app created: my-estelle-relay
 
 ## 4단계: Estelle 설정
 
-### 4-1. 프로젝트 다운로드 (아직 안 했다면)
-
-```bash
-git clone https://github.com/your-username/estelle.git
-cd estelle
-pnpm install
-```
-
-### 4-2. 환경 변수 설정
+### 4-1. 환경 변수 설정
 
 **Windows (명령 프롬프트):**
 ```bash
@@ -187,7 +179,7 @@ copy .env.example .env
 Copy-Item .env.example .env
 ```
 
-### 4-3. .env 파일 수정
+### 4-2. .env 파일 수정
 
 메모장으로 `.env` 파일을 열고 수정:
 
@@ -202,7 +194,7 @@ VITE_GOOGLE_CLIENT_ID=123456789-xxxxxxxxxxxx.apps.googleusercontent.com
 GOOGLE_CLIENT_ID=123456789-xxxxxxxxxxxx.apps.googleusercontent.com
 ```
 
-### 4-4. 환경 설정 파일 수정
+### 4-3. 환경 설정 파일 수정
 
 메모장으로 `config/environments.json` 파일을 열고 수정:
 

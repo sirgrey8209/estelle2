@@ -108,31 +108,13 @@ claude login
 
 ---
 
-## 2단계: Estelle 다운로드
+## 2단계: 프로젝트 설정
 
-### 2-1. 프로젝트 다운로드
+> 💡 **팁**: 파일 탐색기에서 estelle2 폴더를 열고, 주소창에 `cmd`를 입력하면 해당 위치에서 명령 프롬프트가 열려요.
 
-원하는 폴더에서 명령 프롬프트를 열고:
+### 2-1. 의존성 설치
 
-```bash
-git clone https://github.com/your-username/estelle.git
-```
-
-### 2-2. 프로젝트 폴더로 이동
-
-```bash
-cd estelle
-```
-
-> 💡 **팁**: 파일 탐색기에서 estelle 폴더를 열고, 주소창에 `cmd`를 입력하면 해당 위치에서 명령 프롬프트가 열려요.
-
----
-
-## 3단계: 프로젝트 설정
-
-### 3-1. 의존성 설치
-
-estelle 폴더에서:
+estelle2 폴더에서:
 
 ```bash
 pnpm install
@@ -140,7 +122,7 @@ pnpm install
 
 여러 패키지가 설치되며 시간이 좀 걸릴 수 있어요 (1-3분).
 
-### 3-2. 환경 설정 파일 복사
+### 2-2. 환경 설정 파일 복사
 
 **Windows (명령 프롬프트):**
 ```bash
@@ -154,7 +136,7 @@ Copy-Item .env.example .env
 
 > 💡 로컬 환경에서는 `.env` 파일을 수정하지 않아도 됩니다. `VITE_GOOGLE_CLIENT_ID`가 비어있으면 Google 로그인 없이 바로 사용할 수 있어요!
 
-### 3-3. 프로젝트 빌드
+### 2-3. 프로젝트 빌드
 
 ```bash
 pnpm build
@@ -164,9 +146,9 @@ pnpm build
 
 ---
 
-## 4단계: Estelle 실행
+## 3단계: Estelle 실행
 
-### 4-1. 서버 시작
+### 3-1. 서버 시작
 
 ```bash
 pnpm dev
@@ -180,7 +162,7 @@ pnpm dev
 [Client] Local: http://localhost:5173
 ```
 
-### 4-2. 브라우저에서 접속
+### 3-2. 브라우저에서 접속
 
 브라우저를 열고 주소창에 입력:
 
@@ -192,7 +174,7 @@ Estelle 화면이 나타나면 성공!
 
 ---
 
-## 5단계: 서버 관리
+## 4단계: 서버 관리
 
 ### 서버 상태 확인
 
@@ -217,15 +199,15 @@ pnpm dev:restart
 
 ---
 
-## 6단계: Claude Code와 연결
+## 5단계: Claude Code와 연결
 
 Estelle을 Claude Code의 MCP 서버로 연결하면, Claude가 Estelle을 통해 파일을 전송하거나 배포할 수 있어요.
 
-### 6-1. 설정 파일 위치 찾기
+### 5-1. 설정 파일 위치 찾기
 
 **Windows:** `C:\Users\{사용자이름}\.claude\` 폴더
 
-### 6-2. 설정 파일 수정
+### 5-2. 설정 파일 수정
 
 `claude_desktop_config.json` 파일을 메모장으로 열고 다음 내용 추가:
 
@@ -243,7 +225,7 @@ Estelle을 Claude Code의 MCP 서버로 연결하면, Claude가 Estelle을 통�
 
 > ⚠️ 기존 내용이 있다면 `mcpServers` 안에 `"estelle": {...}` 부분만 추가하세요.
 
-### 6-3. Claude Code 재시작
+### 5-3. Claude Code 재시작
 
 Claude Code를 껐다가 다시 켜면 Estelle이 연결됩니다.
 

@@ -60,8 +60,8 @@ Estelle을 사용하면 PC에서 실행 중인 Claude Code를 어디서든 - 휴
 
 ```bash
 # 저장소 클론
-git clone https://github.com/your-username/estelle.git
-cd estelle
+git clone https://github.com/your-username/estelle2.git
+cd estelle2
 
 # 의존성 설치
 pnpm install
@@ -104,7 +104,7 @@ pnpm --filter @estelle/core test:watch
 ## 프로젝트 구조
 
 ```
-estelle/
+estelle2/
 ├── packages/
 │   ├── core/      # 공유 타입 및 메시지 스키마
 │   ├── relay/     # Relay 서버 (Fly.io 배포)
