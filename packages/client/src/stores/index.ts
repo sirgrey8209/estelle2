@@ -77,3 +77,9 @@ export {
   type SyncPhase,
   type ConversationSyncInfo,
 } from './syncStore';
+
+// 공유 링크 상태 스토어
+export {
+  useShareStore,
+  type ShareState,
+} from './shareStore';

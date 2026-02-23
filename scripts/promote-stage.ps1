@@ -123,13 +123,23 @@ try {
 
     # ecosystem.config.cjs (공통 함수 — ESTELLE_ENV_CONFIG JSON 방식)
     $dataSubDir = Join-Path $ReleaseDataDir "data"
-    $ecosystemConfig = New-EcosystemConfig -PylonConfig $ReleaseConfig.pylon -BeaconConfig $ReleaseConfig.beacon -EnvId $ReleaseConfig.envId -DataDir $dataSubDir
+    $ecosystemConfig = New-EcosystemConfig -PylonConfig $ReleaseConfig.pylon -EnvId $ReleaseConfig.envId -DataDir $dataSubDir
     Write-Utf8File -Path (Join-Path $ReleaseDir "pylon\ecosystem.config.cjs") -Content $ecosystemConfig
 
     # fly.toml & Dockerfile (공통 함수 사용)
     $flyApp = $ReleaseConfig.relay.flyApp
     Write-Utf8File -Path (Join-Path $ReleaseDir "relay\fly.toml") -Content (New-FlyToml -FlyApp $flyApp)
     Write-Utf8File -Path (Join-Path $ReleaseDir "relay\Dockerfile") -Content (New-Dockerfile -EnvId $ReleaseConfig.envId)
+
+    # version.json: env를 release로 교체
+    $versionPath = Join-Path $ReleaseDir "relay\public\version.json"
+    if (Test-Path $versionPath) {
+        $versionObj = Get-Content $versionPath -Raw | ConvertFrom-Json
+        $versionObj.env = "release"
+        $versionJson = ConvertTo-Json -InputObject $versionObj -Compress
+        Write-Utf8File -Path $versionPath -Content $versionJson
+        Write-Detail "version.json: env -> release (version: $($versionObj.version))"
+    }
 
     Write-Ok "Release configs generated"
 

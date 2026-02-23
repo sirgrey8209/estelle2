@@ -14,12 +14,7 @@
     "dev:logs": "node scripts/dev-server.js logs",
     "dev:relay": "pnpm --filter @estelle/relay dev",
     "dev:pylon": "pnpm --filter @estelle/pylon dev",
-    "dev:client": "pnpm --filter @estelle/client dev",
-    "beacon": "node scripts/beacon.js start",
-    "beacon:stop": "node scripts/beacon.js stop",
-    "beacon:status": "node scripts/beacon.js status",
-    "beacon:restart": "node scripts/beacon.js restart",
-    "beacon:logs": "node scripts/beacon.js logs"
+    "dev:client": "pnpm --filter @estelle/client dev"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

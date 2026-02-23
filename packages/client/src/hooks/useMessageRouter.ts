@@ -14,6 +14,8 @@ import { useConversationStore } from '../stores/conversationStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
+import { clearDraftText } from '../components/chat/InputBar';
+import { debugLog } from '../stores/debugStore';
 
 /**
  * 메시지를 적절한 Store에 라우팅합니다.
@@ -197,7 +199,9 @@ export function routeMessage(message: RelayMessage): void {
           syncStore.extendSyncedFrom(targetConversationId, Math.max(0, newSyncedFrom));
           syncStore.setLoadingMore(targetConversationId, false);
         } else {
-          // 초기 로드 — stale textBuffer 정리 후 메시지 설정
+          // 초기 로드 — 기존 메시지 비우고 새 히스토리로 교체
+          // clearMessages로 이전 상태 초기화 후 setMessages 호출 (중복 방지)
+          convStore.clearMessages(targetConversationId);
           convStore.clearTextBuffer(targetConversationId);
           convStore.setMessages(targetConversationId, messages);
 
@@ -270,6 +274,8 @@ export function routeMessage(message: RelayMessage): void {
       // conversationId가 있으면 이전 캐시 삭제 (새 대화 생성 시 이전 데이터 정리)
       if (conversationId) {
         useConversationStore.getState().deleteConversation(conversationId);
+        // 입력 draft도 삭제
+        clearDraftText(conversationId);
       }
       break;
     }
@@ -313,6 +319,7 @@ function handleClaudeEventForConversation(
     case 'state': {
       const status = event.state as 'idle' | 'working' | 'permission';
       if (status) {
+        debugLog('STATE', status);
         store.setStatus(conversationId, status);
       }
       break;
@@ -321,12 +328,14 @@ function handleClaudeEventForConversation(
     case 'text': {
       const text = event.text as string;
       if (text) {
+        debugLog('TEXT', `+${text.length}ch "${text.slice(0, 30)}${text.length > 30 ? '...' : ''}"`);
         store.appendTextBuffer(conversationId, text);
       }
       break;
     }
 
     case 'textComplete': {
+      debugLog('TEXT', 'complete (flush)');
       store.flushTextBuffer(conversationId);
       break;
     }
@@ -335,12 +344,14 @@ function handleClaudeEventForConversation(
     case 'tool_start': {
       const toolUseId = event.toolUseId as string | undefined;
       const parentToolUseId = event.parentToolUseId as string | null | undefined;
+      const toolName = event.toolName as string;
+      debugLog('TOOL', `start: ${toolName}`);
       const message: StoreMessage = {
         id: toolUseId || generateId(),
         role: 'assistant',
         type: 'tool_start',
         timestamp: Date.now(),
-        toolName: event.toolName as string,
+        toolName,
         toolInput: (event.toolInput || event.input) as Record<string, unknown>,
         ...(parentToolUseId ? { parentToolUseId } : {}),
       };
@@ -446,15 +457,17 @@ function handleClaudeEventForConversation(
     }
 
     case 'result': {
-      store.flushTextBuffer(conversationId);
       const usage = event.usage as Record<string, unknown> | undefined;
+      const durationMs = (event.duration_ms as number) || 0;
+      debugLog('RESULT', `done in ${(durationMs / 1000).toFixed(1)}s`);
+      store.flushTextBuffer(conversationId);
       store.addMessage(conversationId, {
         id: generateId(),
         role: 'system',
         type: 'result',
         timestamp: Date.now(),
         resultInfo: {
-          durationMs: (event.duration_ms as number) || 0,
+          durationMs,
           inputTokens: (usage?.inputTokens as number) || 0,
           outputTokens: (usage?.outputTokens as number) || 0,
           cacheReadTokens: (usage?.cacheReadInputTokens as number) || 0,
@@ -518,6 +531,75 @@ function handleClaudeEventForConversation(
           cacheReadInputTokens: usage.cacheReadInputTokens || 0,
           cacheCreationInputTokens: usage.cacheCreationInputTokens || 0,
         });
+      }
+      break;
+    }
+
+    case 'compactStart': {
+      // Compact 시작 - tool_start 메시지 추가
+      const message: StoreMessage = {
+        id: generateId(),
+        role: 'assistant',
+        type: 'tool_start',
+        timestamp: Date.now(),
+        toolName: 'Compact',
+        toolInput: {},
+      };
+      store.addMessage(conversationId, message);
+      break;
+    }
+
+    case 'compactComplete': {
+      const preTokens = event.preTokens as number | undefined;
+
+      // preTokens 포맷팅 (원본 + 천 단위 쉼표)
+      // 테스트에서 200000과 200,000 둘 다 포함되어야 함
+      let output = 'Compacted';
+      if (preTokens !== undefined) {
+        const formattedTokens = preTokens.toLocaleString();
+        output = `Compacted ${formattedTokens} (${preTokens}) tokens`;
+      }
+
+      // tool_start → tool_complete 교체
+      const state = store.getState(conversationId);
+      if (state) {
+        const messages = [...state.messages];
+        let replaced = false;
+
+        // 역순으로 Compact tool_start 찾기
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.type === 'tool_start' && (msg as { toolName?: string }).toolName === 'Compact') {
+            messages[i] = {
+              id: msg.id,
+              role: 'assistant',
+              type: 'tool_complete',
+              timestamp: msg.timestamp,
+              toolName: 'Compact',
+              toolInput: (msg as { toolInput?: Record<string, unknown> }).toolInput || {},
+              success: true,
+              output,
+            } as StoreMessage;
+            replaced = true;
+            break;
+          }
+        }
+
+        if (replaced) {
+          store.setMessages(conversationId, messages);
+        } else {
+          // tool_start가 없으면 새로 추가
+          store.addMessage(conversationId, {
+            id: generateId(),
+            role: 'assistant',
+            type: 'tool_complete',
+            timestamp: Date.now(),
+            toolName: 'Compact',
+            toolInput: {},
+            success: true,
+            output,
+          } as StoreMessage);
+        }
       }
       break;
     }

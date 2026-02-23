@@ -117,13 +117,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           (c) => c.conversationId === selected.conversationId
         );
         if (conversation) {
-          // 상태 업데이트
+          // 상태 업데이트 (linkedDocuments 포함)
           updatedSelected = {
             ...selected,
             conversationName: conversation.name,
             status: conversation.status,
             unread: conversation.unread,
             permissionMode: conversation.permissionMode,
+            linkedDocuments: conversation.linkedDocuments ?? [],
           };
           break;
         }

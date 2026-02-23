@@ -130,8 +130,8 @@ export interface BlobTransfer {
   /** 전송 컨텍스트 */
   context: BlobContext;
 
-  /** 발신 디바이스 ID */
-  from: string;
+  /** 발신 디바이스 ID (pylonId) */
+  from: number;
 
   /** 저장 경로 */
   savePath: string;
@@ -296,7 +296,7 @@ export class BlobHandler {
    * @param from - 발신 디바이스 ID
    * @returns 처리 결과
    */
-  handleBlobStart(payload: BlobStartPayload, from: string): BlobHandlerResult {
+  handleBlobStart(payload: BlobStartPayload, from: number): BlobHandlerResult {
     const {
       blobId,
       filename,
@@ -498,7 +498,7 @@ export class BlobHandler {
    * @param from - 요청한 디바이스 ID
    * @returns 처리 결과
    */
-  handleBlobRequest(payload: BlobRequestPayload, from: string): BlobHandlerResult {
+  handleBlobRequest(payload: BlobRequestPayload, from: number): BlobHandlerResult {
     const { blobId, filename, localPath } = payload;
 
     console.log(`[BLOB] Download request: ${filename}`, { blobId, localPath });
@@ -526,13 +526,15 @@ export class BlobHandler {
     const mimeType = this.getMimeType(filename);
     const totalChunks = Math.ceil(fileBuffer.length / BlobConfig.CHUNK_SIZE);
 
-    console.log(`[BLOB] Sending file: ${filename} (${fileBuffer.length} bytes, ${totalChunks} chunks)`);
+    console.log(`[BLOB] Sending file: ${filename} (${fileBuffer.length} bytes, ${totalChunks} chunks) to ${from}`);
+
+    // 요청자 deviceId (Relay 라우팅용)
+    const toDeviceId = from;
 
     // blob_start 전송
-    // Note: 'to' 필드는 Relay가 라우팅 시 설정하므로 여기서는 생략
-    // from 정보는 메시지 처리 레이어에서 라우팅에 사용됨
     this.send({
       type: MessageType.BLOB_START,
+      to: [toDeviceId],
       payload: {
         blobId,
         filename,
@@ -554,6 +556,7 @@ export class BlobHandler {
 
       this.send({
         type: MessageType.BLOB_CHUNK,
+        to: [toDeviceId],
         payload: {
           blobId,
           index: i,
@@ -568,6 +571,7 @@ export class BlobHandler {
     const checksum = createHash('sha256').update(fileBuffer).digest('hex');
     this.send({
       type: MessageType.BLOB_END,
+      to: [toDeviceId],
       payload: {
         blobId,
         checksum: `sha256:${checksum}`,

@@ -904,8 +904,8 @@ export class MessageStore {
       return null;
     }
 
-    // 저장 전 trim 적용
-    this.trimMessages(sessionId);
+    // 저장 시 trim 제거 - 전체 히스토리 보존
+    // 클라이언트 전송은 maxBytes 페이징으로 처리됨
 
     const messages = this._cache.get(sessionId)!;
     return {
@@ -955,5 +955,28 @@ export class MessageStore {
    */
   hasCache(sessionId: number): boolean {
     return this._cache.has(sessionId);
+  }
+
+  // ============================================================================
+  // Share 전용 메서드
+  // ============================================================================
+
+  /**
+   * 공유용 메시지 히스토리 조회
+   *
+   * @description
+   * 공유 페이지에서 사용할 전체 메시지를 시간순(과거→최신)으로 반환합니다.
+   * 일반 getMessages와 달리 페이징 없이 전체 메시지를 반환합니다.
+   *
+   * @param sessionId - 세션 ID
+   * @returns 시간순 정렬된 전체 메시지 배열
+   */
+  getSharedMessageHistory(sessionId: number): StoreMessage[] {
+    if (!this._cache.has(sessionId)) {
+      return [];
+    }
+
+    // 원본은 이미 시간순 (오래된 것 → 최신)으로 저장되어 있음
+    return [...this._cache.get(sessionId)!];
   }
 }

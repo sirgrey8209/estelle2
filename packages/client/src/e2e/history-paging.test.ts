@@ -34,6 +34,7 @@ const mockConversationStore = {
   prependMessages: vi.fn(),
   addMessage: vi.fn(),
   clearTextBuffer: vi.fn(),
+  clearMessages: vi.fn(),
   getState: vi.fn(() => ({ messages: [], status: 'idle' })),
   setStatus: vi.fn(),
 };

@@ -1,12 +1,20 @@
 import { useRelayStore, useSyncStore } from '../stores';
+import { useAuthStore } from '../stores/authStore';
 import { LoadingOverlay } from '../components/common/LoadingOverlay';
 import { ResponsiveLayout } from '../layouts/ResponsiveLayout';
 import { WorkspaceSidebar } from '../components/sidebar/WorkspaceSidebar';
 import { ChatArea } from '../components/chat/ChatArea';
+import { LoginScreen } from '../components/auth/LoginScreen';
 
 export function HomePage() {
   const { isConnected, isAuthenticated } = useRelayStore();
+  const { isAuthenticated: isGoogleAuthenticated } = useAuthStore();
   const workspaceSync = useSyncStore((s) => s.workspaceSync);
+
+  // Google 로그인하지 않은 경우 로그인 화면 표시
+  if (!isGoogleAuthenticated) {
+    return <LoginScreen />;
+  }
 
   // 로딩 메시지 결정
   const getLoadingMessage = () => {

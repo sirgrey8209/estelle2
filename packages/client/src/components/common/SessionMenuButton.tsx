@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Pencil, AlertTriangle, MoreVertical, RefreshCw, Package, Bug, Type, Trash2 } from 'lucide-react';
+import { Lock, Pencil, AlertTriangle, MoreVertical, RefreshCw, Package, Bug, Type, Trash2, Share2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -39,6 +39,7 @@ interface SessionMenuButtonProps {
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onNewSession?: () => void;
   onCompact?: () => void;
+  onShare?: () => void;
   onBugReport?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
@@ -53,6 +54,7 @@ export function SessionMenuButton({
   onPermissionModeChange,
   onNewSession,
   onCompact,
+  onShare,
   onBugReport,
   onRename,
   onDelete,
@@ -117,6 +119,12 @@ export function SessionMenuButton({
               <Package className="mr-2 h-4 w-4" />
               컴팩트
             </DropdownMenuItem>
+            {onShare && (
+              <DropdownMenuItem onClick={onShare}>
+                <Share2 className="mr-2 h-4 w-4" />
+                공유
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onBugReport} className="text-destructive">
               <Bug className="mr-2 h-4 w-4" />

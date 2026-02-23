@@ -98,7 +98,7 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
    * @returns SDK 메시지 스트림
    */
   async *query(options: ClaudeQueryOptions): AsyncIterable<ClaudeMessage> {
-    const sdkOptions = {
+    const sdkOptions: Record<string, unknown> = {
       cwd: options.cwd,
       abortController: options.abortController,
       includePartialMessages: options.includePartialMessages ?? true,
@@ -106,10 +106,13 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
       resume: options.resume,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
-      // DEPRECATED: Beacon 사용 시 env는 Beacon이 관리
-      // 직접 SDK 사용 시에만 필요하지만, 현재는 Beacon을 통해 호출됨
-      // env: options.env,
+      env: options.env,
     };
+
+    // systemPrompt 전달 (undefined가 아닌 경우에만, 빈 문자열도 전달)
+    if (options.systemPrompt !== undefined) {
+      sdkOptions.systemPrompt = options.systemPrompt;
+    }
 
     // SDK query 호출
     const sdkQuery = query({

@@ -513,6 +513,57 @@ describe('MessageStore', () => {
       });
     });
   });
+
+  // ============================================================================
+  // Share 전용 메서드 테스트
+  // ============================================================================
+  describe('getSharedMessageHistory', () => {
+    it('should return empty array for non-existent session', () => {
+      const result = store.getSharedMessageHistory(999);
+      expect(result).toEqual([]);
+    });
+
+    it('should return all messages in chronological order (oldest first)', () => {
+      // Given: 시간순으로 메시지 추가
+      store.addUserMessage(1, 'first message');
+      store.addAssistantText(1, 'second message');
+      store.addUserMessage(1, 'third message');
+
+      // When: getSharedMessageHistory 호출
+      const result = store.getSharedMessageHistory(1);
+
+      // Then: 시간순 (오래된 것 → 최신) 반환
+      expect(result).toHaveLength(3);
+      expect((result[0] as UserTextMessage).content).toBe('first message');
+      expect((result[1] as AssistantTextMessage).content).toBe('second message');
+      expect((result[2] as UserTextMessage).content).toBe('third message');
+    });
+
+    it('should return a copy of messages (not original reference)', () => {
+      store.addUserMessage(1, 'test');
+
+      const result = store.getSharedMessageHistory(1);
+      result.push({ id: 'fake', role: 'user', type: 'text', content: 'fake', timestamp: 0 } as UserTextMessage);
+
+      // 원본은 영향받지 않아야 함
+      expect(store.getCount(1)).toBe(1);
+    });
+
+    it('should return all messages without pagination limits', () => {
+      // Given: 많은 메시지 추가 (MAX_MESSAGES_PER_SESSION 이상)
+      for (let i = 0; i < 250; i++) {
+        store.addUserMessage(1, `message ${i}`);
+      }
+
+      // When: getSharedMessageHistory 호출
+      const result = store.getSharedMessageHistory(1);
+
+      // Then: 전체 메시지 반환 (페이징 제한 없음)
+      expect(result).toHaveLength(250);
+      expect((result[0] as UserTextMessage).content).toBe('message 0');
+      expect((result[249] as UserTextMessage).content).toBe('message 249');
+    });
+  });
 });
 
 // ============================================================================

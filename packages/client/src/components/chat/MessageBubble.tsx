@@ -7,7 +7,7 @@ import type {
   ErrorMessage,
   UserResponseMessage,
 } from '@estelle/core';
-import { ToolCard, type ChildToolInfo } from './ToolCard';
+import { ToolCard, type ChildToolInfo, type McpFileInfo } from './ToolCard';
 import { cn } from '../../lib/utils';
 
 interface MessageBubbleProps {
@@ -15,12 +15,14 @@ interface MessageBubbleProps {
   onImagePress?: (uri: string) => void;
   /** Task 툴의 하위 툴들 */
   childTools?: ChildToolInfo[];
+  /** MCP 파일 클릭 핸들러 */
+  onMcpFileClick?: (fileInfo: McpFileInfo) => void;
 }
 
 /**
  * 메시지 버블 (컴팩트)
  */
-export function MessageBubble({ message, onImagePress, childTools }: MessageBubbleProps) {
+export function MessageBubble({ message, onImagePress, childTools, onMcpFileClick }: MessageBubbleProps) {
   const isUser = message.role === 'user' && message.type === 'text';
   const isToolStart = message.type === 'tool_start';
   const isToolComplete = message.type === 'tool_complete';
@@ -50,6 +52,7 @@ export function MessageBubble({ message, onImagePress, childTools }: MessageBubb
           success={success}
           elapsedSeconds={elapsedSeconds}
           childTools={toolMsg.toolName === 'Task' ? childTools : undefined}
+          onMcpFileClick={onMcpFileClick}
         />
       </div>
     );

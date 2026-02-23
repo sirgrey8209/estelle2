@@ -5,6 +5,7 @@ node_modules/
 dist/
 release/
 release-stage/
+release-beacon/
 release-data/
 stage-data/
 data/
@@ -23,13 +24,21 @@ config/build-counter.json
 
 # Logs
 *.log
+log/
+
+# Work in progress (internal)
+wip/
 
 # Temp files
 .dev-server.pid
 .dev-logs/
+ecosystem.dev.config.cjs
 nul
 test-thumbnails/
 test-permission-check.txt
+
+# Runtime generated
+packages/relay/public/version.json
 
 # Pylon local data
 packages/pylon/data/
@@ -45,6 +54,15 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Claude Code local settings
+.claude/
+CLAUDE.md
+Persona.md
+
+# Internal documents
+doc/claude-sdk-options.md
+doc/claude-session-characteristics.md
 
 # Expo
 .expo/

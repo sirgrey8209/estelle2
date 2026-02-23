@@ -18,7 +18,7 @@ function deriveRelayUrl(): string {
   if (host === 'localhost' || host === '127.0.0.1') {
     return 'ws://localhost:3000';
   }
-  return `wss://${typeof window !== 'undefined' ? window.location.host : 'estelle-relay-v2.fly.dev'}`;
+  return `wss://${typeof window !== 'undefined' ? window.location.host : 'your-app-name.fly.dev'}`;
 }
 
 /**
@@ -74,10 +74,11 @@ export const AppConfig = {
 
 /**
  * GitHub 설정
+ * TODO: 실제 배포 시 GitHub 저장소 URL로 변경 필요
  */
 export const GitHubConfig = {
   /** 릴리즈 베이스 URL */
-  releaseBaseUrl: 'https://github.com/sirgrey8209/estelle/releases/download/deploy',
+  releaseBaseUrl: 'https://github.com/your-username/estelle/releases/download/deploy',
 
   /** APK 파일명 */
   apkFilename: 'app-release.apk',

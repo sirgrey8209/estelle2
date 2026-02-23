@@ -27,8 +27,7 @@
 | 컴포넌트 | 역할 |
 |----------|------|
 | **Relay** | 순수 라우터 (인증 + 메시지 전달) |
-| **Pylon** | PC 백그라운드 서비스, 상태 관리 |
-| **ClaudeBeacon** | Claude SDK 단일 인스턴스, 다중 Pylon 서비스 |
+| **Pylon** | PC 백그라운드 서비스, 상태 관리, Claude SDK 직접 통합 |
 | **App** | 통합 클라이언트 (Desktop/Mobile) |
 
 ### 기존 설계 결정 (유지할 것들)
@@ -90,8 +89,7 @@
 |----------|------|------|
 | **core** | TypeScript | 공유 타입, 메시지 스키마 |
 | **Relay** | Node.js + TypeScript | Fly.io 배포, 정적 파일 서빙 |
-| **Pylon** | Node.js + TypeScript | PC 백그라운드 서비스, PM2 |
-| **ClaudeBeacon** | Node.js + TypeScript | Claude SDK 단일 인스턴스, PM2 |
+| **Pylon** | Node.js + TypeScript | PC 백그라운드 서비스, Claude SDK 직접 통합, MCP 서버, PM2 |
 | **Client** | React + Vite + shadcn/ui | Relay에서 서빙, PWA |
 | **테스트** | Vitest | 빠르고 ESM 친화적 |
 | **패키지 관리** | pnpm workspaces | 모노레포 |
@@ -105,8 +103,7 @@ estelle2/
 ├── packages/
 │   ├── core/           # 공유 타입, 메시지 스키마
 │   ├── relay/          # Relay 서버 (순수 라우터 + 정적 파일 서빙)
-│   ├── pylon/          # Pylon 서비스 (상태 관리)
-│   ├── claude-beacon/  # ClaudeBeacon (단일 SDK로 다중 Pylon 서비스)
+│   ├── pylon/          # Pylon 서비스 (상태 관리, Claude SDK, MCP 서버)
 │   └── client/         # React 웹 클라이언트 (Vite + shadcn/ui)
 ├── config/             # 환경 설정 (environments.json)
 ├── doc/                # 설계 문서
@@ -151,52 +148,39 @@ estelle2/
 
 ## 설계 원칙
 
-### ClaudeBeacon 아키텍처 (2026-02-10 도입)
+### Pylon 직접 SDK 통합 (2026-02-14)
 
-단일 ClaudeBeacon이 Claude SDK를 실행하고, 다중 Pylon(dev/stage/release)에 서비스합니다.
+각 Pylon이 Claude SDK를 직접 사용하는 단순한 구조입니다.
 
 ```
-                    ┌─────────────────────────────┐
-                    │      ClaudeBeacon           │
-                    │  - Claude SDK 단일 실행      │
-                    │  - 단일 Credentials          │
-                    │  - ToolContextMap           │
-                    │  - TCP Server (:9875)       │
-                    └─────────────────────────────┘
-                           │
-            ┌──────────────┼──────────────┐
-            ▼              ▼              ▼
     ┌────────────┐  ┌────────────┐  ┌────────────┐
     │ Dev Pylon  │  │Stage Pylon │  │Release Pylon│
-    │ (환경별)   │  │ (환경별)   │  │ (환경별)    │
+    │            │  │            │  │             │
+    │ Claude SDK │  │ Claude SDK │  │ Claude SDK  │
+    │ MCP Server │  │ MCP Server │  │ MCP Server  │
     └────────────┘  └────────────┘  └────────────┘
+         :9878          :9877           :9876
 ```
 
-**도입 배경**:
-- 기존: 각 Pylon이 Claude SDK를 직접 호출 → 인증 충돌, 세션 관리 복잡
-- 변경: ClaudeBeacon이 SDK를 중앙 관리 → 단일 인증, 다중 환경 지원
+**아키텍처**:
+- 각 Pylon이 ClaudeSDKAdapter를 통해 SDK 직접 호출
+- MCP 서버가 Pylon 내부에 통합 (`pylon/src/mcp/`)
+- toolUseId → conversationId 매핑을 ClaudeManager 내부에서 처리
+- 환경변수 `ESTELLE_MCP_PORT`로 MCP 포트 주입
 
 **핵심 컴포넌트**:
 
 | 컴포넌트 | 위치 | 역할 |
 |----------|------|------|
-| **ToolContextMap** | claude-beacon | toolUseId → { pylonAddress, entityId, raw } 매핑 |
-| **BeaconServer** | claude-beacon | MCP lookup 요청 처리 (TCP :9875) |
-| **ClaudeBeaconAdapter** | claude-beacon | Pylon이 Beacon을 통해 SDK 호출 |
-
-**통신 프로토콜**:
-```
-Pylon → Beacon: { action: "register", pylonAddress: "...", env: "dev" }
-Pylon → Beacon: { action: "query", entityId: 2049, options: {...} }
-Beacon → Pylon: { type: "event", entityId: 2049, message: {...} }
-MCP → Beacon:   { action: "lookup", toolUseId: "toolu_xxx" }
-```
+| **ClaudeSDKAdapter** | pylon | Claude SDK 직접 호출, 이벤트 스트리밍 |
+| **ClaudeManager** | pylon | 세션 관리, toolUseId 역매핑 |
+| **PylonMcpServer** | pylon | MCP TCP 서버 (send_file, deploy 등) |
 
 **포트 할당**:
-- ClaudeBeacon TCP: 9875
 - MCP TCP (release): 9876
 - MCP TCP (stage): 9877
 - MCP TCP (dev): 9878
+- MCP TCP (test): 9879
 
 ---
 
@@ -420,9 +404,9 @@ class FileMessageStore implements IMessageStore { ... }
 
 - 원본 스펙: `C:\WorkSpace\estelle\spec\`
 - 원본 코드: `C:\WorkSpace\estelle\`
-- ClaudeBeacon 상세: `log/2026-02-11-claude-beacon-architecture.md`
+- Beacon 제거 히스토리: `log/2026-02-14-beacon-removal.md` (예정)
 
 ---
 
 *작성일: 2026-01-31*
-*갱신일: 2026-02-11*
+*갱신일: 2026-02-14*

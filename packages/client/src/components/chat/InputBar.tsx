@@ -15,6 +15,13 @@ import { useResponsive } from '../../hooks/useResponsive';
 // 대화별 입력 텍스트 저장소 (conversationId → draft text)
 const draftTexts = new Map<number, string>();
 
+/**
+ * 특정 대화의 draft 텍스트 삭제 (새 대화 생성 시 호출)
+ */
+export function clearDraftText(conversationId: number): void {
+  draftTexts.delete(conversationId);
+}
+
 interface InputBarProps {
   disabled?: boolean;
   onSend?: (text: string, attachments?: AttachedImage[]) => void;

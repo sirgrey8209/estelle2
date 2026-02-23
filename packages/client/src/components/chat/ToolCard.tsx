@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock } from 'lucide-react';
-import { parseToolInput } from '../../utils/toolInputParser';
+import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock, Plug } from 'lucide-react';
+import { parseToolInput, parseMcpToolName } from '../../utils/toolInputParser';
 import { removeSystemReminder, diffLines } from '../../utils/textUtils';
 import { Collapsible } from '../common/Collapsible';
 import { cn } from '../../lib/utils';
@@ -36,6 +36,151 @@ interface ToolCardProps {
   elapsedSeconds?: number;
   /** Task 툴의 하위 툴들 */
   childTools?: ChildToolInfo[];
+  /** MCP 파일 클릭 핸들러 */
+  onMcpFileClick?: (fileInfo: McpFileInfo) => void;
+}
+
+// McpFileInfo를 export
+export type { McpFileInfo };
+
+interface McpRenderContext {
+  isComplete: boolean;
+  success?: boolean;
+  statusIcon: React.ReactNode;
+  statusColor: string;
+  borderColor: string;
+  isExpanded: boolean;
+  setIsExpanded: (expanded: boolean) => void;
+  onFileClick?: (fileInfo: McpFileInfo) => void;
+}
+
+interface McpFileInfo {
+  filename: string;
+  mimeType?: string;
+  size: number;
+  path: string;
+  description?: string | null;
+}
+
+/**
+ * MCP 도구 전용 렌더링
+ * - 상단: 🔌 + serverName (아주 작게)
+ * - 본문: 도구명 + desc (Read와 동일한 형태)
+ * - 확장: output JSON raw
+ */
+function renderMcpTool(
+  serverName: string,
+  mcpToolName: string,
+  toolInput: Record<string, unknown> | undefined,
+  cleanedOutput: unknown,
+  ctx: McpRenderContext
+): React.ReactNode {
+  const { isComplete, success, statusIcon, statusColor, borderColor, isExpanded, setIsExpanded, onFileClick } = ctx;
+
+  // 도구명과 설명
+  const displayToolName = mcpToolName.replace(/_/g, ' ');
+  const firstVal = toolInput
+    ? Object.values(toolInput).find((v) => typeof v === 'string') as string | undefined
+    : undefined;
+
+  // send_file 전용: 파일 정보 파싱
+  let fileInfo: McpFileInfo | null = null;
+  if (mcpToolName === 'send_file' && typeof cleanedOutput === 'string') {
+    try {
+      const parsed = JSON.parse(cleanedOutput);
+      if (parsed?.success && parsed?.file) {
+        fileInfo = parsed.file as McpFileInfo;
+      }
+    } catch {
+      // 파싱 실패
+    }
+  }
+
+  const getFileTypeIcon = (mimeType?: string, filename?: string) => {
+    if (mimeType?.startsWith('image/')) return '🖼️';
+    if (mimeType === 'text/markdown' || filename?.endsWith('.md')) return '📝';
+    return '📄';
+  };
+
+  const formatSize = (bytes?: number): string => {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div
+      className={cn(
+        'my-0.5 ml-2 rounded border border-l-2 bg-card overflow-hidden max-w-[400px]',
+        borderColor
+      )}
+      style={{ borderLeftColor: isComplete ? (success ? '#22c55e' : '#ef4444') : '#eab308' }}
+    >
+      {/* 상단: 상태 아이콘 + 🔌서버명 + 도구명 (다른 툴과 동일한 포맷) */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
+      >
+        <span className={statusColor}>{statusIcon}</span>
+        <Plug className="ml-1.5 h-3.5 w-3.5" />
+        <span className="ml-0.5 text-sm font-medium">{serverName}</span>
+        <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
+          {displayToolName}
+        </span>
+        {isExpanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+
+      {/* send_file 성공 시: 파일 카드 (한 줄) */}
+      {mcpToolName === 'send_file' && fileInfo && (
+        <button
+          onClick={() => onFileClick?.(fileInfo!)}
+          className="w-full flex items-center gap-1.5 px-2 py-1 border-t border-border/50 hover:bg-accent/30 transition-colors"
+        >
+          <span className="text-sm">{getFileTypeIcon(fileInfo.mimeType, fileInfo.filename)}</span>
+          <span className="text-xs truncate flex-1 text-left">
+            {fileInfo.description || fileInfo.filename}
+          </span>
+          {fileInfo.filename && fileInfo.description && (
+            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
+              {fileInfo.filename}
+            </span>
+          )}
+          <span className="text-[10px] text-muted-foreground/60 shrink-0">
+            {formatSize(fileInfo.size)}
+          </span>
+        </button>
+      )}
+
+      {/* 확장 시: output JSON raw */}
+      <Collapsible expanded={isExpanded}>
+        <div className="border-t border-border px-2 py-1">
+          {toolInput && (
+            <div className="mb-1">
+              <p className="text-[10px] text-muted-foreground/50 mb-0.5">Input:</p>
+              <p className="text-xs text-muted-foreground select-text whitespace-pre-wrap break-all">
+                {JSON.stringify(toolInput, null, 2)}
+              </p>
+            </div>
+          )}
+          {isComplete && cleanedOutput !== undefined && (
+            <div className="bg-muted p-1.5 rounded">
+              <p className="text-[10px] text-muted-foreground/50 mb-0.5">Output:</p>
+              <p className="text-xs opacity-80 select-text whitespace-pre-wrap break-all">
+                {typeof cleanedOutput === 'string'
+                  ? cleanedOutput
+                  : JSON.stringify(cleanedOutput, null, 2)}
+              </p>
+            </div>
+          )}
+        </div>
+      </Collapsible>
+    </div>
+  );
 }
 
 /**
@@ -49,6 +194,7 @@ export function ToolCard({
   success,
   elapsedSeconds,
   childTools,
+  onMcpFileClick,
 }: ToolCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null);
@@ -270,6 +416,21 @@ export function ToolCard({
         </Collapsible>
       </div>
     );
+  }
+
+  // MCP 도구 전용 렌더링
+  const mcpInfo = parseMcpToolName(toolName);
+  if (mcpInfo.isMcp) {
+    return renderMcpTool(mcpInfo.serverName, mcpInfo.toolName, toolInput, cleanedOutput, {
+      isComplete,
+      success,
+      statusIcon,
+      statusColor,
+      borderColor,
+      isExpanded,
+      setIsExpanded,
+      onFileClick: onMcpFileClick,
+    });
   }
 
   // Bash, Grep, Glob, Task, Edit, Write, Read 툴들의 렌더링

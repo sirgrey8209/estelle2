@@ -254,4 +254,119 @@ describe('ClaudeSDKAdapter', () => {
       });
     });
   });
+
+  // ============================================================================
+  // systemPrompt 전달 테스트
+  // ============================================================================
+  describe('systemPrompt 전달', () => {
+    it('should_pass_systemPrompt_string_to_sdk', async () => {
+      // Arrange
+      const mockMessages: ClaudeMessage[] = [];
+      vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
+
+      const options: ClaudeQueryOptions = {
+        prompt: 'Hello',
+        cwd: '/test/dir',
+        abortController: new AbortController(),
+        systemPrompt: 'You are a helpful assistant.',
+      };
+
+      // Act
+      for await (const _msg of adapter.query(options)) {
+        // 메시지 소비
+      }
+
+      // Assert
+      expect(mockQuery).toHaveBeenCalledWith({
+        prompt: 'Hello',
+        options: expect.objectContaining({
+          systemPrompt: 'You are a helpful assistant.',
+        }),
+      });
+    });
+
+    it('should_pass_systemPrompt_preset_with_append_to_sdk', async () => {
+      // Arrange
+      const mockMessages: ClaudeMessage[] = [];
+      vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
+
+      const systemPromptPreset = {
+        type: 'preset' as const,
+        preset: 'claude_code' as const,
+        append: '## Custom Instructions\nAlways be helpful.',
+      };
+
+      const options: ClaudeQueryOptions = {
+        prompt: 'Hello',
+        cwd: '/test/dir',
+        abortController: new AbortController(),
+        systemPrompt: systemPromptPreset,
+      };
+
+      // Act
+      for await (const _msg of adapter.query(options)) {
+        // 메시지 소비
+      }
+
+      // Assert
+      expect(mockQuery).toHaveBeenCalledWith({
+        prompt: 'Hello',
+        options: expect.objectContaining({
+          systemPrompt: {
+            type: 'preset',
+            preset: 'claude_code',
+            append: '## Custom Instructions\nAlways be helpful.',
+          },
+        }),
+      });
+    });
+
+    it('should_not_include_systemPrompt_when_undefined', async () => {
+      // Arrange
+      const mockMessages: ClaudeMessage[] = [];
+      vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
+
+      const options: ClaudeQueryOptions = {
+        prompt: 'Hello',
+        cwd: '/test/dir',
+        abortController: new AbortController(),
+        // systemPrompt 생략
+      };
+
+      // Act
+      for await (const _msg of adapter.query(options)) {
+        // 메시지 소비
+      }
+
+      // Assert - systemPrompt가 없어야 함
+      const callArgs = vi.mocked(mockQuery).mock.calls[0][0];
+      expect(callArgs.options.systemPrompt).toBeUndefined();
+    });
+
+    it('should_pass_empty_string_systemPrompt_when_explicitly_set', async () => {
+      // Arrange
+      const mockMessages: ClaudeMessage[] = [];
+      vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
+
+      const options: ClaudeQueryOptions = {
+        prompt: 'Hello',
+        cwd: '/test/dir',
+        abortController: new AbortController(),
+        systemPrompt: '', // 명시적으로 빈 문자열 설정
+      };
+
+      // Act
+      for await (const _msg of adapter.query(options)) {
+        // 메시지 소비
+      }
+
+      // Assert - 빈 문자열도 전달되어야 함
+      expect(mockQuery).toHaveBeenCalledWith({
+        prompt: 'Hello',
+        options: expect.objectContaining({
+          systemPrompt: '',
+        }),
+      });
+    });
+  });
 });

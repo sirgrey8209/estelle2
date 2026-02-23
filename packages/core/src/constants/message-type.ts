@@ -173,6 +173,12 @@ export const MessageType = {
   /** 사용량 조회 응답 */
   USAGE_RESPONSE: 'usage_response',
 
+  // === Share ===
+  /** 공유 링크 생성 요청 */
+  SHARE_CREATE: 'share_create',
+  /** 공유 링크 생성 응답 */
+  SHARE_CREATE_RESULT: 'share_create_result',
+
   // === Account ===
   /** 계정 전환 요청 */
   ACCOUNT_SWITCH: 'account_switch',

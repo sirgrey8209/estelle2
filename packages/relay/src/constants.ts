@@ -16,7 +16,8 @@ import type { DeviceConfig } from './types.js';
  *
  * @description
  * Pylon으로 연결할 수 있는 고정 디바이스들의 설정입니다.
- * deviceId(숫자)를 키로 사용하며, IP 기반 인증을 위한 정보를 포함합니다.
+ * **키는 deviceIndex (1~15)** 이며, 환경과 무관합니다.
+ * Relay가 인증 시 deviceIndex로 조회하고, pylonId는 내부에서 인코딩합니다.
  *
  * @remarks
  * - allowedIps에 '*'를 지정하면 모든 IP에서 접근 가능
@@ -26,10 +27,6 @@ import type { DeviceConfig } from './types.js';
  * ```typescript
  * const device1Config = DEVICES[1];
  * // { name: 'Device 1', icon: '🏢', role: 'office', allowedIps: ['*'] }
- *
- * if (DEVICES[deviceId]) {
- *   // 등록된 고정 디바이스
- * }
  * ```
  */
 export const DEVICES: Record<number, DeviceConfig> = {

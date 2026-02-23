@@ -26,6 +26,7 @@
 import type { PersistenceAdapter } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
+import type { ShareStoreData } from '../stores/share-store.js';
 
 /**
  * InMemory Persistence 어댑터
@@ -34,6 +35,7 @@ import type { SessionData } from '../stores/message-store.js';
  */
 export class InMemoryPersistence implements PersistenceAdapter {
   private workspaceData?: WorkspaceStoreData;
+  private shareData?: ShareStoreData;
   private sessions = new Map<string, SessionData>();
 
   // ============================================================================
@@ -89,6 +91,25 @@ export class InMemoryPersistence implements PersistenceAdapter {
   }
 
   // ============================================================================
+  // ShareStore 영속화
+  // ============================================================================
+
+  /**
+   * ShareStore 데이터 로드
+   */
+  loadShareStore(): ShareStoreData | undefined {
+    return this.shareData;
+  }
+
+  /**
+   * ShareStore 데이터 저장
+   */
+  async saveShareStore(data: ShareStoreData): Promise<void> {
+    // 깊은 복사로 저장 (외부 수정 방지)
+    this.shareData = JSON.parse(JSON.stringify(data));
+  }
+
+  // ============================================================================
   // 테스트 헬퍼 메서드
   // ============================================================================
 
@@ -107,10 +128,18 @@ export class InMemoryPersistence implements PersistenceAdapter {
   }
 
   /**
+   * ShareStore 데이터 직접 설정 (테스트용)
+   */
+  setShareStore(data: ShareStoreData): void {
+    this.shareData = JSON.parse(JSON.stringify(data));
+  }
+
+  /**
    * 모든 데이터 초기화 (테스트용)
    */
   clear(): void {
     this.workspaceData = undefined;
+    this.shareData = undefined;
     this.sessions.clear();
   }
 

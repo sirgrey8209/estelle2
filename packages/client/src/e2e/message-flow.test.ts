@@ -61,6 +61,9 @@ const mockConversationStore = {
   appendTextBuffer: vi.fn(),
   flushTextBuffer: vi.fn(),
   clearTextBuffer: vi.fn(),
+  clearMessages: vi.fn((conversationId: number) => {
+    convMessages.set(conversationId, []);
+  }),
   addMessage: vi.fn((conversationId: number, msg: any) => {
     const msgs = convMessages.get(conversationId) || [];
     msgs.push(msg);

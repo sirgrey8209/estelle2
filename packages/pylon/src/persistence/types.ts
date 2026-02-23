@@ -7,6 +7,7 @@
 
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
+import type { ShareStoreData } from '../stores/share-store.js';
 
 /**
  * 영속성 어댑터 인터페이스
@@ -67,4 +68,22 @@ export interface PersistenceAdapter {
    * @returns 세션 ID 배열
    */
   listMessageSessions(): string[];
+
+  // ============================================================================
+  // ShareStore 영속화
+  // ============================================================================
+
+  /**
+   * ShareStore 데이터 로드
+   *
+   * @returns 저장된 데이터 또는 undefined (파일 없음)
+   */
+  loadShareStore(): ShareStoreData | undefined;
+
+  /**
+   * ShareStore 데이터 저장
+   *
+   * @param data - 저장할 데이터
+   */
+  saveShareStore(data: ShareStoreData): Promise<void>;
 }

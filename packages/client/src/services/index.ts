@@ -47,6 +47,7 @@ export {
   deleteConversation,
   renameConversation,
   sendBugReport,
+  createShare,
 } from './relaySender';
 
 export {

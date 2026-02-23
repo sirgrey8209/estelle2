@@ -12,7 +12,7 @@ import { WorkingIndicator } from './WorkingIndicator';
 import { FileViewer } from '../viewers';
 import { blobService } from '../../services/blobService';
 import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
-import type { ChildToolInfo } from './ToolCard';
+import type { ChildToolInfo, McpFileInfo } from './ToolCard';
 
 interface MessageListProps {
   isLoadingHistory?: boolean;
@@ -164,6 +164,47 @@ export function MessageList({
       content,
     });
   }, []);
+
+  // MCP send_file 파일 클릭 → 다운로드 → FileViewer 열기
+  const handleMcpFileClick = useCallback((fileInfo: McpFileInfo) => {
+    const pylonId = selectedConversation?.pylonId;
+    const conversationId = selectedConversation?.conversationId;
+    if (!pylonId || !conversationId) return;
+
+    const { filename, path: filePath, mimeType, size, description } = fileInfo;
+
+    // 캐시에 있으면 바로 표시
+    const cached = blobService.getCachedImage(filename);
+    if (cached) {
+      openFileViewer(filename, cached, { filename, path: filePath, description: description ?? undefined });
+      return;
+    }
+
+    // 뷰어를 먼저 열고 로딩 표시
+    setViewerFile({
+      filename,
+      size,
+      mimeType,
+      description: description ?? undefined,
+      content: null,
+    });
+
+    // 다운로드 요청
+    const unsubscribe = blobService.onDownloadComplete((event) => {
+      if (event.filename === filename) {
+        unsubscribe();
+        openFileViewer(filename, event.bytes, { filename, path: filePath, description: description ?? undefined });
+      }
+    });
+
+    console.log('[MCP File Click] Requesting file download:', { pylonId, conversationId, filename, filePath });
+    blobService.requestFile({
+      targetDeviceId: pylonId,
+      conversationId,
+      filename,
+      filePath,
+    });
+  }, [selectedConversation, openFileViewer]);
 
   const buildDisplayItems = useCallback(() => {
     const items: Array<{ type: string; data: unknown; key: string }> = [];
@@ -353,6 +394,7 @@ export function MessageList({
               const att = userMsg.attachments?.find(a => a.path === uri);
               if (att) handleAttachmentPress(att);
             }}
+            onMcpFileClick={handleMcpFileClick}
           />
         );
       }

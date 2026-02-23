@@ -13,6 +13,7 @@
  *
  * - `pylon`: Claude SDK와 연동되는 메인 서비스 (PC에서 실행)
  * - `desktop`: 데스크톱 클라이언트 앱
+ * - `viewer`: 공유된 대화를 조회하는 읽기 전용 클라이언트
  *
  * @example
  * ```typescript
@@ -20,11 +21,11 @@
  *
  * // 타입 가드로 활용
  * function isValidDeviceType(value: string): value is DeviceType {
- *   return value === 'pylon' || value === 'desktop';
+ *   return value === 'pylon' || value === 'desktop' || value === 'viewer';
  * }
  * ```
  */
-export type DeviceType = 'pylon' | 'desktop';
+export type DeviceType = 'pylon' | 'desktop' | 'viewer';
 
 /**
  * 디바이스를 고유하게 식별하기 위한 인터페이스

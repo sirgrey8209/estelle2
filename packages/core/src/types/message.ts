@@ -71,18 +71,17 @@ export interface Message<T = unknown> {
   timestamp: number;
 
   /**
-   * 메시지 발신자의 DeviceId
-   * null인 경우 발신자가 명시되지 않음을 의미
-   * undefined인 경우 필드 자체가 생략됨
+   * 메시지 발신자의 DeviceId (Relay가 인증 시 설정)
+   * Relay 내부에서 pylonId (number)로 관리됨
    */
   from?: DeviceId | null;
 
   /**
-   * 메시지 수신자의 DeviceId
-   * null인 경우 브로드캐스트 또는 특정 수신자 없음을 의미
-   * undefined인 경우 필드 자체가 생략됨
+   * 메시지 수신자의 pylonId 배열
+   * Relay가 라우팅 시 사용 (number[])
+   * undefined/null인 경우 브로드캐스트
    */
-  to?: DeviceId | null;
+  to?: number[] | null;
 
   /**
    * 요청-응답 매칭을 위한 고유 ID

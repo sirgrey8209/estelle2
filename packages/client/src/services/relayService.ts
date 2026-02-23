@@ -16,6 +16,8 @@ export interface RelayConfig {
   url: string;
   authToken: string;
   deviceType: 'app' | 'pylon';
+  /** Google ID 토큰 (Google OAuth 인증용) */
+  idToken?: string;
   /** 재연결 간격 (ms, 기본: 3000) */
   reconnectInterval?: number;
   /** Heartbeat 간격 (ms, 기본: 10000) */
@@ -66,6 +68,9 @@ export class RelayService {
   private _isAuthenticated = false;
   private _deviceId: string | null = null;
 
+  /** Google ID 토큰 */
+  private _idToken: string | null = null;
+
   /** 재연결 활성화 여부 */
   private reconnectEnabled = true;
 
@@ -82,6 +87,7 @@ export class RelayService {
     this.config = config;
     this.adapterFactory = adapterFactory;
     this.listeners = new Map();
+    this._idToken = config.idToken ?? null;
   }
 
   /**
@@ -204,15 +210,28 @@ export class RelayService {
   }
 
   /**
+   * Google ID 토큰 설정
+   */
+  setIdToken(idToken: string | null): void {
+    this._idToken = idToken;
+  }
+
+  /**
    * 인증 메시지 전송
    */
-  private sendAuth(): void {
+  sendAuth(): void {
+    const payload: Record<string, unknown> = {
+      token: this.config.authToken,
+      deviceType: this.config.deviceType,
+    };
+
+    if (this._idToken) {
+      payload.idToken = this._idToken;
+    }
+
     this.send({
       type: MessageType.AUTH,
-      payload: {
-        token: this.config.authToken,
-        deviceType: this.config.deviceType,
-      },
+      payload,
     });
   }
 

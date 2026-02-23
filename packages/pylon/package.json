@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.27",
-    "@estelle/claude-beacon": "workspace:*",
     "@estelle/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "sharp": "^0.34.5",

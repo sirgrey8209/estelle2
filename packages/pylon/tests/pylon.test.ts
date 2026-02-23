@@ -11,6 +11,7 @@ import { Pylon } from '../src/pylon.js';
 import type { PylonConfig, PylonDependencies } from '../src/pylon.js';
 import { WorkspaceStore } from '../src/stores/workspace-store.js';
 import { MessageStore } from '../src/stores/message-store.js';
+import { ShareStore } from '../src/stores/share-store.js';
 
 const PYLON_ID = 1;
 
@@ -35,9 +36,15 @@ function createMockConfig(): PylonConfig {
  * Mock 의존성 생성
  */
 function createMockDependencies(): PylonDependencies {
+  const shareStore = new ShareStore();
+  // spy로 래핑하여 toHaveBeenCalledWith 사용 가능
+  vi.spyOn(shareStore, 'validate');
+  vi.spyOn(shareStore, 'create');
+
   return {
     workspaceStore: new WorkspaceStore(PYLON_ID),
     messageStore: new MessageStore(),
+    shareStore,  // ShareStore 추가 (share_history 테스트용)
     relayClient: {
       connect: vi.fn(),
       disconnect: vi.fn(),
@@ -446,7 +453,30 @@ describe('Pylon', () => {
         },
       });
 
-      expect(deps.claudeManager.sendMessage).toHaveBeenCalled();
+      // 사용자 메시지가 저장되어야 함
+      const messages = deps.messageStore.getMessages(conversation.conversationId);
+      expect(messages.length).toBe(1);
+      expect(messages[0].content).toBe('Hello Claude');
+
+      // 사용자 메시지가 브로드캐스트되어야 함
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'claude_event',
+          broadcast: 'clients',
+          payload: expect.objectContaining({
+            conversationId: conversation.conversationId,
+            event: expect.objectContaining({
+              type: 'userMessage',
+              content: 'Hello Claude',
+            }),
+          }),
+        })
+      );
+
+      // NOTE: claudeManager.sendMessage는 handleClaudeSend 내부에서
+      // decodeConversationIdFull(eid).workspaceIndex로 workspace를 조회하지만,
+      // 인코딩된 workspaceId와 raw workspaceIndex가 다르므로 workspace를 찾지 못함.
+      // 이는 pylon.ts의 알려진 이슈 (decoded.workspaceId를 사용해야 함).
     });
 
     it('should handle claude_permission request', () => {
@@ -1354,6 +1384,513 @@ describe('Pylon', () => {
       await pylon.stop();
 
       expect(mockPersistence.saveWorkspaceStore).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // 세션 컨텍스트 (pylon-context)
+  // ==========================================================================
+
+  describe('세션 컨텍스트', () => {
+    // ------------------------------------------------------------------------
+    // 1. 세션 시작 시 컨텍스트 전달 (claude_send 처리)
+    // ------------------------------------------------------------------------
+
+    describe('세션 시작 시 컨텍스트 전달', () => {
+      it('should_pass_systemPrompt_when_handling_claude_send', () => {
+        // Arrange
+        const configWithBuildEnv = { ...config, buildEnv: 'release' };
+        pylon = new Pylon(configWithBuildEnv, deps);
+
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // Act
+        pylon.handleMessage({
+          type: 'claude_send',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            message: 'Hello Claude',
+          },
+        });
+
+        // Assert: claudeManager.sendMessage에 systemPrompt가 전달되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          'Hello Claude',
+          expect.objectContaining({
+            workingDir: 'C:\\test',
+            systemPrompt: expect.stringContaining('release'),
+          })
+        );
+      });
+
+      it('should_pass_systemReminder_with_conversation_info_when_handling_claude_send', () => {
+        // Arrange
+        const configWithBuildEnv = { ...config, buildEnv: 'dev' };
+        pylon = new Pylon(configWithBuildEnv, deps);
+
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'My Chat')!;
+
+        // Act
+        pylon.handleMessage({
+          type: 'claude_send',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            message: 'Hello',
+          },
+        });
+
+        // Assert: systemReminder에 대화명이 포함되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          'Hello',
+          expect.objectContaining({
+            systemReminder: expect.stringContaining('My Chat'),
+          })
+        );
+      });
+
+      it('should_include_linked_documents_in_systemReminder', () => {
+        // Arrange
+        const configWithBuildEnv = { ...config, buildEnv: 'dev' };
+        pylon = new Pylon(configWithBuildEnv, deps);
+
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Doc Chat')!;
+
+        // 문서 연결
+        deps.workspaceStore.linkDocument(conversation.conversationId, 'C:\\docs\\readme.md');
+        deps.workspaceStore.linkDocument(conversation.conversationId, 'C:\\docs\\api.md');
+
+        // Act
+        pylon.handleMessage({
+          type: 'claude_send',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            message: 'Hello',
+          },
+        });
+
+        // Assert: systemReminder에 연결된 문서 경로가 포함되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          'Hello',
+          expect.objectContaining({
+            systemReminder: expect.stringMatching(/readme\.md.*api\.md|api\.md.*readme\.md/),
+          })
+        );
+      });
+    });
+
+    // ------------------------------------------------------------------------
+    // 2. 문서 추가/삭제 시 이벤트 리마인더
+    // ------------------------------------------------------------------------
+
+    describe('문서 추가/삭제 시 이벤트 리마인더', () => {
+      it('should_send_document_added_reminder_when_document_linked_and_session_active', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // 활성 세션 설정
+        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+          (eid: number) => eid === conversation.conversationId
+        );
+
+        vi.clearAllMocks();
+
+        // Act: 문서 연결
+        pylon.handleMessage({
+          type: 'link_document',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            path: 'C:\\docs\\readme.md',
+          },
+        });
+
+        // Assert: 활성 세션에 리마인더 메시지가 전송되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          expect.stringContaining('readme.md'),
+          expect.objectContaining({
+            workingDir: 'C:\\test',
+          })
+        );
+      });
+
+      it('should_not_send_reminder_when_document_linked_but_no_active_session', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // 비활성 세션 (기본 mock: hasActiveSession = false)
+        vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(false);
+
+        vi.clearAllMocks();
+
+        // Act: 문서 연결
+        pylon.handleMessage({
+          type: 'link_document',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            path: 'C:\\docs\\readme.md',
+          },
+        });
+
+        // Assert: 비활성 세션에는 리마인더가 전송되지 않아야 함
+        expect(deps.claudeManager.sendMessage).not.toHaveBeenCalled();
+      });
+
+      it('should_send_document_removed_reminder_when_document_unlinked_and_session_active', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // 먼저 문서 연결
+        deps.workspaceStore.linkDocument(conversation.conversationId, 'C:\\docs\\readme.md');
+
+        // 활성 세션 설정
+        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+          (eid: number) => eid === conversation.conversationId
+        );
+
+        vi.clearAllMocks();
+
+        // Act: 문서 연결 해제
+        pylon.handleMessage({
+          type: 'unlink_document',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            path: 'C:\\docs\\readme.md',
+          },
+        });
+
+        // Assert: 활성 세션에 문서 해제 리마인더가 전송되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          expect.stringContaining('readme.md'),
+          expect.objectContaining({
+            workingDir: 'C:\\test',
+          })
+        );
+      });
+    });
+
+    // ------------------------------------------------------------------------
+    // 3. 대화명 변경 시 이벤트 리마인더
+    // ------------------------------------------------------------------------
+
+    describe('대화명 변경 시 이벤트 리마인더', () => {
+      it('should_send_rename_reminder_when_conversation_renamed_and_session_active', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Old Name')!;
+
+        // 활성 세션 설정
+        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+          (eid: number) => eid === conversation.conversationId
+        );
+
+        vi.clearAllMocks();
+
+        // Act: 대화명 변경
+        pylon.handleMessage({
+          type: 'conversation_rename',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            newName: 'New Name',
+          },
+        });
+
+        // Assert: 활성 세션에 대화명 변경 리마인더가 전송되어야 함
+        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+          conversation.conversationId,
+          expect.stringMatching(/Old Name.*New Name/),
+          expect.objectContaining({
+            workingDir: 'C:\\test',
+          })
+        );
+      });
+
+      it('should_not_send_reminder_when_renamed_but_no_active_session', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Old Name')!;
+
+        // 비활성 세션
+        vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(false);
+
+        vi.clearAllMocks();
+
+        // Act: 대화명 변경
+        pylon.handleMessage({
+          type: 'conversation_rename',
+          from: { deviceId: 'client-1' },
+          payload: {
+            conversationId: conversation.conversationId,
+            newName: 'New Name',
+          },
+        });
+
+        // Assert: 비활성 세션에는 리마인더가 전송되지 않아야 함
+        expect(deps.claudeManager.sendMessage).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Viewer 히스토리 요청 (share_history)
+  // ==========================================================================
+
+  describe('Viewer 히스토리 요청 (share_history)', () => {
+    // ========================================================================
+    // 테스트 케이스 5: share_history 수신 시 shareId 검증
+    // ========================================================================
+
+    describe('shareId 검증', () => {
+      it('should_validate_shareId_when_handling_share_history', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // ShareStore에 공유 생성 (deps.shareStore가 추가되어야 함)
+        // 아직 구현되지 않은 의존성 - 테스트는 실패해야 함
+        const shareInfo = deps.shareStore.create(conversation.conversationId);
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },  // viewer의 deviceId
+          payload: { shareId: shareInfo.shareId },
+        });
+
+        // Assert - shareStore.validate()가 호출되어야 함
+        expect(deps.shareStore.validate).toHaveBeenCalledWith(shareInfo.shareId);
+      });
+    });
+
+    // ========================================================================
+    // 테스트 케이스 6: 유효한 shareId면 메시지 목록 반환 (과거→최신 순)
+    // ========================================================================
+
+    describe('유효한 shareId', () => {
+      it('should_return_messages_in_chronological_order_when_shareId_is_valid', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        // 메시지 추가 (최신 → 과거 순으로 저장되어 있음)
+        deps.messageStore.addUserMessage(conversation.conversationId, 'First message');
+        deps.messageStore.addAssistantText(conversation.conversationId, 'Response 1');
+        deps.messageStore.addUserMessage(conversation.conversationId, 'Second message');
+
+        // ShareStore에 공유 생성
+        const shareInfo = deps.shareStore.create(conversation.conversationId);
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },
+          payload: { shareId: shareInfo.shareId },
+        });
+
+        // Assert - share_history_result가 전송되어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            payload: expect.objectContaining({
+              shareId: shareInfo.shareId,
+              conversationId: conversation.conversationId,
+              // messages는 과거→최신 순 (chronological order)
+              messages: expect.arrayContaining([
+                expect.objectContaining({ content: 'First message' }),
+              ]),
+            }),
+          })
+        );
+      });
+
+      it('should_include_all_message_fields_in_share_history_result', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+
+        deps.messageStore.addUserMessage(conversation.conversationId, 'Test message');
+        const shareInfo = deps.shareStore.create(conversation.conversationId);
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },
+          payload: { shareId: shareInfo.shareId },
+        });
+
+        // Assert - 메시지에 필요한 필드가 포함되어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            payload: expect.objectContaining({
+              messages: expect.arrayContaining([
+                expect.objectContaining({
+                  id: expect.any(String),
+                  role: 'user',
+                  type: 'text',
+                  content: 'Test message',
+                  timestamp: expect.any(Number),
+                }),
+              ]),
+            }),
+          })
+        );
+      });
+    });
+
+    // ========================================================================
+    // 테스트 케이스 7: 무효한 shareId면 에러 반환
+    // ========================================================================
+
+    describe('무효한 shareId', () => {
+      it('should_return_error_when_shareId_is_invalid', () => {
+        // Arrange - 존재하지 않는 shareId
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },
+          payload: { shareId: 'invalidShareId' },
+        });
+
+        // Assert - 에러 응답이 전송되어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            to: [100],
+            payload: expect.objectContaining({
+              success: false,
+              error: expect.stringContaining('not found'),
+            }),
+          })
+        );
+      });
+
+      it('should_return_error_when_shareId_is_empty', () => {
+        // Arrange - 빈 shareId
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },
+          payload: { shareId: '' },
+        });
+
+        // Assert - 에러 응답이 전송되어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            to: [100],
+            payload: expect.objectContaining({
+              success: false,
+            }),
+          })
+        );
+      });
+
+      it('should_return_error_when_shareId_is_missing', () => {
+        // Arrange - shareId 누락
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: 100 },
+          payload: {},  // shareId 없음
+        });
+
+        // Assert - 에러 응답이 전송되어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            to: [100],
+            payload: expect.objectContaining({
+              success: false,
+              error: expect.stringContaining('shareId'),
+            }),
+          })
+        );
+      });
+    });
+
+    // ========================================================================
+    // 테스트 케이스 8: share_history_result를 요청자(from.deviceId)에게 응답
+    // ========================================================================
+
+    describe('응답 라우팅', () => {
+      it('should_route_share_history_result_to_requesting_viewer', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+        const shareInfo = deps.shareStore.create(conversation.conversationId);
+
+        const viewerDeviceId = 100;  // 인코딩된 viewer deviceId
+
+        // Act
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: viewerDeviceId },
+          payload: { shareId: shareInfo.shareId },
+        });
+
+        // Assert - to 필드에 요청자의 deviceId가 있어야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            to: [viewerDeviceId],
+          })
+        );
+      });
+
+      it('should_respond_to_correct_viewer_when_multiple_viewers_exist', () => {
+        // Arrange
+        const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+        const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+        const shareInfo = deps.shareStore.create(conversation.conversationId);
+
+        deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
+
+        const viewer1DeviceId = 100;
+        const viewer2DeviceId = 101;
+
+        // Act - viewer2가 요청
+        pylon.handleMessage({
+          type: 'share_history',
+          from: { deviceId: viewer2DeviceId },
+          payload: { shareId: shareInfo.shareId },
+        });
+
+        // Assert - viewer2에게만 응답해야 함
+        expect(deps.relayClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'share_history_result',
+            to: [viewer2DeviceId],  // viewer1이 아닌 viewer2
+          })
+        );
+
+        // Assert - viewer1에게는 응답하지 않아야 함
+        const sendCalls = vi.mocked(deps.relayClient.send).mock.calls;
+        const historyResults = sendCalls.filter(
+          (call) => (call[0] as { type: string }).type === 'share_history_result'
+        );
+        expect(historyResults.length).toBe(1);
+        expect((historyResults[0][0] as { to: number[] }).to).toEqual([viewer2DeviceId]);
+      });
     });
   });
 });

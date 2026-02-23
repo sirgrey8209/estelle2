@@ -119,20 +119,10 @@ function Build-TypeScript {
 
     Push-Location $RepoRoot
     try {
-        # 환경 변수 설정 후 빌드
-        $env:VITE_BUILD_ENV = $Target
-        $env:VITE_BUILD_VERSION = $Version
-        $env:VITE_BUILD_TIME = (Get-Date).ToUniversalTime().ToString("o")
-
         pnpm build
         if ($LASTEXITCODE -ne 0) {
             throw "TypeScript build failed (exit code: $LASTEXITCODE)"
         }
-
-        # 환경 변수 정리
-        Remove-Item Env:\VITE_BUILD_ENV -ErrorAction SilentlyContinue
-        Remove-Item Env:\VITE_BUILD_VERSION -ErrorAction SilentlyContinue
-        Remove-Item Env:\VITE_BUILD_TIME -ErrorAction SilentlyContinue
 
         Write-Ok "TypeScript build completed"
     } finally {
@@ -185,6 +175,8 @@ function Initialize-DataDir {
 # ============================================================
 
 function Build-TargetFolder {
+    param([string]$Version)
+
     Write-Phase "Phase 2" "Building target folder: $TargetDirName/..."
 
     # Clean previous target
@@ -228,7 +220,7 @@ function Build-TargetFolder {
 
     # ecosystem.config.cjs (공통 함수 사용) - DataDir은 junction target의 data 하위 폴더
     $dataSubDir = Join-Path $DataDir "data"
-    $ecosystemConfig = New-EcosystemConfig -PylonConfig $TargetConfig.pylon -BeaconConfig $TargetConfig.beacon -EnvId $TargetConfig.envId -DataDir $dataSubDir
+    $ecosystemConfig = New-EcosystemConfig -PylonConfig $TargetConfig.pylon -EnvId $TargetConfig.envId -DataDir $dataSubDir
     Write-Utf8File -Path (Join-Path $PylonDst "ecosystem.config.cjs") -Content $ecosystemConfig
 
     # Data/Uploads junction
@@ -264,6 +256,15 @@ function Build-TargetFolder {
     Write-Utf8File -Path (Join-Path $RelayDst "Dockerfile") -Content (New-Dockerfile -EnvId $TargetConfig.envId)
     Write-Utf8File -Path (Join-Path $RelayDst "fly.toml") -Content (New-FlyToml -FlyApp $TargetConfig.relay.flyApp)
 
+    # version.json (런타임 버전 정보)
+    $versionJson = ConvertTo-Json -InputObject @{
+        env = $Target
+        version = $Version
+        buildTime = (Get-Date).ToUniversalTime().ToString("o")
+    } -Compress
+    Write-Utf8File -Path (Join-Path $RelayDst "public\version.json") -Content $versionJson
+    Write-Detail "Generated version.json: ($Target)$Version"
+
     Write-Ok "Target folder built: $TargetDirName/"
 }
 
@@ -284,7 +285,8 @@ function Test-TargetIntegrity {
         "pylon\uploads",
         "relay\dist",
         "relay\package.json",
-        "relay\public\index.html"
+        "relay\public\index.html",
+        "relay\public\version.json"
     )
 
     $allOk = $true
@@ -333,7 +335,7 @@ try {
     Stop-PylonPM2 -PM2Name $pm2Name
 
     # Phase 2: Build target folder
-    Build-TargetFolder
+    Build-TargetFolder -Version $version
 
     # Phase 3: Integrity check
     Test-TargetIntegrity

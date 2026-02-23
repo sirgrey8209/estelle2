@@ -111,8 +111,11 @@ export function serveStatic(
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
     // 캐시 컨트롤 결정
+    const isVersionJson = pathname === '/version.json';
     const isAsset = assetPathPattern.test(pathname);
-    const cache = isAsset ? assetCacheControl : cacheControl;
+    const cache = isVersionJson
+      ? 'no-cache, no-store, must-revalidate'
+      : isAsset ? assetCacheControl : cacheControl;
 
     // 응답 전송
     res.writeHead(200, {

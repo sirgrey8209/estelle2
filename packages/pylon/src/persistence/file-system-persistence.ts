@@ -32,6 +32,7 @@
 import type { PersistenceAdapter } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
+import type { ShareStoreData } from '../stores/share-store.js';
 
 /**
  * 파일시스템 인터페이스 (테스트 용이성을 위한 추상화)
@@ -55,6 +56,7 @@ export interface FileSystemInterface {
 export class FileSystemPersistence implements PersistenceAdapter {
   private readonly baseDir: string;
   private readonly workspacesPath: string;
+  private readonly sharesPath: string;
   private readonly messagesDir: string;
   private readonly fs: FileSystemInterface;
 
@@ -67,6 +69,7 @@ export class FileSystemPersistence implements PersistenceAdapter {
   constructor(baseDir: string, fs: FileSystemInterface) {
     this.baseDir = baseDir;
     this.workspacesPath = this.joinPath(baseDir, 'workspaces.json');
+    this.sharesPath = this.joinPath(baseDir, 'shares.json');
     this.messagesDir = this.joinPath(baseDir, 'messages');
     this.fs = fs;
 
@@ -193,5 +196,38 @@ export class FileSystemPersistence implements PersistenceAdapter {
       console.error('[Persistence] Failed to list sessions:', error);
       return [];
     }
+  }
+
+  // ============================================================================
+  // ShareStore
+  // ============================================================================
+
+  /**
+   * ShareStore 데이터 로드
+   */
+  loadShareStore(): ShareStoreData | undefined {
+    try {
+      if (!this.fs.existsSync(this.sharesPath)) {
+        return undefined;
+      }
+
+      const content = this.fs.readFileSync(this.sharesPath, 'utf-8');
+      return JSON.parse(content) as ShareStoreData;
+    } catch (error) {
+      console.error('[Persistence] Failed to load share store:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * ShareStore 데이터 저장
+   */
+  async saveShareStore(data: ShareStoreData): Promise<void> {
+    // 런타임 중 폴더가 삭제될 수 있으므로 저장 전 확인
+    if (!this.fs.existsSync(this.baseDir)) {
+      this.fs.mkdirSync(this.baseDir, { recursive: true });
+    }
+    const content = JSON.stringify(data, null, 2);
+    this.fs.writeFileSync(this.sharesPath, content, 'utf-8');
   }
 }

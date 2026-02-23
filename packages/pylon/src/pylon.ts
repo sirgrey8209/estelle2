@@ -39,9 +39,17 @@ import type { PermissionModeValue, ConversationStatusValue, ConversationId } fro
 import { decodeConversationIdFull } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
+import type { ShareStore } from './stores/share-store.js';
 import type { ClaudeManagerEvent } from './claude/claude-manager.js';
 import type { PersistenceAdapter } from './persistence/types.js';
 import { generateThumbnail } from './utils/thumbnail.js';
+import {
+  buildSystemPrompt,
+  buildInitialReminder,
+  buildDocumentAddedReminder,
+  buildDocumentRemovedReminder,
+  buildConversationRenamedReminder,
+} from './utils/session-context.js';
 
 // ============================================================================
 // 타입 정의
@@ -62,6 +70,9 @@ export interface PylonConfig {
 
   /** 업로드 파일 저장 디렉토리 */
   uploadsDir: string;
+
+  /** 빌드 환경 (dev, stage, release) */
+  buildEnv?: string;
 }
 
 /**
@@ -77,10 +88,24 @@ export interface RelayClientAdapter {
 }
 
 /**
+ * 시스템 프롬프트 프리셋 타입 (ClaudeManager와 동일)
+ */
+interface SystemPromptPreset {
+  type: 'preset';
+  preset: 'claude_code';
+  append?: string;
+}
+
+/**
  * ClaudeManager 인터페이스 (의존성 주입용)
  */
 export interface ClaudeManagerAdapter {
-  sendMessage(conversationId: number, message: string, options: { workingDir: string; claudeSessionId?: string }): Promise<void>;
+  sendMessage(conversationId: number, message: string, options: {
+    workingDir: string;
+    claudeSessionId?: string;
+    systemPrompt?: string | SystemPromptPreset;
+    systemReminder?: string;
+  }): Promise<void>;
   stop(conversationId: number): void;
   newSession(conversationId: number): void;
   cleanup(): void;
@@ -90,16 +115,17 @@ export interface ClaudeManagerAdapter {
   hasActiveSession(conversationId: number): boolean;
   getSessionStartTime(conversationId: number): number | null;
   getPendingEvent(conversationId: number): unknown;
+  getSessionIdByToolUseId(toolUseId: string): number | null;
 }
 
 /**
  * BlobHandler 인터페이스 (의존성 주입용)
  */
 export interface BlobHandlerAdapter {
-  handleBlobStart(message: unknown): { success: boolean; path?: string };
-  handleBlobChunk(message: unknown): void;
-  handleBlobEnd(message: unknown): { success: boolean; path?: string; context?: unknown };
-  handleBlobRequest(message: unknown): void;
+  handleBlobStart(payload: unknown, from: number): { success: boolean; path?: string };
+  handleBlobChunk(payload: unknown): { success: boolean };
+  handleBlobEnd(payload: unknown): { success: boolean; path?: string; context?: unknown };
+  handleBlobRequest(payload: unknown, from: number): { success: boolean; error?: string };
 }
 
 /**
@@ -197,6 +223,9 @@ export interface PylonDependencies {
 
   /** 인증 관리자 (선택, 계정 전환 기능에 필요) */
   credentialManager?: CredentialManagerAdapter;
+
+  /** 공유 저장소 (선택, 공유 기능에 필요) */
+  shareStore?: ShareStore;
 }
 
 /**
@@ -432,6 +461,29 @@ export class Pylon {
     return this.sessionViewers.get(conversationId) ?? new Set();
   }
 
+  /**
+   * 새 세션 시작 트리거 (외부에서 호출 가능)
+   *
+   * @description
+   * MCP 도구 등에서 새 세션을 시작해야 할 때 호출합니다.
+   * 기존 세션을 정리하고, 메시지 저장소를 초기화하고, 새 세션을 시작합니다.
+   */
+  triggerNewSession(conversationId: number): void {
+    this.deps.claudeManager.newSession(conversationId);
+    this.deps.messageStore.clear(conversationId);
+    this.sendInitialContext(conversationId);
+  }
+
+  /**
+   * 초기 컨텍스트 전송 트리거 (외부에서 호출 가능)
+   *
+   * @description
+   * MCP create_conversation 등에서 대화 생성 후 첫 쿼리를 보내야 할 때 호출합니다.
+   */
+  triggerInitialContext(conversationId: number): void {
+    this.sendInitialContext(conversationId);
+  }
+
   // ==========================================================================
   // Public 메서드 - 메시지 처리
   // ==========================================================================
@@ -507,6 +559,12 @@ export class Pylon {
       return;
     }
 
+    // Share 히스토리 요청 (Viewer용)
+    if (type === 'share_history') {
+      this.handleShareHistory(payload, from);
+      return;
+    }
+
     // ===== 워크스페이스 관련 =====
     if (type === 'workspace_list') {
       this.handleWorkspaceList(from);
@@ -569,6 +627,17 @@ export class Pylon {
       return;
     }
 
+    // ===== 문서 연결 관련 =====
+    if (type === 'link_document') {
+      this.handleLinkDocument(payload);
+      return;
+    }
+
+    if (type === 'unlink_document') {
+      this.handleUnlinkDocument(payload);
+      return;
+    }
+
     // ===== Claude 관련 =====
     if (type === 'claude_send') {
       this.handleClaudeSend(payload, from);
@@ -597,24 +666,26 @@ export class Pylon {
 
     // ===== Blob 관련 =====
     if (type === 'blob_start') {
-      this.deps.blobHandler.handleBlobStart(message);
+      const fromDeviceId = from?.deviceId ?? 0;
+      this.deps.blobHandler.handleBlobStart(payload, fromDeviceId);
       return;
     }
 
     if (type === 'blob_chunk') {
-      this.deps.blobHandler.handleBlobChunk(message);
+      this.deps.blobHandler.handleBlobChunk(payload);
       return;
     }
 
     if (type === 'blob_end') {
-      const result = this.deps.blobHandler.handleBlobEnd(message);
+      const result = this.deps.blobHandler.handleBlobEnd(payload);
       // 비동기로 썸네일 생성 후 완료 알림 (에러는 내부에서 처리)
       void this.handleBlobEndResult(result, from, payload);
       return;
     }
 
     if (type === 'blob_request') {
-      this.deps.blobHandler.handleBlobRequest(message);
+      const fromDeviceId = from?.deviceId ?? 0;
+      this.deps.blobHandler.handleBlobRequest(payload, fromDeviceId);
       return;
     }
 
@@ -687,6 +758,12 @@ export class Pylon {
     // ===== 계정 전환 =====
     if (type === 'account_switch') {
       this.handleAccountSwitch(payload, from);
+      return;
+    }
+
+    // ===== 공유 생성 =====
+    if (type === 'share_create') {
+      this.handleShareCreate(payload, from);
       return;
     }
 
@@ -896,6 +973,83 @@ export class Pylon {
         },
       });
     }
+  }
+
+  /**
+   * share_history 요청 처리 (Viewer용)
+   *
+   * @description
+   * Viewer가 보낸 share_history 요청을 처리합니다.
+   * shareId를 검증하고, 유효하면 해당 대화의 메시지 목록을 반환합니다.
+   *
+   * @param payload - 요청 페이로드 ({ shareId: string })
+   * @param from - 발신자 정보
+   */
+  private handleShareHistory(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    const shareId = payload?.shareId as string | undefined;
+    const fromDeviceId = from?.deviceId;
+
+    // from이 없으면 응답 불가
+    if (fromDeviceId === undefined) return;
+
+    // shareId 필수 확인
+    if (!shareId || shareId.trim() === '') {
+      this.send({
+        type: 'share_history_result',
+        to: [fromDeviceId],
+        payload: {
+          success: false,
+          error: 'Missing shareId',
+        },
+      });
+      return;
+    }
+
+    // shareStore가 없으면 에러
+    if (!this.deps.shareStore) {
+      this.send({
+        type: 'share_history_result',
+        to: [fromDeviceId],
+        payload: {
+          success: false,
+          error: 'Share feature not available',
+        },
+      });
+      return;
+    }
+
+    // shareId 검증
+    const validateResult = this.deps.shareStore.validate(shareId);
+    if (!validateResult.valid || validateResult.conversationId === undefined) {
+      this.send({
+        type: 'share_history_result',
+        to: [fromDeviceId],
+        payload: {
+          success: false,
+          error: 'Share not found',
+        },
+      });
+      return;
+    }
+
+    const conversationId = validateResult.conversationId;
+
+    // 공유 전용 메서드: 시간순(과거→최신) 전체 메시지 반환
+    const messages = this.deps.messageStore.getSharedMessageHistory(conversationId);
+
+    // share_history_result 응답
+    this.send({
+      type: 'share_history_result',
+      to: [fromDeviceId],
+      payload: {
+        shareId,
+        conversationId,
+        messages,
+      },
+    });
   }
 
   // ==========================================================================
@@ -1129,6 +1283,9 @@ export class Pylon {
       if (from?.deviceId) {
         this.registerSessionViewer(from.deviceId, conversation.conversationId);
       }
+
+      // 새 대화 생성 시 초기 컨텍스트 자동 전송
+      this.sendInitialContext(conversation.conversationId);
     }
   }
 
@@ -1160,16 +1317,95 @@ export class Pylon {
     const { conversationId, newName } = payload || {};
     if (!conversationId || !newName) return;
 
-    const success = this.deps.workspaceStore.renameConversation(
-      conversationId as ConversationId,
-      newName as string
-    );
+    const eid = conversationId as ConversationId;
+
+    // 이전 이름 저장 (리마인더 전송용)
+    const oldConversation = this.deps.workspaceStore.getConversation(eid);
+    const oldName = oldConversation?.name || '';
+
+    const success = this.deps.workspaceStore.renameConversation(eid, newName as string);
     if (success) {
       this.broadcastWorkspaceList();
       this.saveWorkspaceStore().catch((err) => {
         this.deps.logger.error(`[Pylon] Failed to save after conversation rename: ${err}`);
       });
+
+      // 활성 세션에 리마인더 전송
+      if (this.deps.claudeManager.hasActiveSession(eid)) {
+        const reminder = buildConversationRenamedReminder(oldName, newName as string);
+        const workingDir = this.getWorkingDirForConversation(eid);
+        if (workingDir) {
+          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+        }
+      }
     }
+  }
+
+  /**
+   * link_document 처리
+   */
+  private handleLinkDocument(payload: Record<string, unknown> | undefined): void {
+    const { conversationId, path } = payload || {};
+    if (!conversationId || !path) return;
+
+    const eid = conversationId as ConversationId;
+    const docPath = path as string;
+
+    // 문서 연결
+    const success = this.deps.workspaceStore.linkDocument(eid, docPath);
+    if (success) {
+      this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after link document: ${err}`);
+      });
+
+      // 활성 세션에 리마인더 전송
+      if (this.deps.claudeManager.hasActiveSession(eid)) {
+        const reminder = buildDocumentAddedReminder(docPath);
+        const workingDir = this.getWorkingDirForConversation(eid);
+        if (workingDir) {
+          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+        }
+      }
+    }
+  }
+
+  /**
+   * unlink_document 처리
+   */
+  private handleUnlinkDocument(payload: Record<string, unknown> | undefined): void {
+    const { conversationId, path } = payload || {};
+    if (!conversationId || !path) return;
+
+    const eid = conversationId as ConversationId;
+    const docPath = path as string;
+
+    // 문서 연결 해제
+    const success = this.deps.workspaceStore.unlinkDocument(eid, docPath);
+    if (success) {
+      this.broadcastWorkspaceList();
+      this.saveWorkspaceStore().catch((err) => {
+        this.deps.logger.error(`[Pylon] Failed to save after unlink document: ${err}`);
+      });
+
+      // 활성 세션에 리마인더 전송
+      if (this.deps.claudeManager.hasActiveSession(eid)) {
+        const reminder = buildDocumentRemovedReminder(docPath);
+        const workingDir = this.getWorkingDirForConversation(eid);
+        if (workingDir) {
+          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+        }
+      }
+    }
+  }
+
+  /**
+   * conversationId로 workingDir 조회 (헬퍼)
+   */
+  private getWorkingDirForConversation(conversationId: ConversationId): string | null {
+    const decoded = decodeConversationIdFull(conversationId);
+    const workspace = this.deps.workspaceStore.getWorkspace(decoded.workspaceId);
+    return workspace?.workingDir ?? null;
   }
 
   /**
@@ -1309,7 +1545,7 @@ export class Pylon {
     // workingDir 및 conversation 정보 가져오기
     const conversation = this.deps.workspaceStore.getConversation(eid as ConversationId) ?? null;
     const decoded = decodeConversationIdFull(eid as ConversationId);
-    const workspace = this.deps.workspaceStore.getWorkspace(decoded.workspaceIndex);
+    const workspace = this.deps.workspaceStore.getWorkspace(decoded.workspaceId);
     const workingDir = workspace?.workingDir ?? null;
 
     // 첨부 파일 처리
@@ -1390,9 +1626,22 @@ export class Pylon {
       }
 
       const claudeSessionId = conversation?.claudeSessionId ?? undefined;
+
+      // 세션 컨텍스트 빌드
+      const linkedDocs = conversation?.linkedDocuments?.map((d) => d.path) || [];
+      const systemPrompt = this.config.buildEnv
+        ? buildSystemPrompt(this.config.buildEnv)
+        : undefined;
+      const systemReminder = buildInitialReminder(
+        conversation?.name || '새 대화',
+        linkedDocs
+      );
+
       this.deps.claudeManager.sendMessage(eid, promptToSend, {
         workingDir,
         claudeSessionId,
+        systemPrompt,
+        systemReminder,
       });
     }
   }
@@ -1442,11 +1691,50 @@ export class Pylon {
       case 'clear':
         this.deps.claudeManager.newSession(eid);
         this.deps.messageStore.clear(eid);
+        // 새 세션 시작 시 초기 컨텍스트 자동 전송
+        this.sendInitialContext(eid);
         break;
       case 'compact':
         this.log(`Compact not implemented yet`);
         break;
     }
+  }
+
+  /**
+   * 초기 컨텍스트 전송 (대화 생성/새 세션 시)
+   */
+  private sendInitialContext(conversationId: number): void {
+    const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
+    if (!conversation) return;
+
+    const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
+    if (!workingDir) return;
+
+    const linkedDocs = conversation.linkedDocuments?.map((d) => d.path) || [];
+
+    // systemPrompt 결정: customSystemPrompt가 있으면 preset + append 형식 사용
+    let systemPrompt: string | { type: 'preset'; preset: 'claude_code'; append?: string } | undefined;
+    if (conversation.customSystemPrompt) {
+      // customSystemPrompt가 있으면 Claude Code 기본 프롬프트에 append
+      systemPrompt = {
+        type: 'preset',
+        preset: 'claude_code',
+        append: conversation.customSystemPrompt,
+      };
+    } else if (this.config.buildEnv) {
+      // 기존 방식: 환경 정보만 포함
+      systemPrompt = buildSystemPrompt(this.config.buildEnv);
+    }
+
+    const systemReminder = buildInitialReminder(
+      conversation.name || '',
+      linkedDocs
+    );
+
+    this.deps.claudeManager.sendMessage(conversationId, systemReminder, {
+      workingDir,
+      systemPrompt,
+    });
   }
 
   /**
@@ -2526,6 +2814,97 @@ Message: ${message}
         }
       }
     })();
+  }
+
+  /**
+   * share_create 처리
+   *
+   * @description
+   * 대화 공유 링크 생성 요청을 처리합니다.
+   */
+  private handleShareCreate(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    const { conversationId } = payload || {};
+
+    // conversationId 검증
+    if (conversationId === undefined || typeof conversationId !== 'number') {
+      if (from?.deviceId !== undefined) {
+        this.send({
+          type: 'share_create_result',
+          to: [from.deviceId],
+          payload: {
+            success: false,
+            error: 'Invalid conversationId',
+          },
+        });
+      }
+      return;
+    }
+
+    // shareStore 필수
+    if (!this.deps.shareStore) {
+      if (from?.deviceId !== undefined) {
+        this.send({
+          type: 'share_create_result',
+          to: [from.deviceId],
+          payload: {
+            success: false,
+            error: 'Share feature not configured',
+          },
+        });
+      }
+      return;
+    }
+
+    // 대화 존재 확인
+    const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
+    if (!conversation) {
+      if (from?.deviceId !== undefined) {
+        this.send({
+          type: 'share_create_result',
+          to: [from.deviceId],
+          payload: {
+            success: false,
+            error: 'Conversation not found',
+          },
+        });
+      }
+      return;
+    }
+
+    // 공유 생성
+    const shareInfo = this.deps.shareStore.create(conversationId);
+
+    this.log(`[Share] Created share for conversation ${conversationId}: ${shareInfo.shareId}`);
+
+    // 응답 전송
+    if (from?.deviceId !== undefined) {
+      this.send({
+        type: 'share_create_result',
+        to: [from.deviceId],
+        payload: {
+          success: true,
+          shareId: shareInfo.shareId,
+          conversationId,
+        },
+      });
+    }
+
+    // shareStore 변경 사항 저장
+    this.saveShareStore();
+  }
+
+  /**
+   * ShareStore 저장 (영속화)
+   */
+  private saveShareStore(): void {
+    if (this.deps.persistence && this.deps.shareStore) {
+      this.deps.persistence.saveShareStore(this.deps.shareStore.toJSON()).catch((err) => {
+        this.log(`[Persistence] Failed to save share store: ${err}`);
+      });
+    }
   }
 
   /**

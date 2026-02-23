@@ -183,4 +183,81 @@ describe('RelayService', () => {
       expect(lastMessage.payload.action).toBe('stop');
     });
   });
+
+  describe('Google Auth - idToken', () => {
+    it('should_include_idToken_in_auth_message_when_provided', async () => {
+      // Arrange - idToken을 포함한 config
+      const configWithIdToken: RelayConfig = {
+        url: 'ws://localhost:8080',
+        authToken: 'test-token',
+        deviceType: 'app',
+        idToken: 'google-id-token-12345',
+      };
+      const adapter = new MockWebSocketAdapter();
+      const serviceWithIdToken = new RelayService(configWithIdToken, () => adapter);
+
+      // Act
+      serviceWithIdToken.connect();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Assert
+      expect(adapter.sentMessages).toHaveLength(1);
+      const authMessage = JSON.parse(adapter.sentMessages[0]);
+      expect(authMessage.type).toBe('auth');
+      expect(authMessage.payload.idToken).toBe('google-id-token-12345');
+    });
+
+    it('should_not_include_idToken_when_not_provided', async () => {
+      // Arrange - idToken 없는 config (기존 config)
+      service.connect();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Assert
+      const authMessage = JSON.parse(mockAdapter.sentMessages[0]);
+      expect(authMessage.type).toBe('auth');
+      expect(authMessage.payload.idToken).toBeUndefined();
+    });
+
+    it('should_update_idToken_via_setIdToken_method', async () => {
+      // Arrange
+      service.connect();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Act - idToken 업데이트 후 재인증
+      service.setIdToken('new-google-id-token');
+      service.sendAuth();
+
+      // Assert - 마지막 auth 메시지에 idToken 포함
+      const lastAuthMessage = JSON.parse(
+        mockAdapter.sentMessages[mockAdapter.sentMessages.length - 1]
+      );
+      expect(lastAuthMessage.type).toBe('auth');
+      expect(lastAuthMessage.payload.idToken).toBe('new-google-id-token');
+    });
+
+    it('should_clear_idToken_when_set_to_null', async () => {
+      // Arrange - idToken으로 시작
+      const configWithIdToken: RelayConfig = {
+        url: 'ws://localhost:8080',
+        authToken: 'test-token',
+        deviceType: 'app',
+        idToken: 'initial-token',
+      };
+      const adapter = new MockWebSocketAdapter();
+      const serviceWithIdToken = new RelayService(configWithIdToken, () => adapter);
+
+      serviceWithIdToken.connect();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Act - idToken 제거
+      serviceWithIdToken.setIdToken(null);
+      serviceWithIdToken.sendAuth();
+
+      // Assert - idToken이 없어야 함
+      const lastAuthMessage = JSON.parse(
+        adapter.sentMessages[adapter.sentMessages.length - 1]
+      );
+      expect(lastAuthMessage.payload.idToken).toBeUndefined();
+    });
+  });
 });

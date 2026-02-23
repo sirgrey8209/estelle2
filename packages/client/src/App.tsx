@@ -1,14 +1,26 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { useRelayStore } from './stores';
+import { useAuthStore } from './stores/authStore';
 import { RelayConfig, AppConfig } from './utils/config';
+import { loadVersionInfo } from './utils/buildInfo';
 import { routeMessage } from './hooks/useMessageRouter';
 import { setWebSocket } from './services/relaySender';
 import { syncOrchestrator } from './services/syncOrchestrator';
 import { blobService } from './services/blobService';
 import type { RelayMessage } from './services/relayService';
 import { HomePage } from './pages/HomePage';
+import { SharePage } from './pages/SharePage';
 import { useViewportHeight } from './hooks/useViewportHeight';
+
+/**
+ * 버전 정보 로드 (version.json)
+ */
+function useVersionInfo() {
+  useEffect(() => {
+    loadVersionInfo();
+  }, []);
+}
 
 /**
  * 웹 문서 타이틀 설정
@@ -20,11 +32,19 @@ function useDocumentTitle() {
 }
 
 /**
- * WebSocket 연결 및 메시지 처리
+ * WebSocket 연결 및 메시지 처리 (메인 앱용)
+ *
+ * SharePage는 별도의 useShareConnection을 사용하므로
+ * /share 경로에서는 이 훅이 연결하지 않습니다.
  */
 function useRelayConnection() {
+  const location = useLocation();
   const { setConnected, setAuthenticated, setDeviceId } = useRelayStore();
+  const { isAuthenticated: isGoogleAuthenticated, idToken } = useAuthStore();
   const wsRef = useRef<WebSocket | null>(null);
+
+  // SharePage 경로인지 확인
+  const isSharePage = location.pathname.startsWith('/share');
 
   const handleMessage = useCallback(
     (message: RelayMessage) => {
@@ -60,6 +80,16 @@ function useRelayConnection() {
   );
 
   useEffect(() => {
+    // SharePage에서는 연결하지 않음 (별도 useShareConnection 사용)
+    if (isSharePage) {
+      return;
+    }
+
+    // Google 로그인하지 않은 경우 연결하지 않음
+    if (!isGoogleAuthenticated) {
+      return;
+    }
+
     const wsUrl = RelayConfig.url;
 
     console.log('[Relay] Connecting to:', wsUrl);
@@ -82,14 +112,21 @@ function useRelayConnection() {
             send: (data) => ws.send(JSON.stringify(data)),
           });
 
-          // 인증 요청
+          // 인증 요청 (Google idToken 포함)
+          const authPayload: Record<string, unknown> = {
+            deviceType: 'app',
+          };
+
+          // Google 로그인한 경우 idToken 포함
+          const currentIdToken = useAuthStore.getState().idToken;
+          if (currentIdToken) {
+            authPayload.idToken = currentIdToken;
+          }
+
           ws.send(
             JSON.stringify({
               type: 'auth',
-              payload: {
-                token: 'dev-token', // TODO: 실제 토큰 사용
-                deviceType: 'app',
-              },
+              payload: authPayload,
             })
           );
         };
@@ -148,10 +185,11 @@ function useRelayConnection() {
         setWebSocket(null);
       }
     };
-  }, [setConnected, handleMessage]);
+  }, [setConnected, handleMessage, isGoogleAuthenticated, idToken, isSharePage]);
 }
 
 export function App() {
+  useVersionInfo();
   useDocumentTitle();
   useViewportHeight();
   useRelayConnection();
@@ -159,6 +197,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/share/:shareId" element={<SharePage />} />
     </Routes>
   );
 }

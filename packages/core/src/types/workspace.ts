@@ -85,6 +85,9 @@ export interface Conversation {
   /** 연결된 문서 목록 (선택) */
   linkedDocuments?: LinkedDocument[];
 
+  /** 커스텀 시스템 프롬프트 (선택, 파일 내용 또는 직접 입력) */
+  customSystemPrompt?: string;
+
   // 향후 추가 예정
   // /** 분기 원본 대화 ID */
   // parentConversationId?: string;

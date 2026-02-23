@@ -274,6 +274,72 @@ export function broadcastToType(
 }
 
 /**
+ * viewer 타입 클라이언트에게만 브로드캐스트합니다.
+ *
+ * @description
+ * viewer 타입을 가진 인증된 클라이언트만 대상으로 합니다.
+ *
+ * @param clients - 클라이언트 맵
+ * @param excludeClientId - 제외할 clientId
+ * @returns 라우팅 결과
+ *
+ * @example
+ * ```typescript
+ * const result = broadcastToViewers(clients, 'sender-id');
+ * ```
+ */
+export function broadcastToViewers(
+  clients: Map<string, Client>,
+  excludeClientId: string | null = null
+): RouteResult {
+  return broadcastToType('viewer', clients, excludeClientId);
+}
+
+/**
+ * 특정 conversationId를 가진 viewer만 필터링합니다.
+ *
+ * @description
+ * 특정 대화에 관심 있는 viewer들만 선택합니다.
+ *
+ * @param conversationId - 대화 ID
+ * @param clients - 클라이언트 맵
+ * @returns 라우팅 결과
+ *
+ * @example
+ * ```typescript
+ * const result = filterByConversationId(42, clients);
+ * // conversationId=42인 viewer만 포함
+ * ```
+ */
+export function filterByConversationId(
+  conversationId: number,
+  clients: Map<string, Client>
+): RouteResult {
+  const targetClientIds: string[] = [];
+
+  for (const [clientId, client] of clients) {
+    if (!isAuthenticatedClient(client)) {
+      continue;
+    }
+
+    // viewer 타입만 대상
+    if (client.deviceType !== 'viewer') {
+      continue;
+    }
+
+    // conversationId 일치 확인
+    if ((client as Client).conversationId === conversationId) {
+      targetClientIds.push(clientId);
+    }
+  }
+
+  return {
+    targetClientIds,
+    success: targetClientIds.length > 0,
+  };
+}
+
+/**
  * 특정 deviceType을 제외하고 브로드캐스트합니다.
  *
  * @description

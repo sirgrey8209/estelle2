@@ -31,6 +31,7 @@ const mockConversationStore = {
   appendTextBuffer: vi.fn(),
   flushTextBuffer: vi.fn(),
   clearTextBuffer: vi.fn(),
+  clearMessages: vi.fn(),
   addMessage: vi.fn(),
   addPendingRequest: vi.fn(),
   updateRealtimeUsage: vi.fn(),

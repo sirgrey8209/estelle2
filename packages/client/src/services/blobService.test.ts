@@ -350,7 +350,7 @@ describe('BlobTransferService', () => {
       // Assert
       const startMessage = sentMessages.find((m) => m.type === 'blob_start');
       expect(startMessage).toBeDefined();
-      expect(startMessage?.to).toEqual({ deviceId: 1, deviceType: 'pylon' });
+      expect(startMessage?.to).toEqual([1]);
       expect((startMessage?.payload as any).mimeType).toBe('image/png');
       expect((startMessage?.payload as any).totalSize).toBe(5);
     });

@@ -1284,6 +1284,314 @@ describe('ClaudeManager', () => {
   });
 
   // ============================================================================
+  // systemPrompt / systemReminder 테스트 (claude-manager-context)
+  // ============================================================================
+  describe('systemPrompt and systemReminder', () => {
+    /**
+     * 구현 목표:
+     * - systemPrompt: ClaudeQueryOptions.systemPrompt로 SDK에 전달
+     * - systemReminder: message 앞에 <system-reminder> 태그로 붙임
+     * - resume 시: systemPrompt/systemReminder 무시 (이미 세션에 있음)
+     */
+
+    describe('systemPrompt 전달', () => {
+      it('should_include_systemPrompt_in_query_options_when_provided', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+        const systemPrompt = '현재 환경: release\n빌드 버전: v0214_1';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+              yield {
+                type: 'result',
+                subtype: 'success',
+                total_cost_usd: 0.001,
+              };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+          systemPrompt,
+        });
+
+        // Assert: adapter.query가 systemPrompt 옵션을 받아야 함
+        expect(receivedOptions?.systemPrompt).toBe(systemPrompt);
+      });
+
+      it('should_not_include_systemPrompt_when_not_provided', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+          // systemPrompt 없음
+        });
+
+        // Assert: systemPrompt가 undefined이어야 함
+        expect(receivedOptions?.systemPrompt).toBeUndefined();
+      });
+
+      it('should_handle_empty_systemPrompt', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+          systemPrompt: '',
+        });
+
+        // Assert: 빈 문자열도 전달 (필터링하지 않음)
+        expect(receivedOptions?.systemPrompt).toBe('');
+      });
+    });
+
+    describe('systemReminder 전달', () => {
+      it('should_prepend_systemReminder_to_message_when_provided', async () => {
+        // Arrange
+        let receivedPrompt: string | null = null;
+        const systemReminder = 'Claude.md:\n- TDD 필수\n- 경어체 사용';
+        const userMessage = '테스트 작성해줘';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          systemReminder,
+        });
+
+        // Assert: 메시지 앞에 system-reminder가 붙어야 함
+        expect(receivedPrompt).toContain('<system-reminder>');
+        expect(receivedPrompt).toContain(systemReminder);
+        expect(receivedPrompt).toContain('</system-reminder>');
+        expect(receivedPrompt).toContain(userMessage);
+      });
+
+      it('should_format_systemReminder_with_proper_tags', async () => {
+        // Arrange
+        let receivedPrompt: string | null = null;
+        const systemReminder = '# CLAUDE.md\n내용입니다.';
+        const userMessage = 'Hello';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          systemReminder,
+        });
+
+        // Assert: 예상 형식 확인
+        const expectedFormat = `<system-reminder>\n${systemReminder}\n</system-reminder>\n${userMessage}`;
+        expect(receivedPrompt).toBe(expectedFormat);
+      });
+
+      it('should_not_prepend_anything_when_systemReminder_not_provided', async () => {
+        // Arrange
+        let receivedPrompt: string | null = null;
+        const userMessage = 'Hello';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          // systemReminder 없음
+        });
+
+        // Assert: 메시지가 그대로 전달되어야 함
+        expect(receivedPrompt).toBe(userMessage);
+      });
+
+      it('should_not_prepend_empty_systemReminder', async () => {
+        // Arrange
+        let receivedPrompt: string | null = null;
+        const userMessage = 'Hello';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          systemReminder: '',
+        });
+
+        // Assert: 빈 systemReminder는 무시되어야 함
+        expect(receivedPrompt).toBe(userMessage);
+        expect(receivedPrompt).not.toContain('<system-reminder>');
+      });
+    });
+
+    describe('resume 시 처리', () => {
+      it('should_ignore_systemReminder_when_claudeSessionId_provided', async () => {
+        // Arrange
+        let receivedPrompt: string | null = null;
+        const systemReminder = 'Claude.md 내용';
+        const userMessage = 'Hello';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act: resume 시
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          claudeSessionId: 'existing-session-123',
+          systemReminder,
+        });
+
+        // Assert: systemReminder가 무시되어야 함 (이미 세션에 있으므로)
+        expect(receivedPrompt).toBe(userMessage);
+        expect(receivedPrompt).not.toContain('<system-reminder>');
+      });
+
+      it('should_ignore_systemPrompt_when_claudeSessionId_provided', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+        const systemPrompt = '환경 정보';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act: resume 시
+        await manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+          claudeSessionId: 'existing-session-123',
+          systemPrompt,
+        });
+
+        // Assert: systemPrompt가 전달되지 않아야 함 (이미 세션에 있으므로)
+        expect(receivedOptions?.systemPrompt).toBeUndefined();
+      });
+
+      it('should_still_pass_resume_id_when_ignoring_context', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+        const claudeSessionId = 'existing-session-123';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, 'Hello', {
+          workingDir: '/project',
+          claudeSessionId,
+          systemPrompt: '무시됨',
+          systemReminder: '무시됨',
+        });
+
+        // Assert: resume ID는 전달되어야 함
+        expect(receivedOptions?.resume).toBe(claudeSessionId);
+      });
+    });
+
+    describe('systemPrompt와 systemReminder 함께 사용', () => {
+      it('should_pass_both_systemPrompt_and_systemReminder_when_provided', async () => {
+        // Arrange
+        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedPrompt: string | null = null;
+        const systemPrompt = '환경: dev';
+        const systemReminder = 'Claude.md 내용';
+        const userMessage = 'Hello';
+
+        manager = createManager({
+          adapter: {
+            async *query(options) {
+              receivedOptions = options;
+              receivedPrompt = options.prompt;
+              yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
+            },
+          },
+        });
+
+        // Act
+        await manager.sendMessage(100, userMessage, {
+          workingDir: '/project',
+          systemPrompt,
+          systemReminder,
+        });
+
+        // Assert: 둘 다 처리되어야 함
+        expect(receivedOptions?.systemPrompt).toBe(systemPrompt);
+        expect(receivedPrompt).toContain('<system-reminder>');
+        expect(receivedPrompt).toContain(systemReminder);
+        expect(receivedPrompt).toContain(userMessage);
+      });
+    });
+  });
+
+  // ============================================================================
   // 토큰 사용량 추적 테스트
   // ============================================================================
   describe('토큰 사용량 추적', () => {

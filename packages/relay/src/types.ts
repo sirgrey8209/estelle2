@@ -91,9 +91,11 @@ export interface DeviceInfo {
  *
  * @description
  * Relay에서 사용하는 디바이스 타입입니다.
- * core의 DeviceType보다 단순하게 pylon과 app으로만 구분합니다.
+ * - pylon: Claude SDK를 직접 사용하는 서버
+ * - app: 메시지 송수신이 가능한 일반 클라이언트
+ * - viewer: 읽기 전용으로 특정 대화만 조회하는 클라이언트
  */
-export type RelayDeviceType = 'pylon' | 'app';
+export type RelayDeviceType = 'pylon' | 'app' | 'viewer';
 
 /**
  * WebSocket 연결 클라이언트의 정보
@@ -134,7 +136,7 @@ export interface Client {
   /** 디바이스 ID (인증 후 할당, null이면 미인증) */
   deviceId: number | null;
 
-  /** 디바이스 타입 (pylon 또는 app) */
+  /** 디바이스 타입 (pylon, app, 또는 viewer) */
   deviceType: RelayDeviceType | null;
 
   /** 클라이언트 IP 주소 */
@@ -145,6 +147,12 @@ export interface Client {
 
   /** 인증 완료 여부 */
   authenticated: boolean;
+
+  /** 대화 ID (viewer 전용 - 필터링할 대화 식별자) */
+  conversationId?: number;
+
+  /** 공유 ID (viewer 전용 - 접근한 공유 링크 식별자) */
+  shareId?: string;
 }
 
 /**

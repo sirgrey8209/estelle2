@@ -32,8 +32,8 @@ export interface CreateMessageOptions {
   /** 메시지 발신자의 DeviceId */
   from?: DeviceId | null;
 
-  /** 메시지 수신자의 DeviceId */
-  to?: DeviceId | null;
+  /** 메시지 수신자의 pylonId 배열 (Relay 라우팅용) */
+  to?: number[] | null;
 
   /** 요청-응답 매칭을 위한 고유 ID */
   requestId?: string | null;

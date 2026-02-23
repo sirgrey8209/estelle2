@@ -41,3 +41,9 @@ export {
   type MessageStoreData,
   type GetMessagesOptions,
 } from './message-store.js';
+
+export {
+  ShareStore,
+  type ShareStoreData,
+  type ValidateResult,
+} from './share-store.js';

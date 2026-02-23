@@ -86,6 +86,9 @@ export interface AuthPayload {
 
   /** (선택) 네트워크 인터페이스의 MAC 주소 */
   mac?: string;
+
+  /** (선택) Google OAuth ID 토큰 - App 클라이언트 인증용 */
+  idToken?: string;
 }
 
 /**

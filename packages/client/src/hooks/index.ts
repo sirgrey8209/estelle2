@@ -5,3 +5,4 @@
 
 export { useResponsive, BREAKPOINTS, type DeviceType, type ResponsiveInfo } from './useResponsive';
 export { routeMessage, useMessageRouter } from './useMessageRouter';
+export { useShareConnection } from './useShareConnection';

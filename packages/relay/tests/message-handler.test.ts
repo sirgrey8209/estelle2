@@ -612,3 +612,681 @@ describe('[새 체계] handleMessage - allocator 기반 시그니처', () => {
     expect(incrementAction).toBeUndefined();
   });
 });
+
+// ============================================================================
+// Google OAuth 인증 테스트 (구현 예정)
+// ============================================================================
+
+// 아직 구현되지 않은 모듈 import (의도된 실패)
+// handleAuthWithGoogle은 handleAuth를 확장하여 Google 인증을 추가할 예정
+import {
+  handleAuthWithGoogle,
+  type GoogleAuthDependencies,
+} from '../src/message-handler.js';
+
+describe('[Google OAuth] handleAuth - App 인증 시 Google 토큰 검증', () => {
+  const testDevices: Record<number, DeviceConfig> = {
+    1: { name: 'Office', icon: '🏢', role: 'office', allowedIps: ['*'] },
+  };
+
+  function createClient(
+    deviceId: number | null,
+    deviceType: 'pylon' | 'app' | null,
+    authenticated: boolean
+  ): Client {
+    return {
+      deviceId,
+      deviceType,
+      ip: '192.168.1.100',
+      connectedAt: new Date(),
+      authenticated,
+    };
+  }
+
+  // ============================================================================
+  // 정상 케이스
+  // ============================================================================
+
+  describe('정상 케이스', () => {
+    it('should_authenticate_app_when_valid_token_and_allowed_email', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => ({ email: 'allowed@example.com', name: 'Test User' }),
+        isEmailAllowed: () => true,
+        googleClientId: 'test-client-id.apps.googleusercontent.com',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app', idToken: 'valid-google-id-token' },
+        0,  // envId
+        0,  // nextClientIndex
+        clients,
+        testDevices,
+        deps
+      );
+
+      // Assert - 인증 성공
+      const updateAction = result.actions.find(a => a.type === 'update_client');
+      expect(updateAction).toBeDefined();
+      if (updateAction?.type === 'update_client') {
+        expect(updateAction.updates.authenticated).toBe(true);
+        expect(updateAction.updates.deviceType).toBe('app');
+      }
+
+      const sendAction = result.actions.find(a => a.type === 'send');
+      expect(sendAction).toBeDefined();
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(true);
+      }
+    });
+
+    it('should_include_user_email_in_auth_result_when_google_auth_success', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => ({ email: 'user@example.com', name: 'User Name', picture: 'https://photo.url' }),
+        isEmailAllowed: () => true,
+        googleClientId: 'test-client-id',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app', idToken: 'valid-token' },
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - 응답에 이메일 정보 포함
+      const sendAction = result.actions.find(a => a.type === 'send');
+      if (sendAction?.type === 'send') {
+        const payload = sendAction.message.payload as any;
+        expect(payload.success).toBe(true);
+        expect(payload.device?.email).toBe('user@example.com');
+      }
+    });
+  });
+
+  // ============================================================================
+  // 에러 케이스
+  // ============================================================================
+
+  describe('에러 케이스', () => {
+    it('should_reject_app_when_idToken_is_missing', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => ({ email: 'test@example.com' }),
+        isEmailAllowed: () => true,
+        googleClientId: 'test-client-id',
+      };
+
+      // Act - idToken 없이 인증 시도
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app' },  // idToken 없음
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - 인증 실패
+      const sendAction = result.actions.find(a => a.type === 'send');
+      expect(sendAction).toBeDefined();
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+        expect((sendAction.message.payload as any).error).toContain('idToken');
+      }
+    });
+
+    it('should_reject_app_when_token_is_invalid', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => { throw new Error('Invalid token'); },
+        isEmailAllowed: () => true,
+        googleClientId: 'test-client-id',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app', idToken: 'invalid-token' },
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - 인증 실패
+      const sendAction = result.actions.find(a => a.type === 'send');
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+        expect((sendAction.message.payload as any).error).toContain('Invalid');
+      }
+    });
+
+    it('should_reject_app_when_email_not_in_whitelist', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => ({ email: 'notallowed@example.com' }),
+        isEmailAllowed: () => false,  // 화이트리스트에 없음
+        googleClientId: 'test-client-id',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app', idToken: 'valid-token' },
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - 인증 실패 (이메일 미허용)
+      const sendAction = result.actions.find(a => a.type === 'send');
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+        expect((sendAction.message.payload as any).error).toContain('not allowed');
+      }
+    });
+
+    it('should_reject_app_when_idToken_is_empty_string', async () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => ({ email: 'test@example.com' }),
+        isEmailAllowed: () => true,
+        googleClientId: 'test-client-id',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceType: 'app', idToken: '' },  // 빈 문자열
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - 인증 실패
+      const sendAction = result.actions.find(a => a.type === 'send');
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Pylon 인증은 영향 없음
+  // ============================================================================
+
+  describe('Pylon 인증 (기존 로직 유지)', () => {
+    it('should_authenticate_pylon_without_google_token', async () => {
+      // Arrange - Pylon은 Google 인증 불필요
+      const client = createClient(null, null, false);
+      client.ip = '192.168.1.100';
+      const clients = new Map<string, Client>();
+      const deps: GoogleAuthDependencies = {
+        verifyGoogleToken: async () => { throw new Error('Should not be called'); },
+        isEmailAllowed: () => { throw new Error('Should not be called'); },
+        googleClientId: 'test-client-id',
+      };
+
+      // Act
+      const result = await handleAuthWithGoogle(
+        'client-1',
+        client,
+        { deviceId: 1, deviceType: 'pylon' },  // Pylon은 idToken 불필요
+        0, 0, clients, testDevices, deps
+      );
+
+      // Assert - Pylon 인증 성공 (기존 IP 기반 인증)
+      const updateAction = result.actions.find(a => a.type === 'update_client');
+      expect(updateAction).toBeDefined();
+      if (updateAction?.type === 'update_client') {
+        expect(updateAction.updates.authenticated).toBe(true);
+        expect(updateAction.updates.deviceType).toBe('pylon');
+      }
+    });
+  });
+});
+
+// ============================================================================
+// Core 패키지 AuthPayload 타입 확장 테스트
+// ============================================================================
+
+describe('[Google OAuth] AuthPayload - idToken 필드', () => {
+  // 아직 구현되지 않은 타입 테스트 (의도된 실패)
+  // AuthPayload에 idToken?: string 필드가 추가되어야 함
+
+  it('should_accept_idToken_in_auth_payload', () => {
+    // Arrange - idToken이 포함된 AuthPayload
+    const payload = {
+      deviceType: 'app' as const,
+      idToken: 'google-id-token-value',
+    };
+
+    // Assert - 타입 체크 (컴파일 타임)
+    expect(payload.idToken).toBe('google-id-token-value');
+  });
+
+  it('should_allow_auth_payload_without_idToken_for_pylon', () => {
+    // Arrange - Pylon은 idToken 없이 인증
+    const payload = {
+      deviceId: 1,
+      deviceType: 'pylon' as const,
+    };
+
+    // Assert
+    expect(payload.idToken).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// Viewer 분리 라우팅 테스트
+// ============================================================================
+
+// 아직 구현되지 않은 함수 참조 (의도된 실패)
+// handleViewerAuth: viewer 인증 시 shareId만으로 바로 등록 (인증 스킵)
+// handleViewerRouting: viewer가 보낸 메시지 라우팅 (허용 목록 체크)
+// 구현 시 message-handler.ts에서 export 해야 함
+import * as messageHandler from '../src/message-handler.js';
+const handleViewerAuth = (messageHandler as any).handleViewerAuth;
+const handleViewerRouting = (messageHandler as any).handleViewerRouting;
+
+describe('[Viewer 분리 라우팅] handleViewerAuth - shareId 기반 즉시 등록', () => {
+  const testDevices: Record<number, DeviceConfig> = {
+    1: { name: 'Office', icon: '🏢', role: 'office', allowedIps: ['*'] },
+  };
+
+  function createClient(
+    deviceId: number | null,
+    deviceType: 'pylon' | 'app' | 'viewer' | null,
+    authenticated: boolean
+  ): Client {
+    return {
+      deviceId,
+      deviceType,
+      ip: '192.168.1.100',
+      connectedAt: new Date(),
+      authenticated,
+    };
+  }
+
+  // ============================================================================
+  // 테스트 케이스 1: viewer 인증 시 shareId만으로 바로 등록
+  // ============================================================================
+
+  describe('정상 케이스', () => {
+    it('should_register_viewer_immediately_when_shareId_provided', () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+
+      // Act - viewer는 인증 없이 shareId만으로 등록
+      const result = handleViewerAuth(
+        'client-viewer-1',
+        client,
+        { deviceType: 'viewer', shareId: 'abc123XYZ789' },
+        0,  // envId
+        0,  // nextClientIndex
+        clients,
+        testDevices
+      );
+
+      // Assert - 바로 등록되어야 함 (Pylon 검증 대기 없음)
+      const updateAction = result.actions.find(a => a.type === 'update_client');
+      expect(updateAction).toBeDefined();
+      if (updateAction?.type === 'update_client') {
+        expect(updateAction.updates.deviceType).toBe('viewer');
+        expect(updateAction.updates.authenticated).toBe(true);
+      }
+
+      // Assert - shareId가 클라이언트에 저장되어야 함
+      if (updateAction?.type === 'update_client') {
+        expect(updateAction.updates.shareId).toBe('abc123XYZ789');
+      }
+    });
+
+    it('should_assign_deviceId_for_viewer', () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+
+      // Act
+      const result = handleViewerAuth(
+        'client-viewer-1',
+        client,
+        { deviceType: 'viewer', shareId: 'abc123XYZ789' },
+        0,  // envId
+        0,  // nextClientIndex
+        clients,
+        testDevices
+      );
+
+      // Assert - allocate_client_index 액션이 있어야 함
+      const allocateAction = result.actions.find(a => a.type === 'allocate_client_index');
+      expect(allocateAction).toBeDefined();
+
+      // Assert - deviceId가 할당되어야 함
+      const updateAction = result.actions.find(a => a.type === 'update_client');
+      if (updateAction?.type === 'update_client') {
+        expect(updateAction.updates.deviceId).toBe(0);
+      }
+    });
+
+    it('should_send_auth_result_success_for_viewer', () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+
+      // Act
+      const result = handleViewerAuth(
+        'client-viewer-1',
+        client,
+        { deviceType: 'viewer', shareId: 'abc123XYZ789' },
+        0, 0, clients, testDevices
+      );
+
+      // Assert - auth_result 성공 메시지가 전송되어야 함
+      const sendAction = result.actions.find(a => a.type === 'send');
+      expect(sendAction).toBeDefined();
+      if (sendAction?.type === 'send') {
+        expect(sendAction.message.type).toBe('auth_result');
+        expect((sendAction.message.payload as any).success).toBe(true);
+        expect((sendAction.message.payload as any).device.deviceType).toBe('viewer');
+      }
+    });
+  });
+
+  // ============================================================================
+  // 에러 케이스
+  // ============================================================================
+
+  describe('에러 케이스', () => {
+    it('should_reject_viewer_when_shareId_is_missing', () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+
+      // Act - shareId 없이 인증 시도
+      const result = handleViewerAuth(
+        'client-viewer-1',
+        client,
+        { deviceType: 'viewer' },  // shareId 없음
+        0, 0, clients, testDevices
+      );
+
+      // Assert - 인증 실패
+      const sendAction = result.actions.find(a => a.type === 'send');
+      expect(sendAction).toBeDefined();
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+        expect((sendAction.message.payload as any).error).toContain('shareId');
+      }
+    });
+
+    it('should_reject_viewer_when_shareId_is_empty_string', () => {
+      // Arrange
+      const client = createClient(null, null, false);
+      const clients = new Map<string, Client>();
+
+      // Act - 빈 문자열 shareId
+      const result = handleViewerAuth(
+        'client-viewer-1',
+        client,
+        { deviceType: 'viewer', shareId: '' },
+        0, 0, clients, testDevices
+      );
+
+      // Assert - 인증 실패
+      const sendAction = result.actions.find(a => a.type === 'send');
+      if (sendAction?.type === 'send') {
+        expect((sendAction.message.payload as any).success).toBe(false);
+      }
+    });
+  });
+});
+
+describe('[Viewer 분리 라우팅] handleViewerRouting - 허용된 메시지만 라우팅', () => {
+  const testDevices: Record<number, DeviceConfig> = {
+    1: { name: 'Office', icon: '🏢', role: 'office', allowedIps: ['*'] },
+  };
+
+  function createClient(
+    deviceId: number | null,
+    deviceType: 'pylon' | 'app' | 'viewer' | null,
+    authenticated: boolean,
+    shareId?: string
+  ): Client {
+    return {
+      deviceId,
+      deviceType,
+      ip: '192.168.1.100',
+      connectedAt: new Date(),
+      authenticated,
+      shareId,
+    } as Client;
+  }
+
+  // ============================================================================
+  // 테스트 케이스 2: viewer가 share_history 전송 시 Pylon으로 라우팅
+  // ============================================================================
+
+  describe('share_history 라우팅', () => {
+    it('should_route_share_history_to_pylon_when_sent_by_viewer', () => {
+      // Arrange
+      const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+      const pylon = createClient(1, 'pylon', true);
+      const clients = new Map<string, Client>([
+        ['client-viewer-0', viewer],
+        ['client-pylon-1', pylon],
+      ]);
+      const message: RelayMessage = {
+        type: 'share_history',
+        payload: { shareId: 'abc123XYZ789' },
+      };
+
+      // Act
+      const result = handleViewerRouting(
+        'client-viewer-0',
+        viewer,
+        message,
+        0,  // envId
+        clients,
+        testDevices
+      );
+
+      // Assert - Pylon으로 라우팅되어야 함
+      const broadcastAction = result.actions.find(a => a.type === 'broadcast');
+      expect(broadcastAction).toBeDefined();
+      if (broadcastAction?.type === 'broadcast') {
+        expect(broadcastAction.clientIds).toContain('client-pylon-1');
+        expect(broadcastAction.message.type).toBe('share_history');
+      }
+    });
+
+    it('should_inject_from_info_when_routing_share_history', () => {
+      // Arrange
+      const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+      const pylon = createClient(1, 'pylon', true);
+      const clients = new Map<string, Client>([
+        ['client-viewer-0', viewer],
+        ['client-pylon-1', pylon],
+      ]);
+      const message: RelayMessage = {
+        type: 'share_history',
+        payload: { shareId: 'abc123XYZ789' },
+      };
+
+      // Act
+      const result = handleViewerRouting(
+        'client-viewer-0',
+        viewer,
+        message,
+        0,
+        clients,
+        testDevices
+      );
+
+      // Assert - from 정보가 주입되어야 함
+      const broadcastAction = result.actions.find(a => a.type === 'broadcast');
+      if (broadcastAction?.type === 'broadcast') {
+        expect(broadcastAction.message.from).toBeDefined();
+        expect(broadcastAction.message.from?.deviceType).toBe('viewer');
+      }
+    });
+  });
+
+  // ============================================================================
+  // 테스트 케이스 3: viewer가 허용되지 않은 메시지 전송 시 무시
+  // ============================================================================
+
+  describe('허용되지 않은 메시지 무시', () => {
+    it('should_ignore_claude_send_from_viewer', () => {
+      // Arrange
+      const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+      const pylon = createClient(1, 'pylon', true);
+      const clients = new Map<string, Client>([
+        ['client-viewer-0', viewer],
+        ['client-pylon-1', pylon],
+      ]);
+      const message: RelayMessage = {
+        type: 'claude_send',  // viewer는 이 메시지를 보낼 수 없음
+        payload: { message: 'Hello' },
+      };
+
+      // Act
+      const result = handleViewerRouting(
+        'client-viewer-0',
+        viewer,
+        message,
+        0,
+        clients,
+        testDevices
+      );
+
+      // Assert - 무시되어야 함 (빈 actions)
+      expect(result.actions).toHaveLength(0);
+    });
+
+    it('should_ignore_workspace_create_from_viewer', () => {
+      // Arrange
+      const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+      const clients = new Map<string, Client>([['client-viewer-0', viewer]]);
+      const message: RelayMessage = {
+        type: 'workspace_create',
+        payload: { name: 'New Workspace' },
+      };
+
+      // Act
+      const result = handleViewerRouting(
+        'client-viewer-0',
+        viewer,
+        message,
+        0,
+        clients,
+        testDevices
+      );
+
+      // Assert - 무시되어야 함
+      expect(result.actions).toHaveLength(0);
+    });
+
+    it('should_ignore_conversation_delete_from_viewer', () => {
+      // Arrange
+      const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+      const clients = new Map<string, Client>([['client-viewer-0', viewer]]);
+      const message: RelayMessage = {
+        type: 'conversation_delete',
+        payload: { conversationId: 123 },
+      };
+
+      // Act
+      const result = handleViewerRouting(
+        'client-viewer-0',
+        viewer,
+        message,
+        0,
+        clients,
+        testDevices
+      );
+
+      // Assert - 무시되어야 함
+      expect(result.actions).toHaveLength(0);
+    });
+  });
+
+});
+
+// ============================================================================
+// 테스트 케이스 4: Pylon이 보낸 share_history_result가 viewer에게 라우팅됨
+// ============================================================================
+
+describe('[Viewer 분리 라우팅] share_history_result 라우팅 (기존 handleRouting 사용)', () => {
+  const testDevices: Record<number, DeviceConfig> = {
+    1: { name: 'Office', icon: '🏢', role: 'office', allowedIps: ['*'] },
+  };
+
+  function createClient(
+    deviceId: number | null,
+    deviceType: 'pylon' | 'app' | 'viewer' | null,
+    authenticated: boolean,
+    shareId?: string
+  ): Client {
+    return {
+      deviceId,
+      deviceType,
+      ip: '192.168.1.100',
+      connectedAt: new Date(),
+      authenticated,
+      shareId,
+    } as Client;
+  }
+
+  it('should_route_share_history_result_to_viewer', () => {
+    // Arrange
+    const viewer = createClient(0, 'viewer', true, 'abc123XYZ789');
+    const pylon = createClient(1, 'pylon', true);
+    const clients = new Map<string, Client>([
+      ['client-viewer-0', viewer],
+      ['client-pylon-1', pylon],
+    ]);
+
+    // Pylon이 viewer의 deviceId(인코딩된 값)를 to에 지정
+    const message: RelayMessage = {
+      type: 'share_history_result',
+      to: [16],  // 인코딩된 viewer deviceId (envId=0, deviceType=client, deviceIndex=0)
+      payload: {
+        shareId: 'abc123XYZ789',
+        conversationId: 123,
+        messages: [{ id: 'msg-1', content: 'Hello' }],
+      },
+    };
+
+    // Act - Pylon에서 보낸 메시지 라우팅 (기존 handleRouting 사용)
+    const result = handleRouting(
+      'client-pylon-1',
+      pylon,
+      message,
+      0,
+      clients,
+      testDevices
+      );
+
+      // Assert - viewer에게 전달되어야 함
+      const broadcastAction = result.actions.find(a => a.type === 'broadcast');
+      expect(broadcastAction).toBeDefined();
+      if (broadcastAction?.type === 'broadcast') {
+        expect(broadcastAction.clientIds).toContain('client-viewer-0');
+        expect(broadcastAction.message.type).toBe('share_history_result');
+      }
+    });
+});

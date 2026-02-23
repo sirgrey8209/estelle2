@@ -262,7 +262,7 @@ export class BlobTransferService {
       // blob_start 전송
       this.sender.send({
         type: 'blob_start',
-        to: { deviceId: targetDeviceId, deviceType: 'pylon' },
+        to: [targetDeviceId],
         payload: {
           blobId,
           filename: safeFilename,
@@ -301,7 +301,7 @@ export class BlobTransferService {
 
       this.sender.send({
         type: 'blob_chunk',
-        to: { deviceId: targetDeviceId, deviceType: 'pylon' },
+        to: [targetDeviceId],
         payload: {
           blobId,
           index: i,
@@ -323,7 +323,7 @@ export class BlobTransferService {
     const checksum = await calculateChecksum(bytes);
     this.sender.send({
       type: 'blob_end',
-      to: { deviceId: targetDeviceId, deviceType: 'pylon' },
+      to: [targetDeviceId],
       payload: {
         blobId,
         checksum,
@@ -370,7 +370,7 @@ export class BlobTransferService {
 
     this.sender.send({
       type: 'blob_request',
-      to: { deviceId: targetDeviceId, deviceType: 'pylon' },
+      to: [targetDeviceId],  // Relay는 숫자 배열을 기대함
       payload: {
         blobId,
         conversationId,

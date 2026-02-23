@@ -24,3 +24,12 @@ export {
   getUsageSummary,
 } from './ccusage.js';
 export type { FetchCcusageOptions } from './ccusage.js';
+
+// SessionContext - Claude 세션 컨텍스트 빌더
+export {
+  buildSystemPrompt,
+  buildInitialReminder,
+  buildDocumentAddedReminder,
+  buildDocumentRemovedReminder,
+  buildConversationRenamedReminder,
+} from './session-context.js';

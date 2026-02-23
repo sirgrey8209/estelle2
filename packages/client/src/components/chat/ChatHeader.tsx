@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { ArrowLeft, Check, X, FileText } from 'lucide-react';
+import { MessageType } from '@estelle/core';
 import { useWorkspaceStore, useDeviceConfigStore, useConversationStore } from '../../stores';
 import { useResponsive } from '../../hooks/useResponsive';
 import { SessionMenuButton } from '../common/SessionMenuButton';
 import { BugReportDialog } from '../common/BugReportDialog';
+import { ShareDialog } from '../share/ShareDialog';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
 import { getDeviceIcon } from '../../utils/device-icons';
-import { setPermissionMode, renameConversation, deleteConversation, sendBugReport, sendClaudeControl, blobService } from '../../services';
+import { setPermissionMode, renameConversation, deleteConversation, sendBugReport, sendClaudeControl, blobService, createShare, getWebSocket } from '../../services';
+import { clearDraftText } from './InputBar';
 import { Button } from '../ui/button';
 import { FileViewer } from '../viewers/FileViewer';
 
@@ -23,6 +26,10 @@ interface ChatHeaderProps {
  */
 export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
   const [showBugReport, setShowBugReport] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [viewingDocument, setViewingDocument] = useState<{ path: string; content: string | null } | null>(null);
@@ -118,6 +125,58 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
     useConversationStore.getState().deleteConversation(selectedConversation.conversationId);
   }, [selectedConversation]);
 
+  // 공유 핸들러
+  const handleShare = useCallback(() => {
+    if (!selectedConversation) return;
+
+    setShowShareDialog(true);
+    setShareLoading(true);
+    setShareError(null);
+    setShareUrl(null);
+
+    // WebSocket 메시지 리스너
+    const ws = getWebSocket();
+    if (!ws) {
+      setShareLoading(false);
+      setShareError('서버에 연결되어 있지 않습니다.');
+      return;
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === MessageType.SHARE_CREATE_RESULT) {
+          ws.removeEventListener('message', handleMessage);
+          setShareLoading(false);
+
+          if (message.payload.success) {
+            const shareId = message.payload.shareId;
+            const url = `${window.location.origin}/share/${shareId}`;
+            setShareUrl(url);
+          } else {
+            setShareError(message.payload.error || '공유 링크 생성에 실패했습니다.');
+          }
+        }
+      } catch {
+        // JSON 파싱 에러 무시
+      }
+    };
+
+    ws.addEventListener('message', handleMessage);
+
+    // 공유 요청 전송
+    createShare(selectedConversation.conversationId);
+
+    // 타임아웃 처리
+    setTimeout(() => {
+      ws.removeEventListener('message', handleMessage);
+      if (shareLoading) {
+        setShareLoading(false);
+        setShareError('요청 시간이 초과되었습니다.');
+      }
+    }, 10000);
+  }, [selectedConversation, shareLoading]);
+
   if (!selectedConversation) {
     return (
       <div className="px-3 py-1 bg-secondary/30 flex items-center">
@@ -207,8 +266,12 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
               updatePermissionMode(selectedConversation.conversationId, mode);
             }}
             onNewSession={() => {
+              // 로컬 메시지 및 입력 draft 정리 (새 세션이므로 이전 히스토리 불필요)
+              useConversationStore.getState().clearMessages(selectedConversation.conversationId);
+              clearDraftText(selectedConversation.conversationId);
               sendClaudeControl(selectedConversation.conversationId, 'new_session');
             }}
+            onShare={handleShare}
             onBugReport={() => setShowBugReport(true)}
             onRename={startRename}
             onDelete={handleDelete}
@@ -246,6 +309,15 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
           );
           if (!sent) throw new Error('WebSocket 연결 안 됨');
         }}
+      />
+
+      {/* 공유 다이얼로그 */}
+      <ShareDialog
+        open={showShareDialog}
+        onClose={() => setShowShareDialog(false)}
+        shareUrl={shareUrl}
+        isLoading={shareLoading}
+        error={shareError}
       />
 
       {/* 문서 뷰어 */}

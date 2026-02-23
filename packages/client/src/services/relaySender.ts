@@ -445,3 +445,20 @@ export function requestAccountSwitch(account: AccountType): boolean {
     broadcast: 'pylons',
   });
 }
+
+// ============================================================================
+// 공유 관련
+// ============================================================================
+
+/**
+ * 공유 링크 생성 요청
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ */
+export function createShare(conversationId: number): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: MessageType.SHARE_CREATE,
+    payload: { conversationId },
+    to: [pylonId],
+  });
+}

@@ -3,7 +3,7 @@
  * @description WorkspaceStore 테스트
  *
  * 워크스페이스 영속 저장 기능을 테스트합니다.
- * - workspaceId: number (1~127) - workspaceIndex와 동일
+ * - workspaceId: number (인코딩된 값) - pylonId + workspaceIndex
  * - conversationId: ConversationId (24비트 통합 ID)
  * - 삭제된 ID는 할당 시 검색으로 재사용
  *
@@ -38,8 +38,16 @@ const DEVICE_INDEX = 1;
 /** 테스트용 환경 ID (0=release) */
 const ENV_ID = 0 as const;
 
-/** 테스트용 PylonId 생성 헬퍼 */
-const TEST_DEVICE_INDEX = encodePylonId(ENV_ID, DEVICE_INDEX);
+/** 테스트용 PylonId */
+const TEST_PYLON_ID = encodePylonId(ENV_ID, DEVICE_INDEX);
+
+/**
+ * 테스트용 WorkspaceId 생성 헬퍼
+ * allocateWorkspaceId()가 인코딩된 값을 반환하므로, 테스트 기대값도 인코딩
+ */
+function testEncodeWorkspaceId(workspaceIndex: number): number {
+  return encodeWorkspaceId(TEST_PYLON_ID, workspaceIndex);
+}
 
 /**
  * 테스트용 ConversationId 생성 헬퍼
@@ -87,11 +95,11 @@ describe('WorkspaceStore', () => {
     it('should initialize from existing data', () => {
       const conversationId = testEncodeConversationId(DEVICE_INDEX, 1, 1);
       const existingData: WorkspaceStoreData = {
-        activeWorkspaceId: 1,
+        activeWorkspaceId: testEncodeWorkspaceId(1),
         activeConversationId: conversationId,
         workspaces: [
           {
-            workspaceId: 1,
+            workspaceId: testEncodeWorkspaceId(1),
             name: 'Test Workspace',
             workingDir: 'C:\\test',
             conversations: [
@@ -114,7 +122,7 @@ describe('WorkspaceStore', () => {
       const loadedStore = new WorkspaceStore(DEVICE_INDEX, existingData);
 
       expect(loadedStore.getAllWorkspaces()).toHaveLength(1);
-      expect(loadedStore.getActiveState().activeWorkspaceId).toBe(1);
+      expect(loadedStore.getActiveState().activeWorkspaceId).toBe(testEncodeWorkspaceId(1));
     });
   });
 
@@ -132,10 +140,10 @@ describe('WorkspaceStore', () => {
         expect(result.conversation).toBeUndefined();
       });
 
-      it('should assign numeric workspaceId starting from 1', () => {
+      it('should assign encoded workspaceId', () => {
         const result = store.createWorkspace('WS1', 'C:\\ws1');
 
-        expect(result.workspace.workspaceId).toBe(1);
+        expect(result.workspace.workspaceId).toBe(testEncodeWorkspaceId(1));
         expect(typeof result.workspace.workspaceId).toBe('number');
       });
 
@@ -157,8 +165,8 @@ describe('WorkspaceStore', () => {
         const result1 = store.createWorkspace('WS1', 'C:\\ws1');
         const result2 = store.createWorkspace('WS2', 'C:\\ws2');
 
-        expect(result1.workspace.workspaceId).toBe(1);
-        expect(result2.workspace.workspaceId).toBe(2);
+        expect(result1.workspace.workspaceId).toBe(testEncodeWorkspaceId(1));
+        expect(result2.workspace.workspaceId).toBe(testEncodeWorkspaceId(2));
       });
 
       it('should use default working directory if not provided', () => {
@@ -506,7 +514,7 @@ describe('WorkspaceStore', () => {
       });
 
       it('should return null for non-existent conversation', () => {
-        const fakeId = testEncodeConversationId(DEVICE_INDEX, workspaceId, 999);
+        const fakeId = testEncodeConversationId(DEVICE_INDEX, 1, 999);
         const found = store.getConversation(fakeId);
 
         expect(found).toBeNull();
@@ -544,7 +552,7 @@ describe('WorkspaceStore', () => {
       });
 
       it('should return false for non-existent conversation', () => {
-        const fakeId = testEncodeConversationId(DEVICE_INDEX, workspaceId, 999);
+        const fakeId = testEncodeConversationId(DEVICE_INDEX, 1, 999);
         const result = store.renameConversation(fakeId, 'New');
 
         expect(result).toBe(false);
@@ -571,7 +579,7 @@ describe('WorkspaceStore', () => {
       });
 
       it('should return false for non-existent conversation', () => {
-        const fakeId = testEncodeConversationId(DEVICE_INDEX, workspaceId, 999);
+        const fakeId = testEncodeConversationId(DEVICE_INDEX, 1, 999);
         const result = store.deleteConversation(fakeId);
 
         expect(result).toBe(false);
@@ -642,14 +650,12 @@ describe('WorkspaceStore', () => {
       });
 
       it('should update workspace lastUsed', () => {
-        const { workspaceIndex } = testDecodeConversationId(conversationId);
-        const workspaceId = workspaceIndex;
-        const workspace = store.getWorkspace(workspaceId);
+        const workspace = store.getActiveWorkspace();
         const originalLastUsed = workspace!.lastUsed;
 
         store.updateClaudeSessionId(conversationId, 'session-123');
 
-        const updated = store.getWorkspace(workspaceId);
+        const updated = store.getActiveWorkspace();
         expect(updated?.lastUsed).toBeGreaterThanOrEqual(originalLastUsed);
       });
     });
@@ -866,12 +872,12 @@ describe('WorkspaceStore', () => {
         store.createWorkspace('WS2', 'C:\\ws2');
         store.createWorkspace('WS3', 'C:\\ws3');
 
-        expect(ws1.workspaceId).toBe(1);
+        expect(ws1.workspaceId).toBe(testEncodeWorkspaceId(1));
 
-        store.deleteWorkspace(1);
+        store.deleteWorkspace(testEncodeWorkspaceId(1));
 
         const { workspace: ws4 } = store.createWorkspace('WS4', 'C:\\ws4');
-        expect(ws4.workspaceId).toBe(1);
+        expect(ws4.workspaceId).toBe(testEncodeWorkspaceId(1));
       });
 
       it('should reuse smallest available workspace ID', () => {
@@ -879,17 +885,17 @@ describe('WorkspaceStore', () => {
         store.createWorkspace('WS2', 'C:\\ws2');
         store.createWorkspace('WS3', 'C:\\ws3');
 
-        store.deleteWorkspace(1);
-        store.deleteWorkspace(3);
+        store.deleteWorkspace(testEncodeWorkspaceId(1));
+        store.deleteWorkspace(testEncodeWorkspaceId(3));
 
         const { workspace } = store.createWorkspace('WS4', 'C:\\ws4');
-        expect(workspace.workspaceId).toBe(1);
+        expect(workspace.workspaceId).toBe(testEncodeWorkspaceId(1));
 
         const { workspace: ws5 } = store.createWorkspace('WS5', 'C:\\ws5');
-        expect(ws5.workspaceId).toBe(3);
+        expect(ws5.workspaceId).toBe(testEncodeWorkspaceId(3));
 
         const { workspace: ws6 } = store.createWorkspace('WS6', 'C:\\ws6');
-        expect(ws6.workspaceId).toBe(4);
+        expect(ws6.workspaceId).toBe(testEncodeWorkspaceId(4));
       });
     });
 
@@ -954,19 +960,19 @@ describe('WorkspaceStore', () => {
         const restored = WorkspaceStore.fromJSON(DEVICE_INDEX, store.toJSON());
 
         const { workspace: ws3 } = restored.createWorkspace('WS3', 'C:\\ws3');
-        expect(ws3.workspaceId).toBe(3);
+        expect(ws3.workspaceId).toBe(testEncodeWorkspaceId(3));
       });
 
       it('should detect gaps after fromJSON restore', () => {
         store.createWorkspace('WS1', 'C:\\ws1');
         store.createWorkspace('WS2', 'C:\\ws2');
         store.createWorkspace('WS3', 'C:\\ws3');
-        store.deleteWorkspace(2);
+        store.deleteWorkspace(testEncodeWorkspaceId(2));
 
         const restored = WorkspaceStore.fromJSON(DEVICE_INDEX, store.toJSON());
 
         const { workspace } = restored.createWorkspace('WS4', 'C:\\ws4');
-        expect(workspace.workspaceId).toBe(2);
+        expect(workspace.workspaceId).toBe(testEncodeWorkspaceId(2));
       });
     });
   });

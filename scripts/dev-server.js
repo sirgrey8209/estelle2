@@ -69,7 +69,6 @@ function generateEcosystem() {
       dataDir: dataDir,
       mcpPort: devConfig.pylon.mcpPort,
     },
-    beacon: devConfig.beacon,
   });
 
   const clientDir = join(rootDir, 'packages', 'client');
@@ -193,6 +192,15 @@ async function start() {
   console.log('');
   console.log('========================================');
   console.log('');
+
+  // version.json 생성 (dev 환경)
+  const versionJsonPath = join(rootDir, 'packages', 'relay', 'public', 'version.json');
+  const relayPublicDir = join(rootDir, 'packages', 'relay', 'public');
+  if (!existsSync(relayPublicDir)) {
+    mkdirSync(relayPublicDir, { recursive: true });
+  }
+  writeFileSync(versionJsonPath, JSON.stringify({ env: 'dev', version: '', buildTime: new Date().toISOString() }), 'utf-8');
+  console.log('[dev] Generated version.json');
 
   // ecosystem 생성
   generateEcosystem();

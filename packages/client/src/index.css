@@ -14,6 +14,7 @@
     --popover: 40 30% 99%;
     --popover-foreground: 30 10% 20%;
 
+    /* 기본 primary (release - 파란색) */
     --primary: 199 85% 52%;
     --primary-foreground: 0 0% 100%;
 
@@ -34,6 +35,31 @@
     --ring: 199 85% 52%;
 
     --radius: 0.5rem;
+  }
+
+  /* 환경별 메인 컬러 */
+  /* dev: 초록색 - 개발 중임을 표시 */
+  :root.env-dev {
+    --primary: 142 85% 45%;
+    --accent: 142 50% 92%;
+    --accent-foreground: 142 85% 30%;
+    --ring: 142 85% 45%;
+  }
+
+  /* stage: 주황색 - 테스트 환경임을 경고 */
+  :root.env-stage {
+    --primary: 30 85% 52%;
+    --accent: 30 50% 92%;
+    --accent-foreground: 30 85% 35%;
+    --ring: 30 85% 52%;
+  }
+
+  /* release: 파란색 (기본값과 동일, 명시적 선언) */
+  :root.env-release {
+    --primary: 199 85% 52%;
+    --accent: 199 50% 92%;
+    --accent-foreground: 199 85% 35%;
+    --ring: 199 85% 52%;
   }
 }
 

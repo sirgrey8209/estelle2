@@ -111,6 +111,9 @@ export interface Conversation {
 
   /** 연결된 문서 목록 */
   linkedDocuments?: LinkedDocument[];
+
+  /** 커스텀 시스템 프롬프트 (선택, 파일 내용 또는 직접 입력) */
+  customSystemPrompt?: string;
 }
 
 /**
@@ -285,9 +288,16 @@ export class WorkspaceStore {
    * 사용 가능한 가장 작은 워크스페이스 ID 할당
    */
   private allocateWorkspaceId(): number {
-    const used = new Set(this._workspaces.map((w) => w.workspaceId));
+    // 기존 워크스페이스의 workspaceIndex 사용 현황 조회
+    const usedIndices = new Set(this._workspaces.map((w) => {
+      const decoded = decodeNewWorkspaceId(w.workspaceId as WorkspaceId);
+      return decoded.workspaceIndex;
+    }));
     for (let i = 1; i <= MAX_WORKSPACE_ID; i++) {
-      if (!used.has(i)) return i;
+      if (!usedIndices.has(i)) {
+        // pylonId를 포함한 인코딩된 WorkspaceId 반환
+        return encodeNewWorkspaceId(this._pylonId, i);
+      }
     }
     throw new Error('No available workspace IDs (max: 127)');
   }
@@ -319,11 +329,10 @@ export class WorkspaceStore {
   private findConversation(
     conversationId: ConversationId
   ): { workspace: Workspace; conversation: Conversation } | null {
-    // ConversationId → WorkspaceId → workspaceIndex 추출
+    // ConversationId → WorkspaceId 추출 (인코딩된 값)
     const { workspaceId: wsId } = decodeNewConversationId(conversationId as ConversationId);
-    const { workspaceIndex } = decodeNewWorkspaceId(wsId);
 
-    const workspace = this._workspaces.find((w) => w.workspaceId === workspaceIndex);
+    const workspace = this._workspaces.find((w) => w.workspaceId === wsId);
     if (!workspace) return null;
 
     const conversation = workspace.conversations.find((c) => c.conversationId === conversationId);
@@ -507,10 +516,9 @@ export class WorkspaceStore {
     const conversationIndex = this.allocateConversationId(workspace);
 
     // 새로운 ID 시스템으로 ConversationId 생성
-    // PylonId(7) + workspaceIndex(7) = WorkspaceId(14)
+    // workspaceId는 이미 인코딩된 값 (pylonId + workspaceIndex)
     // WorkspaceId(14) + conversationIndex(10) = ConversationId(24)
-    const wsId = encodeNewWorkspaceId(this._pylonId, workspaceId);
-    const conversationId = encodeNewConversationId(wsId, conversationIndex) as ConversationId;
+    const conversationId = encodeNewConversationId(workspaceId as WorkspaceId, conversationIndex) as ConversationId;
 
     const newConversation: Conversation = {
       conversationId,
@@ -613,6 +621,43 @@ export class WorkspaceStore {
 
     conv.permissionMode = mode;
     return true;
+  }
+
+  // ============================================================================
+  // Custom System Prompt
+  // ============================================================================
+
+  /**
+   * 대화의 커스텀 시스템 프롬프트 설정
+   *
+   * @param conversationId 대화 ConversationId
+   * @param prompt 시스템 프롬프트 (null로 설정하면 제거)
+   * @returns 설정 성공 여부
+   */
+  setCustomSystemPrompt(
+    conversationId: ConversationId,
+    prompt: string | null
+  ): boolean {
+    const conv = this.getConversation(conversationId);
+    if (!conv) return false;
+
+    if (prompt === null) {
+      delete conv.customSystemPrompt;
+    } else {
+      conv.customSystemPrompt = prompt;
+    }
+    return true;
+  }
+
+  /**
+   * 대화의 커스텀 시스템 프롬프트 조회
+   *
+   * @param conversationId 대화 ConversationId
+   * @returns 커스텀 시스템 프롬프트 (없으면 undefined)
+   */
+  getCustomSystemPrompt(conversationId: ConversationId): string | undefined {
+    const conv = this.getConversation(conversationId);
+    return conv?.customSystemPrompt;
   }
 
   // ============================================================================

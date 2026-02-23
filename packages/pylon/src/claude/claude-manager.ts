@@ -51,6 +51,22 @@ import type { PermissionResult } from './permission-rules.js';
 // ============================================================================
 
 /**
+ * SDK의 preset 형식 시스템 프롬프트
+ *
+ * @description
+ * Claude Code의 기본 시스템 프롬프트를 사용하면서 추가 지시사항을 append할 수 있습니다.
+ * CLAUDE.md와 함께 사용됩니다.
+ */
+export interface SystemPromptPreset {
+  type: 'preset';
+  preset: 'claude_code';
+  append?: string;
+}
+
+// ============================================================================
+// ============================================================================
+
+/**
  * Claude 이벤트 타입
  *
  * @description
@@ -85,7 +101,9 @@ export type ClaudeManagerEventType =
   | 'error'
   | 'state'
   | 'claudeAborted'
-  | 'usage_update';
+  | 'usage_update'
+  | 'compactStart'
+  | 'compactComplete';
 
 /**
  * Claude 상태 정보
@@ -221,6 +239,12 @@ export interface SendMessageOptions {
 
   /** Claude 세션 ID (재개용) */
   claudeSessionId?: string;
+
+  /** 시스템 프롬프트 (새 세션용, resume 시 무시됨) */
+  systemPrompt?: string | SystemPromptPreset;
+
+  /** 시스템 리마인더 (새 세션용, resume 시 무시됨) */
+  systemReminder?: string;
 }
 
 /**
@@ -284,7 +308,7 @@ export interface ClaudeQueryOptions {
   /** 중단용 AbortController */
   abortController: AbortController;
 
-  /** 대화 ID (세션 식별자, Beacon 어댑터용) */
+  /** 대화 ID (세션 식별자) */
   conversationId?: number;
 
   /** 부분 메시지 포함 여부 */
@@ -307,6 +331,9 @@ export interface ClaudeQueryOptions {
     toolName: string,
     input: Record<string, unknown>
   ) => Promise<PermissionCallbackResult>;
+
+  /** 시스템 프롬프트 (새 세션용) */
+  systemPrompt?: string | SystemPromptPreset;
 }
 
 /**
@@ -421,10 +448,7 @@ export interface ClaudeManagerOptions {
   /** SDK raw 메시지 로거 (선택) */
   onRawMessage?: RawMessageLogger;
 
-  /**
-   * @deprecated Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
-   * Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 선택)
-   */
+  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 환경별 분리) */
   claudeConfigDir?: string;
 }
 
@@ -509,13 +533,10 @@ export class ClaudeManager {
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
     this.onRawMessage = options.onRawMessage;
-    // DEPRECATED: Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
-    // this.claudeConfigDir = options.claudeConfigDir;
+    this.claudeConfigDir = options.claudeConfigDir;
   }
 
-  /**
-   * @deprecated Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서는 사용하지 않음
-   */
+  /** Claude config 디렉토리 */
   private readonly claudeConfigDir?: string;
 
   // ============================================================================
@@ -566,7 +587,16 @@ export class ClaudeManager {
     this.emitEvent(sessionId, { type: 'state', state: 'working' });
 
     try {
-      await this.runQuery(sessionId, { workingDir, claudeSessionId }, message);
+      await this.runQuery(
+        sessionId,
+        {
+          workingDir,
+          claudeSessionId,
+          systemPrompt: options.systemPrompt,
+          systemReminder: options.systemReminder,
+        },
+        message
+      );
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : String(err);
@@ -741,6 +771,8 @@ export class ClaudeManager {
       answers: { '0': answer },
     };
     pending.resolve({ behavior: 'allow', updatedInput });
+
+    this.emitEvent(sessionId, { type: 'state', state: 'working' });
   }
 
   // ============================================================================
@@ -808,6 +840,25 @@ export class ClaudeManager {
     return Array.from(this.pendingQuestions.values()).map((q) => q.sessionId);
   }
 
+  /**
+   * toolUseId로 세션 ID(=conversationId) 조회
+   *
+   * @description
+   * MCP 도구가 toolUseId를 통해 해당 도구 호출이 어느 대화에서 발생했는지 조회합니다.
+   * ClaudeManager 내부의 pendingTools를 사용하여 매핑합니다.
+   *
+   * @param toolUseId - 도구 호출 ID
+   * @returns 세션 ID 또는 null
+   */
+  getSessionIdByToolUseId(toolUseId: string): number | null {
+    for (const [sessionId, session] of this.sessions) {
+      if (session.pendingTools.has(toolUseId)) {
+        return sessionId;
+      }
+    }
+    return null;
+  }
+
   // ============================================================================
   // Public 메서드 - 정리
   // ============================================================================
@@ -859,7 +910,12 @@ export class ClaudeManager {
    */
   private async runQuery(
     sessionId: number,
-    sessionInfo: { workingDir: string; claudeSessionId?: string },
+    sessionInfo: {
+      workingDir: string;
+      claudeSessionId?: string;
+      systemPrompt?: string | SystemPromptPreset;
+      systemReminder?: string;
+    },
     message: string
   ): Promise<void> {
     const abortController = new AbortController();
@@ -909,18 +965,30 @@ export class ClaudeManager {
       }
     }
 
-    // DEPRECATED: Beacon이 CLAUDE_CONFIG_DIR을 관리하므로 Pylon에서 env를 전달하지 않음
-    // SDK 호출 시 Beacon의 process.env.CLAUDE_CONFIG_DIR이 사용됨
-    // if (this.claudeConfigDir) {
-    //   queryOptions.env = {
-    //     ...process.env as Record<string, string>,
-    //     CLAUDE_CONFIG_DIR: this.claudeConfigDir,
-    //   };
-    // }
+    // 환경별 Claude config 디렉토리 전달
+    if (this.claudeConfigDir) {
+      queryOptions.env = {
+        ...process.env as Record<string, string>,
+        CLAUDE_CONFIG_DIR: this.claudeConfigDir,
+      };
+    }
 
     // 세션 재개
     if (sessionInfo.claudeSessionId) {
       queryOptions.resume = sessionInfo.claudeSessionId;
+    }
+
+    // resume가 아닐 때만 context(systemPrompt, systemReminder) 처리
+    if (!sessionInfo.claudeSessionId) {
+      // systemPrompt 전달 (undefined가 아닌 경우에만, 빈 문자열도 전달)
+      if (sessionInfo.systemPrompt !== undefined) {
+        queryOptions.systemPrompt = sessionInfo.systemPrompt;
+      }
+
+      // systemReminder 전달: 메시지 앞에 <system-reminder> 태그로 감싸서 붙임
+      if (sessionInfo.systemReminder) {
+        queryOptions.prompt = `<system-reminder>\n${sessionInfo.systemReminder}\n</system-reminder>\n${message}`;
+      }
     }
 
     // 어댑터가 없으면 실제 SDK 호출 불가 (테스트용)
@@ -985,7 +1053,7 @@ export class ClaudeManager {
   }
 
   /**
-   * system 메시지 처리 (init)
+   * system 메시지 처리 (init, status, compact_boundary)
    */
   private handleSystemMessage(
     sessionId: number,
@@ -1000,6 +1068,22 @@ export class ClaudeManager {
         session_id: msg.session_id,
         model: msg.model,
         tools: msg.tools,
+      });
+    } else if (msg.subtype === 'status') {
+      // compacting 상태일 때 compactStart 이벤트 emit
+      const status = (msg as ClaudeMessage & { status?: string }).status;
+      if (status === 'compacting') {
+        this.emitEvent(sessionId, {
+          type: 'compactStart',
+        });
+      }
+    } else if (msg.subtype === 'compact_boundary') {
+      // compact_boundary 메시지일 때 compactComplete 이벤트 emit
+      const compactMetadata = (msg as ClaudeMessage & { compact_metadata?: { trigger?: string; pre_tokens?: number } }).compact_metadata;
+      this.emitEvent(sessionId, {
+        type: 'compactComplete',
+        preTokens: compactMetadata?.pre_tokens,
+        trigger: compactMetadata?.trigger,
       });
     }
   }

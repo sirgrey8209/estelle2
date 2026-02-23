@@ -93,7 +93,6 @@ function New-EcosystemConfig {
     param(
         [Parameter(Mandatory)]
         [object]$PylonConfig,
-        [object]$BeaconConfig,
         [int]$EnvId = 0,
         [string]$DataDir = ""
     )
@@ -122,18 +121,6 @@ function New-EcosystemConfig {
             credentialsBackupDir = $credentialsBackupDir
             dataDir = $dataDirResolved
             mcpPort = $PylonConfig.mcpPort
-        }
-    }
-
-    # Beacon 설정 추가
-    if ($BeaconConfig) {
-        $envConfigObj.beacon = @{
-            enabled = [bool]$BeaconConfig.enabled
-            host = if ($BeaconConfig.host) { $BeaconConfig.host } else { "127.0.0.1" }
-            port = if ($BeaconConfig.port) { $BeaconConfig.port } else { 9875 }
-            env = if ($BeaconConfig.env) { $BeaconConfig.env } else { "release" }
-            reconnect = if ($null -ne $BeaconConfig.reconnect) { [bool]$BeaconConfig.reconnect } else { $true }
-            reconnectInterval = if ($BeaconConfig.reconnectInterval) { $BeaconConfig.reconnectInterval } else { 3000 }
         }
     }
 
@@ -262,9 +249,9 @@ function Deploy-FlyRelay {
     )
 
     Write-Detail "Build context: $WorkingDir"
-    Write-Detail "Running: fly deploy --config relay/fly.toml --dockerfile relay/Dockerfile"
+    Write-Detail "Running: fly deploy --config relay/fly.toml --dockerfile relay/Dockerfile --remote-only"
 
-    $flyArgs = "deploy --config relay/fly.toml --dockerfile relay/Dockerfile"
+    $flyArgs = "deploy --config relay/fly.toml --dockerfile relay/Dockerfile --remote-only"
     $outLog = Join-Path $WorkingDir "fly-out.log"
     $errLog = Join-Path $WorkingDir "fly-err.log"
 
@@ -319,7 +306,7 @@ function Start-PylonPM2 {
 
     # PM2에 주입된 ESTELLE_ENV_CONFIG 출력
     Write-Detail "PM2 env for $PM2Name`:"
-    $envOutput = node -e "const cp=require('child_process');const j=JSON.parse(cp.execSync('pm2 jlist',{encoding:'utf8'}));const p=j.find(x=>x.name==='$PM2Name');if(p){const e=p.pm2_env?.env||{};if(e.ESTELLE_ENV_CONFIG){try{const c=JSON.parse(e.ESTELLE_ENV_CONFIG);console.log('envId='+c.envId);console.log('relayUrl='+c.pylon?.relayUrl);console.log('configDir='+c.pylon?.configDir);console.log('dataDir='+c.pylon?.dataDir);console.log('mcpPort='+c.pylon?.mcpPort);if(c.beacon)console.log('beacon='+c.beacon.host+':'+c.beacon.port+' ('+c.beacon.env+')');}catch(e){console.log('ESTELLE_ENV_CONFIG: (parse error)');}}else{console.log('ESTELLE_ENV_CONFIG: (not set)');}}" 2>$null
+    $envOutput = node -e "const cp=require('child_process');const j=JSON.parse(cp.execSync('pm2 jlist',{encoding:'utf8'}));const p=j.find(x=>x.name==='$PM2Name');if(p){const e=p.pm2_env?.env||{};if(e.ESTELLE_ENV_CONFIG){try{const c=JSON.parse(e.ESTELLE_ENV_CONFIG);console.log('envId='+c.envId);console.log('relayUrl='+c.pylon?.relayUrl);console.log('configDir='+c.pylon?.configDir);console.log('dataDir='+c.pylon?.dataDir);console.log('mcpPort='+c.pylon?.mcpPort);}catch(e){console.log('ESTELLE_ENV_CONFIG: (parse error)');}}else{console.log('ESTELLE_ENV_CONFIG: (not set)');}}" 2>$null
     if ($envOutput) {
         $envOutput -split "`n" | ForEach-Object { Write-Detail "  $_" }
     }
