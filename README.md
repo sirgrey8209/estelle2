@@ -60,7 +60,7 @@ Estelle을 사용하면 PC에서 실행 중인 Claude Code를 어디서든 - 휴
 
 ```bash
 # 저장소 클론
-git clone https://github.com/your-username/estelle2.git
+git clone https://github.com/sirgrey8209/estelle2.git
 cd estelle2
 
 # 의존성 설치
