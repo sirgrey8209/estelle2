@@ -110,6 +110,13 @@ export const useAuthStore = create<AuthState>()(
         idToken: state.idToken,
         user: state.user,
       }),
+      // Google OAuth 비활성화 시 저장된 상태 무시하고 초기 상태 사용
+      merge: (persistedState, currentState) => {
+        if (!isGoogleAuthEnabled) {
+          return { ...currentState, ...initialState };
+        }
+        return { ...currentState, ...(persistedState as Partial<AuthState>) };
+      },
     }
   )
 );

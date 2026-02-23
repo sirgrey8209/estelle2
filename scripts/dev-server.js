@@ -107,7 +107,8 @@ module.exports = {
       watch: false,
       autorestart: false,
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        VITE_GOOGLE_CLIENT_ID: ''
       }
     }
   ]
