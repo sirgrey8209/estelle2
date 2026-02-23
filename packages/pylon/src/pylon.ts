@@ -35,13 +35,13 @@
  * ```
  */
 
-import type { PermissionModeValue, ConversationStatusValue, ConversationId } from '@estelle/core';
+import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
 import { decodeConversationIdFull } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
 import type { ClaudeManagerEvent } from './claude/claude-manager.js';
-import type { PersistenceAdapter } from './persistence/types.js';
+import type { PersistenceAdapter, PersistedAccount } from './persistence/types.js';
 import { generateThumbnail } from './utils/thumbnail.js';
 import {
   buildSystemPrompt,
@@ -179,9 +179,9 @@ export interface LoggerAdapter {
  * CredentialManager 인터페이스 (의존성 주입용)
  */
 export interface CredentialManagerAdapter {
-  getCurrentAccount(): Promise<{ account: string; subscriptionType: string } | null>;
-  switchAccount(account: string): Promise<void>;
-  hasBackup(account: string): Promise<boolean>;
+  getCurrentAccount(): Promise<{ account: AccountType; subscriptionType: string } | null>;
+  switchAccount(account: AccountType): Promise<void>;
+  hasBackup(account: AccountType): Promise<boolean>;
 }
 
 /**
@@ -280,7 +280,7 @@ export class Pylon {
   private deviceInfo: DeviceInfo | null = null;
 
   /** 캐싱된 계정 정보 */
-  private cachedAccount: { current: string; subscriptionType: string } | null = null;
+  private cachedAccount: PersistedAccount | null = null;
 
   /** 세션별 시청자: Map<conversationId, Set<encodedDeviceId>> (숫자) */
   private readonly sessionViewers: Map<number, Set<number>> = new Map();
@@ -375,28 +375,48 @@ export class Pylon {
 
   /**
    * 계정 정보 캐싱 갱신
+   *
+   * @returns 계정이 변경되었으면 true
    */
-  private async refreshAccountCache(): Promise<void> {
+  private async refreshAccountCache(): Promise<boolean> {
     if (!this.deps.credentialManager) {
       this.cachedAccount = null;
-      return;
+      return false;
     }
 
     try {
       const info = await this.deps.credentialManager.getCurrentAccount();
       if (info) {
-        this.cachedAccount = {
+          // 이전에 저장된 계정과 비교
+        const persistence = this.deps.persistence;
+        const lastAccount = persistence?.loadLastAccount();
+        const accountChanged = lastAccount !== undefined && lastAccount.current !== info.account;
+
+        if (accountChanged) {
+          this.log(`[Account] Changed: ${lastAccount.current} → ${info.account}`);
+        }
+
+        // 현재 계정 캐싱 및 저장
+        const accountData: PersistedAccount = {
           current: info.account,
           subscriptionType: info.subscriptionType,
         };
+        this.cachedAccount = accountData;
+        if (persistence) {
+          await persistence.saveLastAccount(accountData);
+        }
+
         this.log(`[Account] Cached: ${info.account} (${info.subscriptionType})`);
+        return accountChanged;
       } else {
         this.cachedAccount = null;
         this.log(`[Account] No account info found`);
+        return false;
       }
     } catch (err) {
       this.cachedAccount = null;
       this.deps.logger.error(`[Account] Failed to cache account info: ${err}`);
+      return false;
     }
   }
 
@@ -2743,8 +2763,9 @@ Message: ${message}
     payload: Record<string, unknown> | undefined,
     from: MessageFrom | undefined
   ): void {
-    const { account } = payload || {};
-    if (!account || typeof account !== 'string') {
+    const { account: rawAccount } = payload || {};
+    // AccountType 유효성 검증
+    if (!rawAccount || (rawAccount !== 'linegames' && rawAccount !== 'personal')) {
       if (from?.deviceId !== undefined) {
         this.send({
           type: 'account_status',
@@ -2756,6 +2777,7 @@ Message: ${message}
       }
       return;
     }
+    const account = rawAccount as AccountType;
 
     // credentialManager가 없으면 에러
     if (!this.deps.credentialManager) {

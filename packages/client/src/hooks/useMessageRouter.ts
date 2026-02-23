@@ -15,7 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { debugLog } from '../stores/debugStore';
+// import { debugLog } from '../stores/debugStore';
 
 /**
  * 메시지를 적절한 Store에 라우팅합니다.
@@ -86,8 +86,25 @@ export function routeMessage(message: RelayMessage): void {
       // 계정 정보 업데이트
       if (account) {
         console.log('[Router] Setting account:', account);
-        useSettingsStore.getState().setAccountStatus({
-          current: account.current as import('@estelle/core').AccountType,
+
+        const settingsStore = useSettingsStore.getState();
+        const previousAccount = settingsStore.currentAccount;
+        const newAccount = account.current as import('@estelle/core').AccountType;
+
+        // 계정이 변경된 경우 (Pylon 재시작 등) 스토어 초기화
+        // - 이전 계정이 있고, 새 계정과 다른 경우에만 초기화
+        // - 최초 로드 시 (previousAccount === null)는 초기화하지 않음
+        if (previousAccount !== null && previousAccount !== newAccount) {
+          console.log(`[Router] Account changed on workspace_list: ${previousAccount} → ${newAccount}, resetting stores`);
+
+          // 계정 변경 시 이전 계정의 데이터 정리
+          useConversationStore.getState().reset();
+          // workspaceStore는 직후에 setWorkspaces가 호출되므로 reset 불필요
+          useSyncStore.getState().resetForReconnect();
+        }
+
+        settingsStore.setAccountStatus({
+          current: newAccount,
           subscriptionType: account.subscriptionType,
         });
       } else {
@@ -286,7 +303,23 @@ export function routeMessage(message: RelayMessage): void {
         current: import('@estelle/core').AccountType;
         subscriptionType?: string;
       };
-      useSettingsStore.getState().setAccountStatus({
+
+      const settingsStore = useSettingsStore.getState();
+      const previousAccount = settingsStore.currentAccount;
+
+      // 계정이 변경된 경우 (전환 완료) 스토어 초기화
+      // - 이전 계정이 있고, 새 계정과 다른 경우에만 초기화
+      // - 최초 로드 시 (previousAccount === null)는 초기화하지 않음
+      if (previousAccount !== null && previousAccount !== current) {
+        console.log(`[Router] Account switched: ${previousAccount} → ${current}, resetting stores`);
+
+        // 계정 전환 시 이전 계정의 데이터 정리
+        useConversationStore.getState().reset();
+        useWorkspaceStore.getState().reset();
+        useSyncStore.getState().resetForReconnect();
+      }
+
+      settingsStore.setAccountStatus({
         current,
         subscriptionType,
       });
@@ -319,7 +352,7 @@ function handleClaudeEventForConversation(
     case 'state': {
       const status = event.state as 'idle' | 'working' | 'permission';
       if (status) {
-        debugLog('STATE', status);
+        // debugLog('STATE', status);
         store.setStatus(conversationId, status);
       }
       break;
@@ -328,14 +361,14 @@ function handleClaudeEventForConversation(
     case 'text': {
       const text = event.text as string;
       if (text) {
-        debugLog('TEXT', `+${text.length}ch "${text.slice(0, 30)}${text.length > 30 ? '...' : ''}"`);
+        // debugLog('TEXT', `+${text.length}ch "${text.slice(0, 30)}${text.length > 30 ? '...' : ''}"`);
         store.appendTextBuffer(conversationId, text);
       }
       break;
     }
 
     case 'textComplete': {
-      debugLog('TEXT', 'complete (flush)');
+      // debugLog('TEXT', 'complete (flush)');
       store.flushTextBuffer(conversationId);
       break;
     }
@@ -345,7 +378,7 @@ function handleClaudeEventForConversation(
       const toolUseId = event.toolUseId as string | undefined;
       const parentToolUseId = event.parentToolUseId as string | null | undefined;
       const toolName = event.toolName as string;
-      debugLog('TOOL', `start: ${toolName}`);
+      // debugLog('TOOL', `start: ${toolName}`);
       const message: StoreMessage = {
         id: toolUseId || generateId(),
         role: 'assistant',
@@ -459,7 +492,7 @@ function handleClaudeEventForConversation(
     case 'result': {
       const usage = event.usage as Record<string, unknown> | undefined;
       const durationMs = (event.duration_ms as number) || 0;
-      debugLog('RESULT', `done in ${(durationMs / 1000).toFixed(1)}s`);
+      // debugLog('RESULT', `done in ${(durationMs / 1000).toFixed(1)}s`);
       store.flushTextBuffer(conversationId);
       store.addMessage(conversationId, {
         id: generateId(),

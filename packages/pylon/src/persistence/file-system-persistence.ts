@@ -29,7 +29,7 @@
  * ```
  */
 
-import type { PersistenceAdapter } from './types.js';
+import type { PersistenceAdapter, PersistedAccount } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
@@ -57,6 +57,7 @@ export class FileSystemPersistence implements PersistenceAdapter {
   private readonly baseDir: string;
   private readonly workspacesPath: string;
   private readonly sharesPath: string;
+  private readonly accountPath: string;
   private readonly messagesDir: string;
   private readonly fs: FileSystemInterface;
 
@@ -70,6 +71,7 @@ export class FileSystemPersistence implements PersistenceAdapter {
     this.baseDir = baseDir;
     this.workspacesPath = this.joinPath(baseDir, 'workspaces.json');
     this.sharesPath = this.joinPath(baseDir, 'shares.json');
+    this.accountPath = this.joinPath(baseDir, 'account.json');
     this.messagesDir = this.joinPath(baseDir, 'messages');
     this.fs = fs;
 
@@ -229,5 +231,38 @@ export class FileSystemPersistence implements PersistenceAdapter {
     }
     const content = JSON.stringify(data, null, 2);
     this.fs.writeFileSync(this.sharesPath, content, 'utf-8');
+  }
+
+  // ============================================================================
+  // Account
+  // ============================================================================
+
+  /**
+   * 마지막 계정 정보 로드
+   */
+  loadLastAccount(): PersistedAccount | undefined {
+    try {
+      if (!this.fs.existsSync(this.accountPath)) {
+        return undefined;
+      }
+
+      const content = this.fs.readFileSync(this.accountPath, 'utf-8');
+      return JSON.parse(content) as PersistedAccount;
+    } catch (error) {
+      console.error('[Persistence] Failed to load account:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * 계정 정보 저장
+   */
+  async saveLastAccount(account: PersistedAccount): Promise<void> {
+    // 런타임 중 폴더가 삭제될 수 있으므로 저장 전 확인
+    if (!this.fs.existsSync(this.baseDir)) {
+      this.fs.mkdirSync(this.baseDir, { recursive: true });
+    }
+    const content = JSON.stringify(account, null, 2);
+    this.fs.writeFileSync(this.accountPath, content, 'utf-8');
   }
 }

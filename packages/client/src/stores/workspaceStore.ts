@@ -86,6 +86,54 @@ export interface WorkspaceState {
 }
 
 /**
+ * localStorage 키
+ */
+const STORAGE_KEY = 'estelle:lastSelectedConversation';
+
+/**
+ * 마지막 선택 대화 정보 (localStorage 저장용)
+ */
+interface LastSelectedConversation {
+  pylonId: number;
+  conversationId: number;
+}
+
+/**
+ * localStorage에서 마지막 선택 대화 정보를 로드
+ */
+function loadLastSelected(): LastSelectedConversation | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored) as LastSelectedConversation;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * localStorage에 마지막 선택 대화 정보를 저장
+ */
+function saveLastSelected(pylonId: number, conversationId: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ pylonId, conversationId }));
+  } catch {
+    // localStorage 실패 시 무시
+  }
+}
+
+/**
+ * localStorage에서 마지막 선택 대화 정보를 삭제
+ */
+function clearLastSelected(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // 무시
+  }
+}
+
+/**
  * 초기 상태
  */
 const initialState = {
@@ -131,24 +179,41 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     }
 
-    // 선택된 대화가 없으면 서버의 active 정보 또는 첫 번째 대화 선택
+    // 선택된 대화가 없으면 localStorage → 서버 active → 첫 번째 대화 순으로 선택
     if (!updatedSelected && workspaces.length > 0) {
       let targetWorkspace: WorkspaceWithActive | undefined;
       let targetConversation: Conversation | undefined;
 
-      // 서버에서 받은 active 정보가 있으면 우선 사용
-      if (activeInfo) {
-        targetWorkspace = workspaces.find(
-          (w) => w.workspaceId === activeInfo.workspaceId
-        );
-        if (targetWorkspace) {
-          targetConversation = targetWorkspace.conversations.find(
-            (c) => c.conversationId === activeInfo.conversationId
+      // 1순위: localStorage에 저장된 마지막 선택 대화
+      const lastSelected = loadLastSelected();
+      if (lastSelected && lastSelected.pylonId === pylonId) {
+        for (const workspace of workspaces) {
+          const conversation = workspace.conversations.find(
+            (c) => c.conversationId === lastSelected.conversationId
           );
+          if (conversation) {
+            targetWorkspace = workspace;
+            targetConversation = conversation;
+            break;
+          }
         }
       }
 
-      // active 정보가 없거나 찾지 못하면 첫 번째 대화 선택
+      // 2순위: 서버에서 받은 active 정보
+      if (!targetWorkspace || !targetConversation) {
+        if (activeInfo) {
+          targetWorkspace = workspaces.find(
+            (w) => w.workspaceId === activeInfo.workspaceId
+          );
+          if (targetWorkspace) {
+            targetConversation = targetWorkspace.conversations.find(
+              (c) => c.conversationId === activeInfo.conversationId
+            );
+          }
+        }
+      }
+
+      // 3순위: 첫 번째 대화
       if (!targetWorkspace || !targetConversation) {
         const activeWorkspace = workspaces.find((w) => w.isActive);
         targetWorkspace = activeWorkspace || workspaces[0];
@@ -275,6 +340,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         (c) => c.conversationId === conversationId
       );
       if (conversation) {
+        // localStorage에 마지막 선택 대화 저장
+        saveLastSelected(pylonId, conversationId);
+
         set({
           selectedConversation: {
             pylonId,
@@ -366,6 +434,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   reset: () => {
+    // localStorage의 마지막 선택 대화 정보 삭제
+    clearLastSelected();
     set({
       workspacesByPylon: new Map(),
       connectedPylons: [],

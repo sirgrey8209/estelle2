@@ -1,5 +1,5 @@
 import { AccountSection } from './AccountSection';
-import { DebugLogSection } from './DebugLogSection';
+// import { DebugLogSection } from './DebugLogSection';
 
 /**
  * 설정 화면 메인
@@ -9,9 +9,9 @@ export function SettingsScreen() {
     <div className="flex-1 bg-background">
       <div className="h-full overflow-y-auto p-4">
         <AccountSection />
-        <div className="mt-4">
+        {/* <div className="mt-4">
           <DebugLogSection />
-        </div>
+        </div> */}
       </div>
     </div>
   );
@@ -24,7 +24,7 @@ export function SettingsContent() {
   return (
     <div className="space-y-4">
       <AccountSection />
-      <DebugLogSection />
+      {/* <DebugLogSection /> */}
     </div>
   );
 }

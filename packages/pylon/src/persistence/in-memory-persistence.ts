@@ -23,7 +23,7 @@
  * ```
  */
 
-import type { PersistenceAdapter } from './types.js';
+import type { PersistenceAdapter, PersistedAccount } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
@@ -36,6 +36,7 @@ import type { ShareStoreData } from '../stores/share-store.js';
 export class InMemoryPersistence implements PersistenceAdapter {
   private workspaceData?: WorkspaceStoreData;
   private shareData?: ShareStoreData;
+  private accountData?: PersistedAccount;
   private sessions = new Map<string, SessionData>();
 
   // ============================================================================
@@ -110,6 +111,25 @@ export class InMemoryPersistence implements PersistenceAdapter {
   }
 
   // ============================================================================
+  // Account 영속화
+  // ============================================================================
+
+  /**
+   * 마지막 계정 정보 로드
+   */
+  loadLastAccount(): PersistedAccount | undefined {
+    return this.accountData;
+  }
+
+  /**
+   * 계정 정보 저장
+   */
+  async saveLastAccount(account: PersistedAccount): Promise<void> {
+    // 깊은 복사로 저장 (외부 수정 방지)
+    this.accountData = JSON.parse(JSON.stringify(account));
+  }
+
+  // ============================================================================
   // 테스트 헬퍼 메서드
   // ============================================================================
 
@@ -135,11 +155,19 @@ export class InMemoryPersistence implements PersistenceAdapter {
   }
 
   /**
+   * Account 데이터 직접 설정 (테스트용)
+   */
+  setLastAccount(account: PersistedAccount): void {
+    this.accountData = JSON.parse(JSON.stringify(account));
+  }
+
+  /**
    * 모든 데이터 초기화 (테스트용)
    */
   clear(): void {
     this.workspaceData = undefined;
     this.shareData = undefined;
+    this.accountData = undefined;
     this.sessions.clear();
   }
 

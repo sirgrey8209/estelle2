@@ -8,6 +8,15 @@
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
 import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
+import type { AccountType } from '@estelle/core';
+
+/**
+ * 저장된 계정 정보
+ */
+export interface PersistedAccount {
+  current: AccountType;
+  subscriptionType?: string;
+}
 
 /**
  * 영속성 어댑터 인터페이스
@@ -86,4 +95,22 @@ export interface PersistenceAdapter {
    * @param data - 저장할 데이터
    */
   saveShareStore(data: ShareStoreData): Promise<void>;
+
+  // ============================================================================
+  // Account 영속화
+  // ============================================================================
+
+  /**
+   * 마지막 계정 정보 로드
+   *
+   * @returns 저장된 계정 정보 또는 undefined (파일 없음)
+   */
+  loadLastAccount(): PersistedAccount | undefined;
+
+  /**
+   * 계정 정보 저장
+   *
+   * @param account - 저장할 계정 정보
+   */
+  saveLastAccount(account: PersistedAccount): Promise<void>;
 }
