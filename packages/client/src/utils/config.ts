@@ -12,13 +12,22 @@ const isDev = import.meta.env?.DEV ?? false;
  * Relay URL을 런타임에 결정
  * - localhost → ws://localhost:3000 (dev)
  * - 그 외 → wss://{host} (stage/release 자동 구분)
+ *
+ * 클라이언트는 항상 Relay에서 서빙되므로 window.location.host를 사용
  */
 function deriveRelayUrl(): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  // 브라우저 환경이 아니면 (테스트 등) dev URL 반환
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:3000';
+  }
+
+  const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') {
     return 'ws://localhost:3000';
   }
-  return `wss://${typeof window !== 'undefined' ? window.location.host : 'your-app-name.fly.dev'}`;
+
+  // Relay에서 서빙되므로 현재 호스트 사용
+  return `wss://${window.location.host}`;
 }
 
 /**
@@ -72,17 +81,3 @@ export const AppConfig = {
   inputBarMaxHeight: 200,
 } as const;
 
-/**
- * GitHub 설정
- * TODO: 실제 배포 시 GitHub 저장소 URL로 변경 필요
- */
-export const GitHubConfig = {
-  /** 릴리즈 베이스 URL */
-  releaseBaseUrl: 'https://github.com/your-username/estelle/releases/download/deploy',
-
-  /** APK 파일명 */
-  apkFilename: 'app-release.apk',
-
-  /** Windows ZIP 파일명 */
-  windowsFilename: 'estelle-windows.zip',
-} as const;
