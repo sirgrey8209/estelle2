@@ -16,6 +16,7 @@ release.failed/
 .release-data-backup/
 .turbo/
 config/build-counter.json
+config/environments.json
 
 # Environment
 .env
