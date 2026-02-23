@@ -317,6 +317,9 @@ export function routeMessage(message: RelayMessage): void {
         useConversationStore.getState().reset();
         useWorkspaceStore.getState().reset();
         useSyncStore.getState().resetForReconnect();
+
+        // 워크스페이스 목록 다시 요청
+        syncOrchestrator.startInitialSync();
       }
 
       settingsStore.setAccountStatus({

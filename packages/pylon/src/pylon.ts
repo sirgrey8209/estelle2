@@ -2807,8 +2807,18 @@ Message: ${message}
         // 2. 인증 파일 스왑
         await this.deps.credentialManager!.switchAccount(account);
 
-        // 3. 새 계정 정보 조회
+        // 3. 새 계정 정보 조회 및 캐시 업데이트
         const accountInfo = await this.deps.credentialManager!.getCurrentAccount();
+        if (accountInfo) {
+          this.cachedAccount = {
+            current: accountInfo.account,
+            subscriptionType: accountInfo.subscriptionType,
+          };
+          // persistence에도 저장
+          if (this.deps.persistence) {
+            await this.deps.persistence.saveLastAccount(this.cachedAccount);
+          }
+        }
 
         // 4. 클라이언트에 상태 알림 (broadcast)
         this.send({
