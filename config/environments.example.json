@@ -11,8 +11,8 @@
       "pylonIndex": "1",
       "relayUrl": "ws://localhost:3000",
       "pm2Name": "estelle-pylon-dev",
-      "configDir": "~/.claude-release",
-      "credentialsBackupDir": "~/.claude-credentials/release",
+      "configDir": "~/.claude",
+      "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9878,
       "dataDir": "./dev-data"
     },
@@ -34,8 +34,8 @@
       "pylonIndex": "1",
       "relayUrl": "wss://your-app-name-stage.fly.dev",
       "pm2Name": "estelle-pylon-stage",
-      "configDir": "~/.claude-release",
-      "credentialsBackupDir": "~/.claude-credentials/release",
+      "configDir": "~/.claude",
+      "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9877,
       "dataDir": "./stage-data"
     },
@@ -55,8 +55,8 @@
       "pylonIndex": "1",
       "relayUrl": "wss://your-app-name.fly.dev",
       "pm2Name": "estelle-pylon",
-      "configDir": "~/.claude-release",
-      "credentialsBackupDir": "~/.claude-credentials/release",
+      "configDir": "~/.claude",
+      "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9876,
       "dataDir": "./release-data"
     },

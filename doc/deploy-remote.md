@@ -178,10 +178,10 @@ Claude Code 설정 파일에 추가:
 **백업 방법:**
 ```bash
 # 회사 계정 로그인 후
-cp ~/.claude-release/.credentials.json ~/.claude-credentials/linegames.json
+cp ~/.claude/.credentials.json ~/.claude-credentials/linegames.json
 
 # 개인 계정 로그인 후
-cp ~/.claude-release/.credentials.json ~/.claude-credentials/personal.json
+cp ~/.claude/.credentials.json ~/.claude-credentials/personal.json
 ```
 
 설정 완료 후 Estelle 앱의 Settings에서 계정 전환이 가능합니다.
