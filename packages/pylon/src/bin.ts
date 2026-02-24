@@ -46,6 +46,7 @@ interface EnvConfig {
     credentialsBackupDir?: string;
     dataDir?: string;
     mcpPort?: number;
+    defaultWorkingDir?: string;
   };
 }
 
@@ -99,6 +100,11 @@ const claudeConfigDir = envConfig?.pylon?.configDir || process.env['CLAUDE_CONFI
 /** 인증 백업 디렉토리 */
 const credentialsBackupDir = envConfig?.pylon?.credentialsBackupDir || process.env['CREDENTIALS_BACKUP_DIR'] || path.join(os.homedir(), '.claude-credentials');
 
+/** 기본 작업 디렉토리 (워크스페이스 생성 시 초기값) */
+const defaultWorkingDir = envConfig?.pylon?.defaultWorkingDir || process.env['DEFAULT_WORKING_DIR'] || 'C:\\workspace';
+
+// DEFAULT_WORKING_DIR 환경변수로 설정 (workspace-store에서 사용)
+process.env['DEFAULT_WORKING_DIR'] = defaultWorkingDir;
 
 // ============================================================================
 // Logger 구현
@@ -453,6 +459,7 @@ async function main(): Promise<void> {
   logger.log(`  Data Dir: ${dataDir}`);
   logger.log(`  Claude Config Dir: ${claudeConfigDir}`);
   logger.log(`  Credentials Backup Dir: ${credentialsBackupDir}`);
+  logger.log(`  Default Working Dir: ${defaultWorkingDir}`);
 
   // 업로드 디렉토리 생성
   if (!fs.existsSync(config.uploadsDir)) {

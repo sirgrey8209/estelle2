@@ -68,6 +68,7 @@ function generateEcosystem() {
       credentialsBackupDir: credentialsBackupDir,
       dataDir: dataDir,
       mcpPort: devConfig.pylon.mcpPort,
+      defaultWorkingDir: devConfig.pylon.defaultWorkingDir,
     },
   });
 

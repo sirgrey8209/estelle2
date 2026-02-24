@@ -121,6 +121,7 @@ function New-EcosystemConfig {
             credentialsBackupDir = $credentialsBackupDir
             dataDir = $dataDirResolved
             mcpPort = $PylonConfig.mcpPort
+            defaultWorkingDir = $PylonConfig.defaultWorkingDir
         }
     }
 

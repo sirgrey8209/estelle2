@@ -14,7 +14,8 @@
       "configDir": "~/.claude",
       "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9878,
-      "dataDir": "./dev-data"
+      "dataDir": "./dev-data",
+      "defaultWorkingDir": "C:\\workspace"
     },
     "client": {
       "port": 5173,
@@ -37,7 +38,8 @@
       "configDir": "~/.claude",
       "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9877,
-      "dataDir": "./stage-data"
+      "dataDir": "./stage-data",
+      "defaultWorkingDir": "C:\\workspace"
     },
     "client": {
       "title": "Estelle"
@@ -58,7 +60,8 @@
       "configDir": "~/.claude",
       "credentialsBackupDir": "~/.claude-credentials",
       "mcpPort": 9876,
-      "dataDir": "./release-data"
+      "dataDir": "./release-data",
+      "defaultWorkingDir": "C:\\workspace"
     },
     "client": {
       "title": "Estelle"
