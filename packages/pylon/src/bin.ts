@@ -337,7 +337,11 @@ function createDependencies(): PylonDependencies & {
     logger.log(`[Persistence] Loaded ${workspaceData.workspaces?.length || 0} workspaces from ${dataDir}`);
   }
 
-  const messageStore = new MessageStore();
+  // MessageStore (SQLite)
+  const messagesDbPath = path.join(dataDir, 'messages.db');
+  const messagesMigrationDir = path.join(dataDir, 'messages');  // 기존 JSON 파일 위치
+  const messageStore = new MessageStore(messagesDbPath, messagesMigrationDir);
+  logger.log(`[MessageStore] Using SQLite database: ${messagesDbPath}`);
 
   // ShareStore 로드 또는 새로 생성
   const shareData = persistence.loadShareStore();

@@ -125,9 +125,19 @@ export interface SetSystemPromptResult {
   error?: string;
 }
 
+/** ContinueTask 결과 타입 */
+export interface ContinueTaskResult {
+  success: boolean;
+  message?: string;
+  newSession?: boolean;
+  systemMessageAdded?: boolean;
+  historyPreserved?: boolean;
+  error?: string;
+}
+
 /** 요청 타입 */
 interface PylonRequest {
-  action: 'link' | 'unlink' | 'list' | 'send_file' | 'deploy' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_deploy' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt';
+  action: 'link' | 'unlink' | 'list' | 'send_file' | 'deploy' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_deploy' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task';
   conversationId?: number;
   toolUseId?: string;
   path?: string;
@@ -137,6 +147,7 @@ interface PylonRequest {
   files?: string[];
   newName?: string;
   content?: string;
+  reason?: string;
 }
 
 // ============================================================================
@@ -376,6 +387,32 @@ export class PylonClient {
       action: 'lookup_and_set_system_prompt',
       toolUseId,
       content,
+    });
+  }
+
+  /**
+   * toolUseId 기반 작업 계속
+   * 히스토리를 유지하면서 세션을 재시작합니다.
+   *
+   * @param toolUseId - 도구 사용 ID
+   * @param reason - 재시작 사유 (선택)
+   * @returns 작업 계속 결과
+   */
+  async continueTaskByToolUseId(
+    toolUseId: string,
+    reason?: string,
+  ): Promise<ContinueTaskResult> {
+    if (!toolUseId || toolUseId === '') {
+      return {
+        success: false,
+        error: 'toolUseId is required',
+      };
+    }
+
+    return this._sendRequest<ContinueTaskResult>({
+      action: 'lookup_and_continue_task',
+      toolUseId,
+      reason,
     });
   }
 

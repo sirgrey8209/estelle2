@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, ChangeEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, ChangeEvent, useMemo } from 'react';
 import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
@@ -8,9 +8,17 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { useWorkspaceStore, useCurrentConversationState } from '../../stores';
+import { useConversationStore, EMPTY_SLASH_COMMANDS } from '../../stores/conversationStore';
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
 import { useResponsive } from '../../hooks/useResponsive';
+import {
+  parseSlashCommand,
+  filterSlashCommandsByPrefix,
+  useSlashAutocomplete,
+  SlashAutocompletePopup,
+} from './SlashAutocomplete';
+import { requestSlashCommands } from '../../services/relaySender';
 
 // 대화별 입력 텍스트 저장소 (conversationId → draft text)
 const draftTexts = new Map<number, string>();
@@ -46,6 +54,68 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const { isDesktop, isTablet } = useResponsive();
 
   const conversationId = selectedConversation?.conversationId || null;
+
+  // 슬래시 자동완성
+  const slashCommands = useConversationStore((state) =>
+    conversationId ? state.getSlashCommands(conversationId) : EMPTY_SLASH_COMMANDS
+  );
+  const slashCommand = useMemo(() => parseSlashCommand(text), [text]);
+  const filteredCommands = useMemo(
+    () => (slashCommand.isSlashCommand ? filterSlashCommandsByPrefix(slashCommands, slashCommand.prefix) : []),
+    [slashCommands, slashCommand]
+  );
+
+  // 슬래시 명령어 입력 시 Pylon에 목록 요청
+  // - `/` 입력 시 한 번만 요청 (slashCommands가 비어있을 때)
+  // - 대화가 바뀌면 다시 요청
+  const slashCommandsRequestedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (slashCommand.isSlashCommand && conversationId) {
+      // 현재 대화에서 아직 요청하지 않았고, slashCommands가 비어있으면 요청
+      if (slashCommandsRequestedRef.current !== conversationId && slashCommands.length === 0) {
+        console.log('[InputBar] Requesting slash commands for conversation:', conversationId);
+        requestSlashCommands(conversationId);
+        slashCommandsRequestedRef.current = conversationId;
+      }
+    }
+  }, [slashCommand.isSlashCommand, conversationId, slashCommands.length]);
+
+  // 대화 변경 시 요청 상태 리셋
+  useEffect(() => {
+    if (conversationId !== slashCommandsRequestedRef.current) {
+      slashCommandsRequestedRef.current = null;
+    }
+  }, [conversationId]);
+
+  // DEBUG: 슬래시 명령어 디버깅
+  useEffect(() => {
+    if (slashCommand.isSlashCommand) {
+      console.log('[InputBar] slash command:', { text, slashCommand, slashCommands: slashCommands.length, filteredCommands });
+    }
+  }, [text, slashCommand, slashCommands, filteredCommands]);
+  const {
+    selectedIndex,
+    moveUp,
+    moveDown,
+    reset: resetAutocomplete,
+  } = useSlashAutocomplete(filteredCommands.length);
+
+  const showAutocomplete = slashCommand.isSlashCommand && filteredCommands.length > 0;
+
+  // 슬래시 명령어 선택 시 입력창에 삽입
+  // 기존 텍스트에서 슬래시 명령어 부분만 교체
+  const handleSelectCommand = useCallback((command: string) => {
+    // text에서 slashCommand.prefix 위치를 찾아서 교체
+    const prefixIndex = text.lastIndexOf(slashCommand.prefix);
+    if (prefixIndex !== -1) {
+      const before = text.slice(0, prefixIndex);
+      setText(`${before}${command} `);
+    } else {
+      setText(`${command} `);
+    }
+    resetAutocomplete();
+  }, [text, slashCommand.prefix, resetAutocomplete]);
 
   // 대화 변경 시 텍스트 저장/복원
   useEffect(() => {
@@ -96,6 +166,36 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 자동완성 팝업이 열려있을 때 키보드 처리
+    if (showAutocomplete) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          moveDown();
+          return;
+        case 'ArrowUp':
+          e.preventDefault();
+          moveUp();
+          return;
+        case 'Enter':
+          e.preventDefault();
+          if (filteredCommands[selectedIndex]) {
+            handleSelectCommand(filteredCommands[selectedIndex]);
+          }
+          return;
+        case 'Escape':
+          e.preventDefault();
+          setText(''); // 슬래시 명령어 취소
+          return;
+        case 'Tab':
+          e.preventDefault();
+          if (filteredCommands[selectedIndex]) {
+            handleSelectCommand(filteredCommands[selectedIndex]);
+          }
+          return;
+      }
+    }
+
     if (e.key === 'Enter') {
       if (isDesktop || isTablet) {
         // 데스크탑/태블릿: Enter = 전송, Shift+Enter / Ctrl+Enter = 줄바꿈
@@ -213,7 +313,14 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
       )}
 
       {/* 입력 영역 */}
-      <div className="flex items-end px-2 py-1.5 gap-1">
+      <div className="relative flex items-end px-2 py-1.5 gap-1">
+        {/* 슬래시 자동완성 팝업 */}
+        <SlashAutocompletePopup
+          commands={filteredCommands}
+          selectedIndex={selectedIndex}
+          onSelect={handleSelectCommand}
+          visible={showAutocomplete}
+        />
         {/* 첨부 버튼 */}
         <Button
           variant="ghost"

@@ -39,6 +39,7 @@ const mockConversationStore = {
   setCurrentConversation: vi.fn(),
   getState: vi.fn(() => ({ messages: [] })),
   deleteConversation: vi.fn(),
+  setSlashCommands: vi.fn(),
 };
 
 // vi.mock은 호이스팅되므로 순서 주의
@@ -656,6 +657,55 @@ describe('routeMessage', () => {
         // Assert
         expect(mockConversationStore.setStatus).toHaveBeenCalledWith(CONVERSATION_ID, 'permission');
       });
+    });
+  });
+
+  // ==========================================================================
+  // slash_commands_result 메시지 처리 테스트
+  // ==========================================================================
+
+  describe('slash_commands_result', () => {
+    it('should_store_slashCommands_when_result_received', () => {
+      // Arrange & Act
+      routeMessage({
+        type: MessageType.SLASH_COMMANDS_RESULT,
+        payload: {
+          conversationId: CONVERSATION_ID,
+          slashCommands: ['/compact', '/clear', '/help', '/tdd-flow'],
+        },
+      });
+
+      // Assert
+      expect(mockConversationStore.setSlashCommands).toHaveBeenCalledWith(
+        CONVERSATION_ID,
+        ['/compact', '/clear', '/help', '/tdd-flow']
+      );
+    });
+
+    it('should_not_call_setSlashCommands_when_conversationId_missing', () => {
+      // Arrange & Act
+      routeMessage({
+        type: MessageType.SLASH_COMMANDS_RESULT,
+        payload: {
+          slashCommands: ['/compact', '/clear'],
+        },
+      });
+
+      // Assert
+      expect(mockConversationStore.setSlashCommands).not.toHaveBeenCalled();
+    });
+
+    it('should_not_call_setSlashCommands_when_slashCommands_missing', () => {
+      // Arrange & Act
+      routeMessage({
+        type: MessageType.SLASH_COMMANDS_RESULT,
+        payload: {
+          conversationId: CONVERSATION_ID,
+        },
+      });
+
+      // Assert
+      expect(mockConversationStore.setSlashCommands).not.toHaveBeenCalled();
     });
   });
 });

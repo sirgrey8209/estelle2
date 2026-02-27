@@ -2,14 +2,15 @@
  * @file message-cleanup.test.ts
  * @description 메시지 정리 테스트
  *
- * 워크스페이스/대화 삭제 시 메시지 파일 정리 기능을 테스트합니다.
+ * 워크스페이스/대화 삭제 시 메시지 정리 기능을 테스트합니다.
  * ID 재사용으로 인한 기존 대화 노출 문제를 해결합니다.
+ * 메시지는 SQLite MessageStore에서 직접 삭제됩니다 (persistence.deleteMessageSession 미사용).
  *
  * 테스트 케이스:
  * 1. [기존 수정] createWorkspace가 빈 conversations 배열로 생성
- * 2. [정상] handleWorkspaceDelete가 내부 대화들의 메시지 파일 삭제
- * 3. [정상] handleConversationDelete가 메시지 파일 삭제
- * 4. [정상] handleConversationCreate가 기존 메시지 파일 있으면 클리어
+ * 2. [정상] handleWorkspaceDelete가 내부 대화들의 메시지 삭제
+ * 3. [정상] handleConversationDelete가 메시지 삭제
+ * 4. [정상] handleConversationCreate가 기존 메시지 있으면 클리어
  * 5. [통합] 워크스페이스 삭제 후 재생성 시 기존 메시지 없음
  * 6. [통합] 대화 삭제 후 같은 ID로 생성 시 기존 메시지 없음
  */
@@ -38,7 +39,7 @@ function createMockConfig(): PylonConfig {
 function createMockDependencies(): PylonDependencies {
   return {
     workspaceStore: new WorkspaceStore(PYLON_ID),
-    messageStore: new MessageStore(),
+    messageStore: new MessageStore(':memory:'),
     relayClient: {
       connect: vi.fn(),
       disconnect: vi.fn(),
@@ -109,6 +110,8 @@ describe('메시지 정리', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // Close SQLite connection
+    deps.messageStore.close();
   });
 
   // ==========================================================================
@@ -142,25 +145,12 @@ describe('메시지 정리', () => {
   });
 
   // ==========================================================================
-  // 워크스페이스 삭제 시 메시지 파일 삭제
+  // 워크스페이스 삭제 시 메시지 삭제
   // ==========================================================================
 
-  describe('handleWorkspaceDelete - 메시지 파일 삭제', () => {
-    it('should_delete_message_files_for_all_conversations_when_workspace_deleted', async () => {
-      // Arrange: 영속성 어댑터 모킹
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
-      // 워크스페이스와 여러 대화 생성
+  describe('handleWorkspaceDelete - 메시지 삭제', () => {
+    it('should_delete_messages_for_all_conversations_when_workspace_deleted', async () => {
+      // Arrange: 워크스페이스와 여러 대화 생성
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
       const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
@@ -169,7 +159,9 @@ describe('메시지 정리', () => {
       deps.messageStore.addUserMessage(conv1.conversationId, 'Message 1');
       deps.messageStore.addUserMessage(conv2.conversationId, 'Message 2');
 
-      mockPersistence.deleteMessageSession.mockClear();
+      // 메시지가 추가되었는지 확인
+      expect(deps.messageStore.getMessages(conv1.conversationId)).toHaveLength(1);
+      expect(deps.messageStore.getMessages(conv2.conversationId)).toHaveLength(1);
 
       // Act: 워크스페이스 삭제
       pylon.handleMessage({
@@ -178,11 +170,10 @@ describe('메시지 정리', () => {
         payload: { workspaceId: workspace.workspaceId },
       });
 
-      // Assert: 두 대화의 메시지 파일이 모두 삭제되어야 함
+      // Assert: 두 대화의 메시지가 모두 삭제되어야 함 (SQLite에서 직접 삭제)
       await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledTimes(2);
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv1.conversationId));
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conv2.conversationId));
+      expect(deps.messageStore.getMessages(conv1.conversationId)).toHaveLength(0);
+      expect(deps.messageStore.getMessages(conv2.conversationId)).toHaveLength(0);
     });
 
     it('should_clear_message_cache_when_workspace_deleted', () => {
@@ -208,32 +199,18 @@ describe('메시지 정리', () => {
   });
 
   // ==========================================================================
-  // 대화 삭제 시 메시지 파일 삭제
+  // 대화 삭제 시 메시지 삭제
   // ==========================================================================
 
-  describe('handleConversationDelete - 메시지 파일 삭제', () => {
-    it('should_delete_message_file_when_conversation_deleted', async () => {
-      // Arrange: 영속성 어댑터 모킹
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
-      // 워크스페이스와 대화 생성
+  describe('handleConversationDelete - 메시지 삭제', () => {
+    it('should_delete_messages_when_conversation_deleted', async () => {
+      // Arrange: 워크스페이스와 대화 생성
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
 
       // 메시지 추가
       deps.messageStore.addUserMessage(conversation.conversationId, 'Hello');
-
-      mockPersistence.deleteMessageSession.mockClear();
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(1);
 
       // Act: 대화 삭제
       pylon.handleMessage({
@@ -242,10 +219,9 @@ describe('메시지 정리', () => {
         payload: { conversationId: conversation.conversationId },
       });
 
-      // Assert: 메시지 파일이 삭제되어야 함
+      // Assert: 메시지가 삭제되어야 함 (SQLite에서 직접 삭제)
       await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledTimes(1);
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(conversation.conversationId));
+      expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
 
     it('should_clear_message_cache_when_conversation_deleted', () => {
@@ -270,34 +246,31 @@ describe('메시지 정리', () => {
   });
 
   // ==========================================================================
-  // 대화 생성 시 기존 메시지 파일 클리어
+  // 대화 생성 시 기존 메시지 클리어
   // ==========================================================================
 
   describe('handleConversationCreate - 기존 메시지 클리어', () => {
     it('should_clear_existing_messages_when_conversation_created_with_reused_id', async () => {
-      // Arrange: 영속성 어댑터 모킹 (이전 메시지 세션이 있는 경우 시뮬레이션)
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn().mockReturnValue({
-          sessionId: 0, // ID는 아래에서 설정
-          messages: [
-            { id: 'old_msg_1', role: 'user', type: 'text', content: 'Old message', timestamp: 1000 },
-          ],
-          updatedAt: 1000,
-        }),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
-      // 워크스페이스 생성 + 대화 생성 후 삭제 (ID 1이 재사용 가능해짐)
+      // Arrange: 워크스페이스 생성 + 대화 생성, 메시지 추가 후 삭제 (ID가 재사용 가능해짐)
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const firstConv = deps.workspaceStore.createConversation(workspace.workspaceId)!;
-      deps.workspaceStore.deleteConversation(firstConv.conversationId);
+      const firstConvId = firstConv.conversationId;
+
+      // 첫 대화에 메시지 추가
+      deps.messageStore.addUserMessage(firstConvId, 'Old message');
+      expect(deps.messageStore.getMessages(firstConvId)).toHaveLength(1);
+
+      // 대화 삭제 (ID 재사용 가능해짐)
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        from: { deviceId: 'client-1' },
+        payload: { conversationId: firstConvId },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // 삭제 후 메시지가 클리어되었는지 확인
+      expect(deps.messageStore.getMessages(firstConvId)).toHaveLength(0);
 
       // Act: 새 대화 생성 (ID 재사용됨)
       pylon.handleMessage({
@@ -306,33 +279,17 @@ describe('메시지 정리', () => {
         payload: { workspaceId: workspace.workspaceId, name: 'New Conv' },
       });
 
-      // Assert: 새 대화에 기존 메시지가 없어야 함
-      // 기존 메시지 파일이 있었다면 클리어되어야 함
       await new Promise((resolve) => setTimeout(resolve, 10));
 
+      // Assert: 새 대화에 기존 메시지가 없어야 함
       const newConv = deps.workspaceStore.getWorkspace(workspace.workspaceId)!.conversations[0];
       const messages = deps.messageStore.getMessages(newConv.conversationId);
       expect(messages).toHaveLength(0);
     });
 
-    it('should_delete_message_file_for_new_conversation_id_if_exists', async () => {
-      // Arrange: 영속성 어댑터 모킹
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
-      // 워크스페이스 생성
+    it('should_ensure_clean_state_when_conversation_created', async () => {
+      // Arrange: 워크스페이스 생성
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
-
-      mockPersistence.deleteMessageSession.mockClear();
 
       // Act: 새 대화 생성
       pylon.handleMessage({
@@ -341,13 +298,14 @@ describe('메시지 정리', () => {
         payload: { workspaceId: workspace.workspaceId, name: 'New Conv' },
       });
 
-      // Assert: 생성된 conversationId에 대해 기존 메시지 파일이 있으면 삭제해야 함
       await new Promise((resolve) => setTimeout(resolve, 10));
 
+      // Assert: 새 대화에 메시지가 없어야 함
       const newConv = deps.workspaceStore.getWorkspace(workspace.workspaceId)!.conversations.find(
         (c) => c.name === 'New Conv'
       );
-      expect(mockPersistence.deleteMessageSession).toHaveBeenCalledWith(String(newConv!.conversationId));
+      const messages = deps.messageStore.getMessages(newConv!.conversationId);
+      expect(messages).toHaveLength(0);
     });
   });
 
@@ -357,19 +315,6 @@ describe('메시지 정리', () => {
 
   describe('통합: 워크스페이스 삭제 후 재생성', () => {
     it('should_not_show_old_messages_when_workspace_recreated_with_same_id', async () => {
-      // Arrange: 영속성 어댑터 모킹
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn().mockReturnValue(null), // 삭제되었으므로 null
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
       // 1단계: 워크스페이스 생성 및 메시지 추가
       const { workspace: ws1 } = deps.workspaceStore.createWorkspace('Test1', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(ws1.workspaceId)!;
@@ -412,19 +357,6 @@ describe('메시지 정리', () => {
 
   describe('통합: 대화 삭제 후 같은 ID로 생성', () => {
     it('should_not_show_old_messages_when_conversation_recreated_with_same_id', async () => {
-      // Arrange: 영속성 어댑터 모킹
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn().mockReturnValue(null),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
       // 1단계: 워크스페이스 생성
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId)!;

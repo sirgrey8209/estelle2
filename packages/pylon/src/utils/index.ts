@@ -33,3 +33,9 @@ export {
   buildDocumentRemovedReminder,
   buildConversationRenamedReminder,
 } from './session-context.js';
+
+// Frontmatter - YAML frontmatter 파서
+export { parseFrontmatter, hasAutorun } from './frontmatter.js';
+
+// AutorunDetector - autorun 문서 감지
+export { findAutorunDoc } from './autorun-detector.js';

@@ -2,14 +2,15 @@
  * @file file-system-persistence.ts
  * @description 파일 시스템 기반 영속성 구현
  *
- * 워크스페이스와 메시지 데이터를 JSON 파일로 저장/로드합니다.
+ * 워크스페이스와 공유 데이터를 JSON 파일로 저장/로드합니다.
+ * 메시지는 SQLite MessageStore에서 직접 관리합니다.
  *
  * 저장 구조:
  * ```
  * {baseDir}/
  *   workspaces.json         # 워크스페이스 목록
- *   messages/
- *     {sessionId}.json      # 세션별 메시지
+ *   shares.json             # 공유 목록
+ *   account.json            # 계정 정보
  * ```
  *
  * @example
@@ -22,16 +23,11 @@
  * // 워크스페이스 로드/저장
  * const data = persistence.loadWorkspaceStore();
  * await persistence.saveWorkspaceStore(newData);
- *
- * // 메시지 세션 로드/저장
- * const session = persistence.loadMessageSession('session-1');
- * await persistence.saveMessageSession('session-1', sessionData);
  * ```
  */
 
 import type { PersistenceAdapter, PersistedAccount } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
-import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
 
 /**
@@ -58,7 +54,6 @@ export class FileSystemPersistence implements PersistenceAdapter {
   private readonly workspacesPath: string;
   private readonly sharesPath: string;
   private readonly accountPath: string;
-  private readonly messagesDir: string;
   private readonly fs: FileSystemInterface;
 
   /**
@@ -72,7 +67,6 @@ export class FileSystemPersistence implements PersistenceAdapter {
     this.workspacesPath = this.joinPath(baseDir, 'workspaces.json');
     this.sharesPath = this.joinPath(baseDir, 'shares.json');
     this.accountPath = this.joinPath(baseDir, 'account.json');
-    this.messagesDir = this.joinPath(baseDir, 'messages');
     this.fs = fs;
 
     // 디렉토리 생성
@@ -84,7 +78,6 @@ export class FileSystemPersistence implements PersistenceAdapter {
    */
   private ensureDirectories(): void {
     this.fs.mkdirSync(this.baseDir, { recursive: true });
-    this.fs.mkdirSync(this.messagesDir, { recursive: true });
   }
 
   /**
@@ -125,79 +118,6 @@ export class FileSystemPersistence implements PersistenceAdapter {
     }
     const content = JSON.stringify(data, null, 2);
     this.fs.writeFileSync(this.workspacesPath, content, 'utf-8');
-  }
-
-  // ============================================================================
-  // MessageStore (세션 단위)
-  // ============================================================================
-
-  /**
-   * 세션 파일 경로 생성
-   */
-  private getSessionPath(sessionId: string): string {
-    return this.joinPath(this.messagesDir, `${sessionId}.json`);
-  }
-
-  /**
-   * 메시지 세션 로드
-   */
-  loadMessageSession(sessionId: string): SessionData | undefined {
-    try {
-      const sessionPath = this.getSessionPath(sessionId);
-
-      if (!this.fs.existsSync(sessionPath)) {
-        return undefined;
-      }
-
-      const content = this.fs.readFileSync(sessionPath, 'utf-8');
-      return JSON.parse(content) as SessionData;
-    } catch (error) {
-      console.error(`[Persistence] Failed to load session ${sessionId}:`, error);
-      return undefined;
-    }
-  }
-
-  /**
-   * 메시지 세션 저장
-   */
-  async saveMessageSession(sessionId: string, data: SessionData): Promise<void> {
-    // 런타임 중 폴더가 삭제될 수 있으므로 저장 전 확인
-    if (!this.fs.existsSync(this.messagesDir)) {
-      this.fs.mkdirSync(this.messagesDir, { recursive: true });
-    }
-    const sessionPath = this.getSessionPath(sessionId);
-    const content = JSON.stringify(data, null, 2);
-    this.fs.writeFileSync(sessionPath, content, 'utf-8');
-  }
-
-  /**
-   * 메시지 세션 삭제
-   */
-  async deleteMessageSession(sessionId: string): Promise<void> {
-    const sessionPath = this.getSessionPath(sessionId);
-
-    if (this.fs.existsSync(sessionPath)) {
-      this.fs.unlinkSync(sessionPath);
-    }
-  }
-
-  /**
-   * 저장된 모든 세션 ID 목록
-   */
-  listMessageSessions(): string[] {
-    try {
-      if (!this.fs.existsSync(this.messagesDir)) {
-        return [];
-      }
-
-      const files = this.fs.readdirSync(this.messagesDir);
-      return files
-        .filter((f) => f.endsWith('.json'))
-        .map((f) => f.replace('.json', ''));
-    } catch (error) {
-      console.error('[Persistence] Failed to list sessions:', error);
-      return [];
-    }
   }
 
   // ============================================================================

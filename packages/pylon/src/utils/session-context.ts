@@ -22,23 +22,39 @@ export function buildSystemPrompt(buildEnv: string): string {
 }
 
 /**
+ * buildInitialReminder 옵션
+ */
+interface BuildInitialReminderOptions {
+  /** autorun이 설정된 문서 경로 */
+  autorunDoc?: string;
+}
+
+/**
  * 대화 시작 시 초기 system-reminder를 빌드합니다.
  *
  * @param conversationName - 대화명
  * @param linkedDocs - 연결된 문서 목록
+ * @param options - 추가 옵션 (autorunDoc 등)
  * @returns system-reminder 태그로 감싸진 초기 알림 문자열
  */
 export function buildInitialReminder(
   conversationName: string,
-  linkedDocs: string[]
+  linkedDocs: string[],
+  options?: BuildInitialReminderOptions
 ): string {
   const docsText =
     linkedDocs.length > 0 ? linkedDocs.join(', ') : '없음';
 
-  const content = `대화명: ${conversationName}
+  let content = `대화명: ${conversationName}
 연결된 문서: ${docsText}
 
 대화를 시작해 주세요.`;
+
+  if (options?.autorunDoc) {
+    content += `
+
+[자동실행] ${options.autorunDoc} 문서에 autorun이 설정되어 있습니다. /autorun 스킬을 실행하세요.`;
+  }
 
   return wrapInSystemReminder(content);
 }

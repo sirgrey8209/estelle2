@@ -1,46 +1,32 @@
 /**
  * @file message-store.ts
- * @description MessageStore - 세션별 메시지 히스토리 저장
+ * @description MessageStore - 세션별 메시지 히스토리 저장 (SQLite 기반)
  *
- * 세션(conversationId)별 메시지 히스토리를 관리하는 순수 데이터 클래스입니다.
- * 파일 I/O는 외부에서 처리하여 테스트 용이성을 확보합니다.
- *
- * 저장 구조 (세션별 파일):
- * ```json
- * {
- *   "sessionId": "uuid",
- *   "messages": [
- *     {
- *       "id": "msg_1234567890",
- *       "role": "user",
- *       "type": "text",
- *       "content": "Hello",
- *       "timestamp": 1704067200000
- *     }
- *   ],
- *   "updatedAt": 1704067200000
- * }
- * ```
+ * 세션(conversationId)별 메시지 히스토리를 관리하는 SQLite 기반 저장소입니다.
+ * 모든 변경은 즉시 DB에 저장되어 영속성을 보장합니다.
  *
  * @example
  * ```typescript
  * import { MessageStore } from './stores/message-store.js';
- * import fs from 'fs';
  *
- * // 스토어 생성
- * const store = new MessageStore();
+ * // 스토어 생성 (DB 파일 경로)
+ * const store = new MessageStore('data/messages.db');
  *
- * // 메시지 추가
- * store.addUserMessage('session-1', 'Hello, Claude!');
- * store.addAssistantText('session-1', 'Hi! How can I help?');
+ * // 메시지 추가 (즉시 저장)
+ * store.addUserMessage(1, 'Hello, Claude!');
+ * store.addAssistantText(1, 'Hi! How can I help?');
  *
- * // 세션 데이터 저장
- * const sessionData = store.getSessionData('session-1');
- * if (sessionData) {
- *   fs.writeFileSync('messages/session-1.json', JSON.stringify(sessionData, null, 2));
- * }
+ * // 메시지 조회
+ * const messages = store.getMessages(1);
+ *
+ * // DB 연결 종료
+ * store.close();
  * ```
  */
+
+import Database from 'better-sqlite3';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ============================================================================
 // Core 타입 import & re-export
@@ -56,6 +42,7 @@ import type {
   ResultMessage,
   AbortedMessage,
   FileAttachmentMessage,
+  SystemMessage,
   Attachment,
   FileInfo,
   ResultInfo,
@@ -72,6 +59,7 @@ export type {
   ResultMessage,
   AbortedMessage,
   FileAttachmentMessage,
+  SystemMessage,
   Attachment,
   FileInfo,
   ResultInfo,
@@ -131,9 +119,9 @@ export function generateMessageId(): string {
 // ============================================================================
 
 /**
- * 세션 데이터 (파일 저장용)
+ * 세션 데이터 (파일 저장용 - 마이그레이션 전용)
  * @description
- * 개별 세션의 메시지를 파일에 저장할 때 사용되는 구조입니다.
+ * JSON 마이그레이션에 사용되는 구조입니다.
  */
 export interface SessionData {
   /** 세션 ID */
@@ -145,9 +133,9 @@ export interface SessionData {
 }
 
 /**
- * 메시지 스토어 전체 데이터 (직렬화용)
+ * 메시지 스토어 전체 데이터 (직렬화용 - 마이그레이션 전용)
  * @description
- * 메모리에 있는 모든 세션 데이터를 포함합니다.
+ * JSON 마이그레이션에 사용되는 구조입니다.
  */
 export interface MessageStoreData {
   /** 세션별 데이터 맵 */
@@ -164,6 +152,29 @@ export interface GetMessagesOptions {
   loadBefore?: number;
   /** 반환할 최대 바이트 수 (개수보다 우선) */
   maxBytes?: number;
+}
+
+// ============================================================================
+// DB Row 타입
+// ============================================================================
+
+interface MessageRow {
+  id: string;
+  session_id: number;
+  timestamp: number;
+  role: string;
+  type: string;
+  content: string | null;
+  tool_name: string | null;
+  tool_input: string | null;
+  tool_output: string | null;
+  tool_error: string | null;
+  success: number | null;
+  parent_tool_use_id: string | null;
+  attachments: string | null;
+  file_info: string | null;
+  result_info: string | null;
+  reason: string | null;
 }
 
 // ============================================================================
@@ -333,33 +344,29 @@ export function summarizeOutput(output: unknown): unknown {
 // ============================================================================
 
 /**
- * MessageStore - 세션별 메시지 히스토리 관리
+ * MessageStore - 세션별 메시지 히스토리 관리 (SQLite 기반)
  *
  * @description
- * 세션(conversationId)별 메시지 히스토리를 관리하는 순수 데이터 클래스입니다.
- * 모든 상태 변경은 이 클래스를 통해 이루어지며,
- * 파일 I/O는 외부에서 getSessionData()/loadSessionData()를 통해 처리합니다.
+ * 세션(conversationId)별 메시지 히스토리를 SQLite DB에 저장합니다.
+ * 모든 변경은 즉시 DB에 반영되어 영속성을 보장합니다.
  *
  * 설계 원칙:
- * - 순수 데이터 클래스: 외부 의존성 없음 (파일 I/O, 타이머 분리)
- * - 모킹 없이 테스트 가능
- * - Dirty 플래그로 변경 추적 (Debounced 저장 지원)
+ * - SQLite 기반: 즉시 저장, dirty 추적 불필요
+ * - 쿼리 기반 조회: 필요한 메시지만 로드
+ * - 마이그레이션 지원: 기존 JSON 파일 자동 마이그레이션
  *
  * @example
  * ```typescript
  * // 기본 사용
- * const store = new MessageStore();
- * store.addUserMessage('session-1', 'Hello!');
- * store.addAssistantText('session-1', 'Hi there!');
+ * const store = new MessageStore('data/messages.db');
+ * store.addUserMessage(1, 'Hello!');
+ * store.addAssistantText(1, 'Hi there!');
  *
- * // 외부에서 파일 저장
- * if (store.hasDirtyData()) {
- *   for (const sessionId of store.getDirtySessions()) {
- *     const data = store.getSessionData(sessionId);
- *     saveToFile(sessionId, data);
- *     store.markClean(sessionId);
- *   }
- * }
+ * // 메시지 조회
+ * const messages = store.getMessages(1);
+ *
+ * // 종료
+ * store.close();
  * ```
  */
 export class MessageStore {
@@ -368,14 +375,21 @@ export class MessageStore {
   // ============================================================================
 
   /**
-   * 메모리 캐시: sessionId -> messages[]
+   * SQLite 데이터베이스 연결
    */
-  private _cache: Map<number, StoreMessage[]>;
+  private db: Database.Database;
 
   /**
-   * 저장 필요 세션 Set
+   * Prepared Statements
    */
-  private _dirty: Set<number>;
+  private stmtInsert: Database.Statement;
+  private stmtUpdate: Database.Statement;
+  private stmtSelectAll: Database.Statement;
+  private stmtSelectWithLimit: Database.Statement;
+  private stmtSelectWithOffset: Database.Statement;
+  private stmtSelectCount: Database.Statement;
+  private stmtDelete: Database.Statement;
+  private stmtFindToolStart: Database.Statement;
 
   // ============================================================================
   // 생성자
@@ -384,73 +398,411 @@ export class MessageStore {
   /**
    * MessageStore 생성자
    *
-   * @param data - 초기 데이터 (없으면 빈 상태로 시작)
+   * @param dbPath - SQLite 데이터베이스 파일 경로 (또는 ':memory:')
+   * @param migrationDir - JSON 파일 마이그레이션 소스 디렉토리 (선택)
    */
-  constructor(data?: MessageStoreData) {
-    this._cache = new Map();
-    this._dirty = new Set();
-
-    // 초기 데이터 로드
-    if (data?.sessions) {
-      for (const [key, sessionData] of Object.entries(data.sessions)) {
-        this._cache.set(Number(key), sessionData.messages || []);
+  constructor(dbPath: string, migrationDir?: string) {
+    // DB 파일 경로의 부모 디렉토리 생성 (메모리 DB가 아닌 경우)
+    if (dbPath !== ':memory:') {
+      const dir = path.dirname(dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
+    }
+
+    // DB 연결
+    this.db = new Database(dbPath);
+
+    // 스키마 생성
+    this._initSchema();
+
+    // Prepared statements 초기화
+    this.stmtInsert = this.db.prepare(`
+      INSERT INTO messages (
+        id, session_id, timestamp, role, type, content,
+        tool_name, tool_input, tool_output, tool_error, success,
+        parent_tool_use_id, attachments, file_info, result_info, reason
+      ) VALUES (
+        @id, @session_id, @timestamp, @role, @type, @content,
+        @tool_name, @tool_input, @tool_output, @tool_error, @success,
+        @parent_tool_use_id, @attachments, @file_info, @result_info, @reason
+      )
+    `);
+
+    this.stmtUpdate = this.db.prepare(`
+      UPDATE messages SET
+        type = @type,
+        tool_output = @tool_output,
+        tool_error = @tool_error,
+        success = @success
+      WHERE id = @id
+    `);
+
+    this.stmtSelectAll = this.db.prepare(`
+      SELECT * FROM messages WHERE session_id = @session_id ORDER BY timestamp ASC
+    `);
+
+    this.stmtSelectWithLimit = this.db.prepare(`
+      SELECT * FROM (
+        SELECT * FROM messages WHERE session_id = @session_id ORDER BY timestamp DESC LIMIT @limit
+      ) ORDER BY timestamp ASC
+    `);
+
+    this.stmtSelectWithOffset = this.db.prepare(`
+      SELECT * FROM (
+        SELECT * FROM messages WHERE session_id = @session_id ORDER BY timestamp ASC LIMIT @offset
+      ) ORDER BY timestamp ASC LIMIT @limit OFFSET @skip
+    `);
+
+    this.stmtSelectCount = this.db.prepare(`
+      SELECT COUNT(*) as count FROM messages WHERE session_id = @session_id
+    `);
+
+    this.stmtDelete = this.db.prepare(`
+      DELETE FROM messages WHERE session_id = @session_id
+    `);
+
+    this.stmtFindToolStart = this.db.prepare(`
+      SELECT id FROM messages
+      WHERE session_id = @session_id AND type = 'tool_start' AND tool_name = @tool_name
+      ORDER BY timestamp DESC LIMIT 1
+    `);
+
+    // 마이그레이션 실행 (필요한 경우)
+    if (migrationDir) {
+      this._runMigration(migrationDir);
     }
   }
 
   // ============================================================================
-  // 정적 팩토리 메서드
+  // 스키마 초기화
   // ============================================================================
 
   /**
-   * JSON 데이터에서 MessageStore 생성
-   *
-   * @param data - 직렬화된 스토어 데이터
-   * @returns 새 MessageStore 인스턴스
+   * SQLite 스키마 초기화
    */
-  static fromJSON(data: MessageStoreData): MessageStore {
-    return new MessageStore(data);
+  private _initSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        session_id INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        type TEXT NOT NULL,
+        content TEXT,
+        tool_name TEXT,
+        tool_input TEXT,
+        tool_output TEXT,
+        tool_error TEXT,
+        success INTEGER,
+        parent_tool_use_id TEXT,
+        attachments TEXT,
+        file_info TEXT,
+        result_info TEXT,
+        reason TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_messages_session_time ON messages(session_id, timestamp);
+
+      CREATE TABLE IF NOT EXISTS migration_status (
+        id INTEGER PRIMARY KEY,
+        completed INTEGER NOT NULL DEFAULT 0,
+        completed_at INTEGER
+      );
+    `);
+  }
+
+  // ============================================================================
+  // 마이그레이션
+  // ============================================================================
+
+  /**
+   * JSON 파일 마이그레이션 실행
+   */
+  private _runMigration(migrationDir: string): void {
+    // 마이그레이션 완료 여부 확인
+    const status = this.db.prepare(
+      `SELECT completed FROM migration_status WHERE id = 1`
+    ).get() as { completed: number } | undefined;
+
+    if (status?.completed) {
+      return; // 이미 마이그레이션 완료
+    }
+
+    // JSON 파일 목록 확인
+    if (!fs.existsSync(migrationDir)) {
+      // 마이그레이션 디렉토리가 없으면 완료로 표시
+      this._markMigrationComplete();
+      return;
+    }
+
+    const files = fs.readdirSync(migrationDir).filter(f => f.endsWith('.json'));
+    if (files.length === 0) {
+      this._markMigrationComplete();
+      return;
+    }
+
+    // 백업 디렉토리 생성
+    const backupDir = migrationDir + '_backup';
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    // JSON 파일 마이그레이션
+    const insertMany = this.db.transaction((messages: StoreMessage[], sessionId: number) => {
+      for (const msg of messages) {
+        this._insertMessage(sessionId, msg);
+      }
+    });
+
+    for (const file of files) {
+      const filePath = path.join(migrationDir, file);
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const sessionData = JSON.parse(content) as SessionData;
+
+        if (sessionData.messages && sessionData.messages.length > 0) {
+          insertMany(sessionData.messages, sessionData.sessionId);
+        }
+
+        // 백업 폴더로 이동
+        fs.renameSync(filePath, path.join(backupDir, file));
+      } catch {
+        // 개별 파일 오류는 무시하고 계속
+        console.error(`Migration error for ${file}`);
+      }
+    }
+
+    this._markMigrationComplete();
+  }
+
+  /**
+   * 마이그레이션 완료 표시
+   */
+  private _markMigrationComplete(): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO migration_status (id, completed, completed_at)
+      VALUES (1, 1, @now)
+    `).run({ now: Date.now() });
+  }
+
+  /**
+   * 메시지 삽입 (마이그레이션용)
+   */
+  private _insertMessage(sessionId: number, msg: StoreMessage): void {
+    const row = this._messageToRow(sessionId, msg);
+    this.stmtInsert.run(row);
+  }
+
+  // ============================================================================
+  // Row 변환
+  // ============================================================================
+
+  /**
+   * StoreMessage -> DB Row 변환
+   */
+  private _messageToRow(sessionId: number, msg: StoreMessage): Record<string, unknown> {
+    const base = {
+      id: msg.id,
+      session_id: sessionId,
+      timestamp: msg.timestamp,
+      role: msg.role,
+      type: msg.type,
+      content: null as string | null,
+      tool_name: null as string | null,
+      tool_input: null as string | null,
+      tool_output: null as string | null,
+      tool_error: null as string | null,
+      success: null as number | null,
+      parent_tool_use_id: null as string | null,
+      attachments: null as string | null,
+      file_info: null as string | null,
+      result_info: null as string | null,
+      reason: null as string | null,
+    };
+
+    switch (msg.type) {
+      case 'text':
+        base.content = (msg as UserTextMessage | AssistantTextMessage).content;
+        if ('attachments' in msg && (msg as UserTextMessage).attachments) {
+          base.attachments = JSON.stringify((msg as UserTextMessage).attachments);
+        }
+        break;
+
+      case 'tool_start':
+      case 'tool_complete': {
+        const toolMsg = msg as ToolStartMessage | ToolCompleteMessage;
+        base.tool_name = toolMsg.toolName;
+        base.tool_input = JSON.stringify(toolMsg.toolInput);
+        if ('parentToolUseId' in toolMsg && toolMsg.parentToolUseId) {
+          base.parent_tool_use_id = toolMsg.parentToolUseId;
+        }
+        if (msg.type === 'tool_complete') {
+          const completeMsg = msg as ToolCompleteMessage;
+          base.success = completeMsg.success ? 1 : 0;
+          if (completeMsg.output) {
+            base.tool_output = completeMsg.output;
+          }
+          if (completeMsg.error) {
+            base.tool_error = completeMsg.error;
+          }
+        }
+        break;
+      }
+
+      case 'error':
+        base.content = (msg as ErrorMessage).content;
+        break;
+
+      case 'result':
+        base.result_info = JSON.stringify((msg as ResultMessage).resultInfo);
+        break;
+
+      case 'aborted':
+        base.reason = (msg as AbortedMessage).reason;
+        break;
+
+      case 'file_attachment':
+        base.file_info = JSON.stringify((msg as FileAttachmentMessage).file);
+        break;
+
+      case 'system':
+        base.content = (msg as SystemMessage).content;
+        break;
+    }
+
+    return base;
+  }
+
+  /**
+   * DB Row -> StoreMessage 변환
+   */
+  private _rowToMessage(row: MessageRow): StoreMessage {
+    // role을 제외한 base 속성 (각 case에서 명시적으로 role 지정)
+    const id = row.id;
+    const timestamp = row.timestamp;
+
+    switch (row.type) {
+      case 'text': {
+        if (row.role === 'user') {
+          const userMsg: UserTextMessage = {
+            id,
+            timestamp,
+            role: 'user',
+            type: 'text',
+            content: row.content || '',
+          };
+          if (row.attachments) {
+            userMsg.attachments = JSON.parse(row.attachments);
+          }
+          return userMsg;
+        } else {
+          return {
+            id,
+            timestamp,
+            role: 'assistant',
+            type: 'text',
+            content: row.content || '',
+          } as AssistantTextMessage;
+        }
+      }
+
+      case 'tool_start': {
+        const toolStartMsg: ToolStartMessage = {
+          id,
+          timestamp,
+          role: 'assistant',
+          type: 'tool_start',
+          toolName: row.tool_name || '',
+          toolInput: row.tool_input ? JSON.parse(row.tool_input) : {},
+        };
+        if (row.parent_tool_use_id) {
+          toolStartMsg.parentToolUseId = row.parent_tool_use_id;
+        }
+        return toolStartMsg;
+      }
+
+      case 'tool_complete': {
+        const toolCompleteMsg: ToolCompleteMessage = {
+          id,
+          timestamp,
+          role: 'assistant',
+          type: 'tool_complete',
+          toolName: row.tool_name || '',
+          toolInput: row.tool_input ? JSON.parse(row.tool_input) : {},
+          success: row.success === 1,
+        };
+        if (row.tool_output) {
+          toolCompleteMsg.output = row.tool_output;
+        }
+        if (row.tool_error) {
+          toolCompleteMsg.error = row.tool_error;
+        }
+        if (row.parent_tool_use_id) {
+          toolCompleteMsg.parentToolUseId = row.parent_tool_use_id;
+        }
+        return toolCompleteMsg;
+      }
+
+      case 'error':
+        return {
+          id,
+          timestamp,
+          role: 'system',
+          type: 'error',
+          content: row.content || '',
+        } as ErrorMessage;
+
+      case 'result':
+        return {
+          id,
+          timestamp,
+          role: 'system',
+          type: 'result',
+          resultInfo: row.result_info ? JSON.parse(row.result_info) : {},
+        } as ResultMessage;
+
+      case 'aborted':
+        return {
+          id,
+          timestamp,
+          role: 'system',
+          type: 'aborted',
+          reason: row.reason as 'user' | 'session_ended',
+        } as AbortedMessage;
+
+      case 'file_attachment':
+        return {
+          id,
+          timestamp,
+          role: 'assistant',
+          type: 'file_attachment',
+          file: row.file_info ? JSON.parse(row.file_info) : {},
+        } as FileAttachmentMessage;
+
+      case 'system':
+        return {
+          id,
+          timestamp,
+          role: 'system',
+          type: 'system',
+          content: row.content || '',
+        } as SystemMessage;
+
+      default:
+        // Fallback
+        return {
+          id,
+          timestamp,
+          role: 'user',
+          type: 'text',
+          content: row.content || '',
+        } as UserTextMessage;
+    }
   }
 
   // ============================================================================
   // 메시지 추가 메서드
   // ============================================================================
-
-  /**
-   * 내부: 메시지 타입 별 Omit<id | timestamp> 유니온
-   *
-   * @param sessionId - 세션 ID
-   * @param message - 메시지 데이터 (id, timestamp 제외)
-   * @param externalId - 외부에서 지정한 ID (선택적, 주로 toolUseId)
-   */
-  private _addMessageInternal<T extends StoreMessage>(
-    sessionId: number,
-    message: Omit<T, 'id' | 'timestamp'>,
-    externalId?: string
-  ): StoreMessage[] {
-    const messages = this._ensureCache(sessionId);
-    const fullMessage = {
-      ...message,
-      id: externalId || generateMessageId(),
-      timestamp: Date.now(),
-    } as T;
-    messages.push(fullMessage);
-    this._dirty.add(sessionId);
-    return messages;
-  }
-
-  /**
-   * 캐시 확보 (없으면 빈 배열 생성)
-   *
-   * @param sessionId - 세션 ID
-   * @returns 메시지 배열 참조
-   */
-  private _ensureCache(sessionId: number): StoreMessage[] {
-    if (!this._cache.has(sessionId)) {
-      this._cache.set(sessionId, []);
-    }
-    return this._cache.get(sessionId)!;
-  }
 
   /**
    * 사용자 메시지 추가
@@ -465,13 +817,17 @@ export class MessageStore {
     content: string,
     attachments?: Attachment[]
   ): StoreMessage[] {
-    const message: Omit<UserTextMessage, 'id' | 'timestamp'> = {
+    const msg: UserTextMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'user',
       type: 'text',
       content,
       ...(attachments && { attachments }),
     };
-    return this._addMessageInternal<UserTextMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -482,12 +838,40 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addAssistantText(sessionId: number, content: string): StoreMessage[] {
-    const message: Omit<AssistantTextMessage, 'id' | 'timestamp'> = {
+    const msg: AssistantTextMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'assistant',
       type: 'text',
       content,
     };
-    return this._addMessageInternal<AssistantTextMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
+  }
+
+  /**
+   * 시스템 메시지 추가
+   *
+   * @description
+   * 시스템에서 생성하는 일반 메시지를 추가합니다.
+   * 세션 재시작 등의 이벤트를 기록할 때 사용됩니다.
+   *
+   * @param sessionId - 세션 ID
+   * @param content - 메시지 내용
+   * @returns 업데이트된 메시지 배열
+   */
+  addSystemMessage(sessionId: number, content: string): StoreMessage[] {
+    const msg: SystemMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
+      role: 'system',
+      type: 'system',
+      content,
+    };
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -511,14 +895,18 @@ export class MessageStore {
     parentToolUseId?: string | null,
     toolUseId?: string
   ): StoreMessage[] {
-    const message: Omit<ToolStartMessage, 'id' | 'timestamp'> = {
+    const msg: ToolStartMessage = {
+      id: toolUseId || generateMessageId(),
+      timestamp: Date.now(),
       role: 'assistant',
       type: 'tool_start',
       toolName,
       toolInput: summarizeToolInput(toolName, toolInput),
       ...(parentToolUseId ? { parentToolUseId } : {}),
     };
-    return this._addMessageInternal<ToolStartMessage>(sessionId, message, toolUseId);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -542,32 +930,23 @@ export class MessageStore {
     result?: string,
     error?: string
   ): StoreMessage[] {
-    const messages = this._ensureCache(sessionId);
-
     // 가장 최근의 해당 도구 찾기
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.type === 'tool_start' && (msg as ToolStartMessage).toolName === toolName) {
-        const toolStartMsg = msg as ToolStartMessage;
-        const completeMsg: ToolCompleteMessage = {
-          id: toolStartMsg.id,
-          role: 'assistant',
-          type: 'tool_complete',
-          toolName,
-          toolInput: toolStartMsg.toolInput,
-          success,
-          output: summarizeOutput(result) as string | undefined,
-          error: summarizeOutput(error) as string | undefined,
-          timestamp: msg.timestamp,
-          ...(toolStartMsg.parentToolUseId ? { parentToolUseId: toolStartMsg.parentToolUseId } : {}),
-        };
-        messages[i] = completeMsg;
-        break;
-      }
+    const row = this.stmtFindToolStart.get({
+      session_id: sessionId,
+      tool_name: toolName,
+    }) as { id: string } | undefined;
+
+    if (row) {
+      this.stmtUpdate.run({
+        id: row.id,
+        type: 'tool_complete',
+        tool_output: summarizeOutput(result) as string | null ?? null,
+        tool_error: summarizeOutput(error) as string | null ?? null,
+        success: success ? 1 : 0,
+      });
     }
 
-    this._dirty.add(sessionId);
-    return messages;
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -578,12 +957,16 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addError(sessionId: number, errorMessage: string): StoreMessage[] {
-    const message: Omit<ErrorMessage, 'id' | 'timestamp'> = {
+    const msg: ErrorMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'system',
       type: 'error',
       content: errorMessage,
     };
-    return this._addMessageInternal<ErrorMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -597,12 +980,16 @@ export class MessageStore {
     sessionId: number,
     resultInfo: ResultInfo
   ): StoreMessage[] {
-    const message: Omit<ResultMessage, 'id' | 'timestamp'> = {
+    const msg: ResultMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'system',
       type: 'result',
       resultInfo,
     };
-    return this._addMessageInternal<ResultMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -613,12 +1000,16 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addAborted(sessionId: number, reason: 'user' | 'session_ended'): StoreMessage[] {
-    const message: Omit<AbortedMessage, 'id' | 'timestamp'> = {
+    const msg: AbortedMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'system',
       type: 'aborted',
       reason,
     };
-    return this._addMessageInternal<AbortedMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   /**
@@ -629,12 +1020,16 @@ export class MessageStore {
    * @returns 업데이트된 메시지 배열
    */
   addFileAttachment(sessionId: number, fileInfo: FileInfo): StoreMessage[] {
-    const message: Omit<FileAttachmentMessage, 'id' | 'timestamp'> = {
+    const msg: FileAttachmentMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
       role: 'assistant',
       type: 'file_attachment',
       file: fileInfo,
     };
-    return this._addMessageInternal<FileAttachmentMessage>(sessionId, message);
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
   }
 
   // ============================================================================
@@ -645,102 +1040,106 @@ export class MessageStore {
    * 세션의 메시지 조회 (페이징 지원)
    *
    * @description
-   * limit(개수) 또는 maxBytes(용량) 기준으로 페이징할 수 있습니다.
-   * maxBytes가 지정되면 개수 limit보다 우선합니다.
+   * limit(개수) 기준으로 페이징할 수 있습니다.
    * 최신 메시지가 배열 끝에 위치합니다.
    *
    * @param sessionId - 세션 ID
-   * @param options - 조회 옵션 (limit, loadBefore, maxBytes)
+   * @param options - 조회 옵션 (limit, loadBefore)
    * @returns 메시지 배열
    *
    * @example
    * ```typescript
    * // 최근 10개 메시지
-   * const recent = store.getMessages('session-1', { limit: 10 });
-   *
-   * // 최근 100KB 이내 메시지
-   * const bySize = store.getMessages('session-1', { maxBytes: 100 * 1024 });
+   * const recent = store.getMessages(1, { limit: 10 });
    *
    * // 인덱스 80 이전 메시지 (60~79 반환)
-   * const page2 = store.getMessages('session-1', { loadBefore: 80, maxBytes: 100 * 1024 });
+   * const page2 = store.getMessages(1, { loadBefore: 80, limit: 20 });
+   *
+   * // 최근 100KB 이내 메시지
+   * const bySize = store.getMessages(1, { maxBytes: 100 * 1024 });
    * ```
    */
   getMessages(sessionId: number, options: GetMessagesOptions = {}): StoreMessage[] {
     const { limit = MAX_MESSAGES_PER_SESSION, loadBefore = 0, maxBytes } = options;
 
-    if (!this._cache.has(sessionId)) {
-      return [];
+    let rows: MessageRow[];
+
+    if (loadBefore > 0) {
+      // loadBefore 인덱스 이전의 메시지를 반환
+      // 예: loadBefore=8, limit=3 -> 인덱스 5, 6, 7 (message 6, 7, 8)
+      const skip = Math.max(0, loadBefore - limit);
+      const actualLimit = Math.min(limit, loadBefore);
+
+      rows = this.db.prepare(`
+        SELECT * FROM (
+          SELECT * FROM messages WHERE session_id = @session_id ORDER BY timestamp ASC LIMIT @offset
+        ) ORDER BY timestamp ASC LIMIT @limit OFFSET @skip
+      `).all({
+        session_id: sessionId,
+        offset: loadBefore,
+        limit: actualLimit,
+        skip: skip,
+      }) as MessageRow[];
+    } else {
+      // 전체 카운트 확인
+      const count = this.getCount(sessionId);
+
+      if (limit >= count) {
+        // 전체 반환
+        rows = this.stmtSelectAll.all({ session_id: sessionId }) as MessageRow[];
+      } else {
+        // 최근 N개 반환
+        rows = this.stmtSelectWithLimit.all({
+          session_id: sessionId,
+          limit: limit,
+        }) as MessageRow[];
+      }
     }
 
-    const messages = this._cache.get(sessionId)!;
-
-    // loadBefore 적용: loadBefore 인덱스 이전의 메시지를 반환
-    // loadBefore=0이면 전체 (최신부터), loadBefore=80이면 0~79 범위에서 최신 것들
-    const endIdx = loadBefore > 0 ? Math.min(loadBefore, messages.length) : messages.length;
-    if (endIdx <= 0) {
-      return [];
-    }
-
-    // maxBytes 기준 (용량 기반 페이징)
-    if (maxBytes !== undefined) {
-      const result: StoreMessage[] = [];
+    // maxBytes 옵션 처리: 바이트 제한이 있으면 역순으로 누적
+    if (maxBytes !== undefined && rows.length > 0) {
+      const result: MessageRow[] = [];
       let totalBytes = 0;
 
-      // endIdx 직전부터 역순으로 누적 (가장 최신 → 과거)
-      for (let i = endIdx - 1; i >= 0; i--) {
-        const msg = messages[i];
-        const msgBytes = this._estimateMessageBytes(msg);
+      // 최신 메시지부터 역순으로 누적 (rows는 시간순이므로 뒤에서부터)
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const row = rows[i];
+        const rowBytes = this._estimateRowBytes(row);
 
-        if (totalBytes + msgBytes > maxBytes && result.length > 0) {
+        if (totalBytes + rowBytes > maxBytes && result.length > 0) {
           break;
         }
 
-        totalBytes += msgBytes;
-        result.unshift(msg);
+        totalBytes += rowBytes;
+        result.unshift(row);
       }
 
-      return result;
+      return result.map(row => this._rowToMessage(row));
     }
 
-    // 개수 기준 (기존 로직)
-    if (loadBefore === 0 && limit >= messages.length) {
-      return [...messages];
-    }
-
-    const start = Math.max(0, endIdx - limit);
-    return messages.slice(start, endIdx);
+    return rows.map(row => this._rowToMessage(row));
   }
 
   /**
-   * 메시지 크기 추정 (바이트)
-   *
-   * @description
-   * JSON.stringify 비용을 줄이기 위해 주요 필드만 계산합니다.
-   *
-   * @param message - 메시지
-   * @returns 추정 바이트 수
+   * Row 크기 추정 (바이트)
    */
-  private _estimateMessageBytes(message: StoreMessage): number {
-    let bytes = 100; // 기본 오버헤드 (id, timestamp, role, type 등)
+  private _estimateRowBytes(row: MessageRow): number {
+    let bytes = 100; // 기본 오버헤드
 
-    if ('content' in message && typeof message.content === 'string') {
-      bytes += message.content.length * 2; // UTF-16 가정
+    if (row.content) {
+      bytes += row.content.length * 2; // UTF-16 가정
     }
-
-    if ('toolInput' in message && message.toolInput) {
-      bytes += JSON.stringify(message.toolInput).length;
+    if (row.tool_input) {
+      bytes += row.tool_input.length;
     }
-
-    if ('output' in message && typeof message.output === 'string') {
-      bytes += message.output.length * 2;
+    if (row.tool_output) {
+      bytes += row.tool_output.length * 2;
     }
-
-    if ('error' in message && typeof message.error === 'string') {
-      bytes += message.error.length * 2;
+    if (row.tool_error) {
+      bytes += row.tool_error.length * 2;
     }
-
-    if ('attachments' in message && message.attachments) {
-      bytes += JSON.stringify(message.attachments).length;
+    if (row.attachments) {
+      bytes += row.attachments.length;
     }
 
     return bytes;
@@ -764,10 +1163,8 @@ export class MessageStore {
    * @returns 메시지 개수
    */
   getCount(sessionId: number): number {
-    if (this._cache.has(sessionId)) {
-      return this._cache.get(sessionId)!.length;
-    }
-    return 0;
+    const row = this.stmtSelectCount.get({ session_id: sessionId }) as { count: number };
+    return row.count;
   }
 
   // ============================================================================
@@ -780,181 +1177,19 @@ export class MessageStore {
    * @param sessionId - 세션 ID
    */
   clear(sessionId: number): void {
-    this._cache.delete(sessionId);
-    this._dirty.delete(sessionId);
+    this.stmtDelete.run({ session_id: sessionId });
   }
 
   /**
    * 세션 삭제
    *
    * @description
-   * clear()와 동일하지만 의미적으로 완전 삭제를 나타냅니다.
+   * clear()와 동일합니다.
    *
    * @param sessionId - 세션 ID
    */
   delete(sessionId: number): void {
     this.clear(sessionId);
-  }
-
-  /**
-   * 메시지 수 제한 적용
-   *
-   * @description
-   * MAX_MESSAGES_PER_SESSION을 초과하는 오래된 메시지를 제거합니다.
-   *
-   * @param sessionId - 세션 ID
-   * @returns trim 발생 여부
-   */
-  trimMessages(sessionId: number): boolean {
-    if (!this._cache.has(sessionId)) {
-      return false;
-    }
-
-    const messages = this._cache.get(sessionId)!;
-    if (messages.length <= MAX_MESSAGES_PER_SESSION) {
-      return false;
-    }
-
-    // 최신 메시지만 유지
-    const trimmed = messages.slice(-MAX_MESSAGES_PER_SESSION);
-    this._cache.set(sessionId, trimmed);
-    this._dirty.add(sessionId);
-    return true;
-  }
-
-  // ============================================================================
-  // Dirty 추적 메서드
-  // ============================================================================
-
-  /**
-   * 저장이 필요한 데이터가 있는지 확인
-   *
-   * @returns dirty 세션 존재 여부
-   */
-  hasDirtyData(): boolean {
-    return this._dirty.size > 0;
-  }
-
-  /**
-   * dirty 세션 목록 조회
-   *
-   * @returns dirty 세션 ID 배열
-   */
-  getDirtySessions(): number[] {
-    return Array.from(this._dirty);
-  }
-
-  /**
-   * 세션을 clean으로 표시
-   *
-   * @description
-   * 파일 저장 후 호출하여 dirty 플래그를 제거합니다.
-   *
-   * @param sessionId - 세션 ID
-   */
-  markClean(sessionId: number): void {
-    this._dirty.delete(sessionId);
-  }
-
-  /**
-   * 모든 dirty 세션을 clean으로 표시
-   */
-  markAllClean(): void {
-    this._dirty.clear();
-  }
-
-  // ============================================================================
-  // 직렬화 메서드
-  // ============================================================================
-
-  /**
-   * 전체 스토어 데이터 내보내기
-   *
-   * @description
-   * 메모리에 있는 모든 세션 데이터를 반환합니다.
-   *
-   * @returns 전체 스토어 데이터
-   */
-  toJSON(): MessageStoreData {
-    const sessions: Record<string, SessionData> = {};
-
-    for (const [sessionId, messages] of this._cache) {
-      sessions[sessionId] = {
-        sessionId,
-        messages,
-        updatedAt: Date.now(),
-      };
-    }
-
-    return { sessions };
-  }
-
-  /**
-   * 단일 세션 데이터 조회 (파일 저장용)
-   *
-   * @description
-   * 특정 세션의 데이터를 파일 저장 형식으로 반환합니다.
-   * trim을 적용하여 최대 메시지 수를 제한합니다.
-   *
-   * @param sessionId - 세션 ID
-   * @returns 세션 데이터 또는 null
-   */
-  getSessionData(sessionId: number): SessionData | null {
-    if (!this._cache.has(sessionId)) {
-      return null;
-    }
-
-    // 저장 시 trim 제거 - 전체 히스토리 보존
-    // 클라이언트 전송은 maxBytes 페이징으로 처리됨
-
-    const messages = this._cache.get(sessionId)!;
-    return {
-      sessionId,
-      messages: [...messages],
-      updatedAt: Date.now(),
-    };
-  }
-
-  /**
-   * 외부에서 세션 데이터 로드
-   *
-   * @description
-   * 파일에서 읽어온 세션 데이터를 메모리에 로드합니다.
-   *
-   * @param sessionId - 세션 ID
-   * @param data - 세션 데이터
-   */
-  loadSessionData(sessionId: number, data: SessionData): void {
-    this._cache.set(sessionId, data.messages || []);
-    // 로드된 데이터는 dirty가 아님
-  }
-
-  /**
-   * 캐시된 세션 언로드
-   *
-   * @description
-   * 메모리에서 세션을 제거합니다.
-   * 시청자가 없는 세션의 메모리 해제에 사용합니다.
-   * dirty 세션은 언로드 전에 저장해야 합니다.
-   *
-   * @param sessionId - 세션 ID
-   * @returns 언로드 전 dirty 여부
-   */
-  unloadCache(sessionId: number): boolean {
-    const wasDirty = this._dirty.has(sessionId);
-    this._cache.delete(sessionId);
-    this._dirty.delete(sessionId);
-    return wasDirty;
-  }
-
-  /**
-   * 캐시 여부 확인
-   *
-   * @param sessionId - 세션 ID
-   * @returns 캐시 존재 여부
-   */
-  hasCache(sessionId: number): boolean {
-    return this._cache.has(sessionId);
   }
 
   // ============================================================================
@@ -965,18 +1200,25 @@ export class MessageStore {
    * 공유용 메시지 히스토리 조회
    *
    * @description
-   * 공유 페이지에서 사용할 전체 메시지를 시간순(과거→최신)으로 반환합니다.
-   * 일반 getMessages와 달리 페이징 없이 전체 메시지를 반환합니다.
+   * 공유 페이지에서 사용할 전체 메시지를 시간순(과거->최신)으로 반환합니다.
+   * 페이징 없이 전체 메시지를 반환합니다.
    *
    * @param sessionId - 세션 ID
    * @returns 시간순 정렬된 전체 메시지 배열
    */
   getSharedMessageHistory(sessionId: number): StoreMessage[] {
-    if (!this._cache.has(sessionId)) {
-      return [];
-    }
+    const rows = this.stmtSelectAll.all({ session_id: sessionId }) as MessageRow[];
+    return rows.map(row => this._rowToMessage(row));
+  }
 
-    // 원본은 이미 시간순 (오래된 것 → 최신)으로 저장되어 있음
-    return [...this._cache.get(sessionId)!];
+  // ============================================================================
+  // 종료
+  // ============================================================================
+
+  /**
+   * DB 연결 종료
+   */
+  close(): void {
+    this.db.close();
   }
 }

@@ -6,7 +6,6 @@
  */
 
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
-import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
 import type { AccountType } from '@estelle/core';
 
@@ -43,40 +42,6 @@ export interface PersistenceAdapter {
    * @param data - 저장할 데이터
    */
   saveWorkspaceStore(data: WorkspaceStoreData): Promise<void>;
-
-  // ============================================================================
-  // MessageStore 영속화 (세션 단위)
-  // ============================================================================
-
-  /**
-   * 메시지 세션 데이터 로드
-   *
-   * @param sessionId - 세션 ID (conversationId)
-   * @returns 저장된 세션 데이터 또는 undefined
-   */
-  loadMessageSession(sessionId: string): SessionData | undefined;
-
-  /**
-   * 메시지 세션 데이터 저장
-   *
-   * @param sessionId - 세션 ID
-   * @param data - 저장할 세션 데이터
-   */
-  saveMessageSession(sessionId: string, data: SessionData): Promise<void>;
-
-  /**
-   * 메시지 세션 삭제
-   *
-   * @param sessionId - 삭제할 세션 ID
-   */
-  deleteMessageSession(sessionId: string): Promise<void>;
-
-  /**
-   * 저장된 모든 세션 ID 목록 조회
-   *
-   * @returns 세션 ID 배열
-   */
-  listMessageSessions(): string[];
 
   // ============================================================================
   // ShareStore 영속화

@@ -24,6 +24,7 @@
  * - `aborted`: 작업 중단
  * - `file_attachment`: 파일 첨부
  * - `user_response`: 사용자 응답 (권한/질문)
+ * - `system`: 시스템 메시지 (세션 재시작 등)
  */
 export type StoreMessageType =
   | 'text'
@@ -33,7 +34,8 @@ export type StoreMessageType =
   | 'result'
   | 'aborted'
   | 'file_attachment'
-  | 'user_response';
+  | 'user_response'
+  | 'system';
 
 // ============================================================================
 // Base Interface
@@ -337,6 +339,24 @@ export interface UserResponseMessage extends BaseStoreMessage {
   response: string;
 }
 
+/**
+ * 시스템 메시지
+ *
+ * @description
+ * 시스템에서 생성하는 일반 메시지입니다.
+ * 세션 재시작 등의 이벤트를 기록합니다.
+ */
+export interface SystemMessage extends BaseStoreMessage {
+  /** 역할: 항상 'system' */
+  role: 'system';
+
+  /** 타입: 항상 'system' */
+  type: 'system';
+
+  /** 메시지 내용 */
+  content: string;
+}
+
 // ============================================================================
 // Union Type
 // ============================================================================
@@ -357,7 +377,8 @@ export type StoreMessage =
   | ResultMessage
   | AbortedMessage
   | FileAttachmentMessage
-  | UserResponseMessage;
+  | UserResponseMessage
+  | SystemMessage;
 
 // ============================================================================
 // Type Guards
@@ -536,6 +557,23 @@ export function isUserResponseMessage(value: unknown): value is UserResponseMess
 }
 
 /**
+ * SystemMessage 타입 가드
+ *
+ * @param value - 확인할 값
+ * @returns SystemMessage 타입이면 true
+ */
+export function isSystemMessage(value: unknown): value is SystemMessage {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    value.role === 'system' &&
+    value.type === 'system' &&
+    typeof value.timestamp === 'number' &&
+    typeof value.content === 'string'
+  );
+}
+
+/**
  * StoreMessage 타입 가드
  *
  * @description
@@ -554,6 +592,7 @@ export function isStoreMessage(value: unknown): value is StoreMessage {
     isResultMessage(value) ||
     isAbortedMessage(value) ||
     isFileAttachmentMessage(value) ||
-    isUserResponseMessage(value)
+    isUserResponseMessage(value) ||
+    isSystemMessage(value)
   );
 }

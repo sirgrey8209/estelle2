@@ -35,6 +35,8 @@
  * ```
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
 import { decodeConversationIdFull } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
@@ -50,6 +52,7 @@ import {
   buildDocumentRemovedReminder,
   buildConversationRenamedReminder,
 } from './utils/session-context.js';
+import { findAutorunDoc } from './utils/autorun-detector.js';
 
 // ============================================================================
 // 타입 정의
@@ -116,6 +119,7 @@ export interface ClaudeManagerAdapter {
   getSessionStartTime(conversationId: number): number | null;
   getPendingEvent(conversationId: number): unknown;
   getSessionIdByToolUseId(toolUseId: string): number | null;
+  getSessionTools(conversationId: number): string[];
 }
 
 /**
@@ -582,6 +586,12 @@ export class Pylon {
     // Share 히스토리 요청 (Viewer용)
     if (type === 'share_history') {
       this.handleShareHistory(payload, from);
+      return;
+    }
+
+    // 슬래시 명령어 목록 요청
+    if (type === 'slash_commands_request') {
+      this.handleSlashCommandsRequest(payload, from);
       return;
     }
 
@@ -1070,6 +1080,136 @@ export class Pylon {
         messages,
       },
     });
+  }
+
+  /**
+   * slash_commands_request 처리
+   *
+   * @description
+   * 클라이언트가 `/` 입력 시 사용 가능한 슬래시 명령어 목록을 요청합니다.
+   * .claude/skills/ 폴더에서 스킬 파일을 읽어서 반환합니다.
+   *
+   * @param payload - 요청 페이로드 ({ conversationId: number })
+   * @param from - 발신자 정보
+   */
+  private handleSlashCommandsRequest(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    this.log(`[slash_commands_request] from=${JSON.stringify(from)}, payload=${JSON.stringify(payload)}`);
+
+    const fromDeviceId = from?.deviceId;
+    if (fromDeviceId === undefined) return;
+
+    const conversationId = payload?.conversationId as number | undefined;
+    if (!conversationId) {
+      this.send({
+        type: 'slash_commands_result',
+        to: [fromDeviceId],
+        payload: {
+          success: false,
+          error: 'Missing conversationId',
+          slashCommands: [],
+        },
+      });
+      return;
+    }
+
+    // conversationId에서 workspaceId 추출하여 워크스페이스 찾기
+    const decoded = decodeConversationIdFull(conversationId as ConversationId);
+    this.log(`[slash_commands_request] decoded=${JSON.stringify(decoded)}`);
+
+    const workspace = this.deps.workspaceStore.getWorkspace(decoded.workspaceId);
+    const workingDir = workspace?.workingDir || '';
+    this.log(`[slash_commands_request] workspace=${workspace?.name}, workingDir=${workingDir}`);
+
+    if (!workingDir) {
+      this.log(`[slash_commands_request] No workingDir, sending empty result`);
+      this.send({
+        type: 'slash_commands_result',
+        to: [fromDeviceId],
+        payload: {
+          conversationId,
+          success: true,
+          slashCommands: [],
+        },
+      });
+      return;
+    }
+
+    // .claude/skills 폴더에서 스킬 파일 읽기
+    const slashCommands = this.readSkillsFromFolder(workingDir);
+    this.log(`[slash_commands_request] slashCommands=${JSON.stringify(slashCommands)}, sending to ${fromDeviceId}`);
+
+    this.send({
+      type: 'slash_commands_result',
+      to: [fromDeviceId],
+      payload: {
+        conversationId,
+        success: true,
+        slashCommands,
+      },
+    });
+  }
+
+  /**
+   * 워크스페이스 및 글로벌 스킬 폴더에서 스킬 파일 목록 읽기
+   *
+   * @param workingDir - 워크스페이스 작업 디렉토리
+   * @returns 슬래시 명령어 목록 (예: ['/tdd-flow', '/keybindings-help'])
+   *
+   * @description
+   * 스킬 검색 경로:
+   * 1. 워크스페이스: {workingDir}/.claude/skills/
+   * 2. 글로벌: ~/.claude/skills/
+   *
+   * Claude Code 스킬은 두 가지 형태가 있습니다:
+   * 1. .claude/skills/skill-name.md (단일 파일)
+   * 2. .claude/skills/skill-name/SKILL.md (폴더 형태)
+   */
+  private readSkillsFromFolder(workingDir: string): string[] {
+    const os = require('os');
+    const homeDir = os.homedir();
+
+    // 검색할 스킬 디렉토리 목록
+    const skillsDirs = [
+      path.join(workingDir, '.claude', 'skills'),  // 워크스페이스 스킬
+      path.join(homeDir, '.claude', 'skills'),      // 글로벌 스킬
+    ];
+
+    const skillSet = new Set<string>();
+
+    for (const skillsDir of skillsDirs) {
+      try {
+        if (!fs.existsSync(skillsDir)) {
+          continue;
+        }
+
+        const entries = fs.readdirSync(skillsDir, { withFileTypes: true }) as Array<{
+          name: string;
+          isDirectory: () => boolean;
+          isFile: () => boolean;
+        }>;
+
+        for (const entry of entries) {
+          if (entry.isFile() && entry.name.endsWith('.md')) {
+            // 단일 .md 파일 형태: skill-name.md → /skill-name
+            const skillName = entry.name.replace(/\.md$/, '');
+            skillSet.add(`/${skillName}`);
+          } else if (entry.isDirectory()) {
+            // 폴더 형태: skill-name/SKILL.md → /skill-name
+            const skillMdPath = path.join(skillsDir, entry.name, 'SKILL.md');
+            if (fs.existsSync(skillMdPath)) {
+              skillSet.add(`/${entry.name}`);
+            }
+          }
+        }
+      } catch (error) {
+        this.log(`Error reading skills folder ${skillsDir}: ${error}`);
+      }
+    }
+
+    return Array.from(skillSet).sort();
   }
 
   // ==========================================================================
@@ -1652,9 +1792,17 @@ export class Pylon {
       const systemPrompt = this.config.buildEnv
         ? buildSystemPrompt(this.config.buildEnv)
         : undefined;
+
+      // autorun 문서 감지
+      const autorunDoc = findAutorunDoc(linkedDocs, (p) => {
+        try { return fs.readFileSync(p, 'utf-8'); }
+        catch { return null; }
+      });
+
       const systemReminder = buildInitialReminder(
         conversation?.name || '새 대화',
-        linkedDocs
+        linkedDocs,
+        autorunDoc ? { autorunDoc } : undefined
       );
 
       this.deps.claudeManager.sendMessage(eid, promptToSend, {
@@ -1746,9 +1894,16 @@ export class Pylon {
       systemPrompt = buildSystemPrompt(this.config.buildEnv);
     }
 
+    // autorun 문서 감지
+    const autorunDoc = findAutorunDoc(linkedDocs, (p) => {
+      try { return fs.readFileSync(p, 'utf-8'); }
+      catch { return null; }
+    });
+
     const systemReminder = buildInitialReminder(
       conversation.name || '',
-      linkedDocs
+      linkedDocs,
+      autorunDoc ? { autorunDoc } : undefined
     );
 
     this.deps.claudeManager.sendMessage(conversationId, systemReminder, {
@@ -2314,14 +2469,8 @@ Message: ${message}
         viewers.delete(deviceId);
         if (viewers.size === 0) {
           this.sessionViewers.delete(existingConversationId);
-          // 활성 Claude 세션이 있으면 캐시 유지
-          // (언로드 후 이벤트가 빈 캐시를 생성하여 히스토리가 유실되는 것 방지)
-          if (this.deps.claudeManager.hasActiveSession(existingConversationId)) {
-            this.log(`Keeping message cache for session ${existingConversationId} (active Claude session)`);
-          } else {
-            this.deps.messageStore.unloadCache(existingConversationId);
-            this.log(`Unloaded message cache for session ${existingConversationId} (no viewers)`);
-          }
+          // SQLite 기반으로 전환 후 캐시 언로드 불필요 (DB에 즉시 저장됨)
+          this.log(`No more viewers for session ${existingConversationId}`);
         }
         break;
       }
@@ -2353,12 +2502,8 @@ Message: ${message}
         viewers.delete(deviceId);
         if (viewers.size === 0) {
           this.sessionViewers.delete(conversationId);
-          if (this.deps.claudeManager.hasActiveSession(conversationId)) {
-            this.log(`Keeping message cache for session ${conversationId} (active Claude session)`);
-          } else {
-            this.deps.messageStore.unloadCache(conversationId);
-            this.log(`Unloaded message cache for session ${conversationId} (no viewers)`);
-          }
+          // SQLite 기반으로 전환 후 캐시 언로드 불필요 (DB에 즉시 저장됨)
+          this.log(`No more viewers for session ${conversationId}`);
         }
         this.log(`Client ${deviceId} removed from session ${conversationId} viewers`);
         break;
@@ -2506,13 +2651,8 @@ Message: ${message}
    * 메모리 캐시와 영속 파일을 모두 삭제합니다.
    */
   private clearMessagesForConversation(conversationId: ConversationId): void {
-    // 메모리 캐시 클리어
+    // SQLite DB에서 메시지 삭제
     this.deps.messageStore.clear(conversationId);
-
-    // 영속성 파일 삭제
-    if (this.deps.persistence) {
-      this.deps.persistence.deleteMessageSession(String(conversationId));
-    }
   }
 
   // ==========================================================================
@@ -2599,21 +2739,13 @@ Message: ${message}
 
   /**
    * 메시지 세션 즉시 저장
+   *
+   * @deprecated SQLite 기반으로 전환되어 메시지가 즉시 DB에 저장됩니다.
+   * 이 메서드는 호환성을 위해 유지되지만 실제 저장 로직은 수행하지 않습니다.
    */
-  private async saveMessageSession(conversationId: number): Promise<void> {
-    const persistence = this.deps.persistence;
-    if (!persistence) return;
-
-    try {
-      const sessionData = this.deps.messageStore.getSessionData(conversationId);
-      if (sessionData) {
-        await persistence.saveMessageSession(String(conversationId), sessionData);
-        this.deps.messageStore.markClean(conversationId);
-        this.log(`[Persistence] Saved message session: ${conversationId}`);
-      }
-    } catch (err) {
-      this.deps.logger.error(`[Persistence] Failed to save session ${conversationId}: ${err}`);
-    }
+  private async saveMessageSession(_conversationId: number): Promise<void> {
+    // SQLite 기반으로 전환되어 별도의 저장 로직이 필요 없음
+    // 메시지는 추가 시 즉시 DB에 저장됨
   }
 
   /**
@@ -2627,53 +2759,37 @@ Message: ${message}
       await this.saveWorkspaceStore();
     }
 
-    // 메시지 타이머 취소
-    for (const [conversationId, timer] of this.messageSaveTimers) {
+    // 메시지 타이머 취소 (SQLite 전환 후 더 이상 사용되지 않음)
+    for (const [, timer] of this.messageSaveTimers) {
       clearTimeout(timer);
-      this.messageSaveTimers.delete(conversationId);
     }
+    this.messageSaveTimers.clear();
 
-    // dirty 세션 모두 저장
-    if (this.deps.messageStore.hasDirtyData()) {
-      const dirtySessions = this.deps.messageStore.getDirtySessions();
-      for (const conversationId of dirtySessions) {
-        await this.saveMessageSession(conversationId);
-      }
-    }
+    // SQLite 기반으로 전환되어 dirty 세션 저장 불필요
+    // 메시지는 추가 시 즉시 DB에 저장됨
   }
 
   /**
    * 모든 대화의 메시지 세션 로드 (시작 시 호출)
+   *
+   * @deprecated SQLite 기반으로 전환되어 별도의 로드가 필요 없습니다.
+   * 메시지는 필요할 때 DB에서 직접 쿼리됩니다.
    */
   private loadAllMessageSessions(): void {
-    const workspaces = this.deps.workspaceStore.getAllWorkspaces();
-    let count = 0;
-    for (const workspace of workspaces) {
-      for (const conv of workspace.conversations) {
-        this.loadMessageSession(conv.conversationId);
-        count++;
-      }
-    }
-    if (count > 0) {
-      this.log(`[Startup] Loaded ${count} message sessions`);
-    }
+    // SQLite 기반으로 전환되어 별도의 로드 불필요
+    // 메시지는 getMessages() 호출 시 DB에서 직접 조회됨
+    this.log(`[Startup] MessageStore using SQLite - no preloading needed`);
   }
 
   /**
    * 메시지 세션 로드 (lazy loading)
+   *
+   * @deprecated SQLite 기반으로 전환되어 별도의 로드가 필요 없습니다.
+   * 이 메서드는 호환성을 위해 유지되지만 실제 로드 로직은 수행하지 않습니다.
    */
-  loadMessageSession(conversationId: number): void {
-    const persistence = this.deps.persistence;
-    if (!persistence) return;
-
-    // 이미 캐시되어 있으면 스킵
-    if (this.deps.messageStore.hasCache(conversationId)) return;
-
-    const sessionData = persistence.loadMessageSession(String(conversationId));
-    if (sessionData) {
-      this.deps.messageStore.loadSessionData(conversationId, sessionData);
-      this.log(`[Persistence] Loaded message session: ${conversationId}`);
-    }
+  loadMessageSession(_conversationId: number): void {
+    // SQLite 기반으로 전환되어 별도의 로드 불필요
+    // 메시지는 getMessages() 호출 시 DB에서 직접 조회됨
   }
 
   // ==========================================================================

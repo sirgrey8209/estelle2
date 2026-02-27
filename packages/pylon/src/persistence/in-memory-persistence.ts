@@ -25,7 +25,6 @@
 
 import type { PersistenceAdapter, PersistedAccount } from './types.js';
 import type { WorkspaceStoreData } from '../stores/workspace-store.js';
-import type { SessionData } from '../stores/message-store.js';
 import type { ShareStoreData } from '../stores/share-store.js';
 
 /**
@@ -37,7 +36,6 @@ export class InMemoryPersistence implements PersistenceAdapter {
   private workspaceData?: WorkspaceStoreData;
   private shareData?: ShareStoreData;
   private accountData?: PersistedAccount;
-  private sessions = new Map<string, SessionData>();
 
   // ============================================================================
   // WorkspaceStore 영속화
@@ -56,39 +54,6 @@ export class InMemoryPersistence implements PersistenceAdapter {
   async saveWorkspaceStore(data: WorkspaceStoreData): Promise<void> {
     // 깊은 복사로 저장 (외부 수정 방지)
     this.workspaceData = JSON.parse(JSON.stringify(data));
-  }
-
-  // ============================================================================
-  // MessageStore 영속화 (세션 단위)
-  // ============================================================================
-
-  /**
-   * 메시지 세션 데이터 로드
-   */
-  loadMessageSession(sessionId: string): SessionData | undefined {
-    return this.sessions.get(sessionId);
-  }
-
-  /**
-   * 메시지 세션 데이터 저장
-   */
-  async saveMessageSession(sessionId: string, data: SessionData): Promise<void> {
-    // 깊은 복사로 저장
-    this.sessions.set(sessionId, JSON.parse(JSON.stringify(data)));
-  }
-
-  /**
-   * 메시지 세션 삭제
-   */
-  async deleteMessageSession(sessionId: string): Promise<void> {
-    this.sessions.delete(sessionId);
-  }
-
-  /**
-   * 저장된 모든 세션 ID 목록 조회
-   */
-  listMessageSessions(): string[] {
-    return Array.from(this.sessions.keys());
   }
 
   // ============================================================================
@@ -141,13 +106,6 @@ export class InMemoryPersistence implements PersistenceAdapter {
   }
 
   /**
-   * 세션 데이터 직접 설정 (테스트용)
-   */
-  setMessageSession(sessionId: string, data: SessionData): void {
-    this.sessions.set(sessionId, JSON.parse(JSON.stringify(data)));
-  }
-
-  /**
    * ShareStore 데이터 직접 설정 (테스트용)
    */
   setShareStore(data: ShareStoreData): void {
@@ -168,14 +126,6 @@ export class InMemoryPersistence implements PersistenceAdapter {
     this.workspaceData = undefined;
     this.shareData = undefined;
     this.accountData = undefined;
-    this.sessions.clear();
-  }
-
-  /**
-   * 현재 저장된 세션 수 반환 (테스트용)
-   */
-  getSessionCount(): number {
-    return this.sessions.size;
   }
 
   /**

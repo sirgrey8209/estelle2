@@ -8,9 +8,11 @@
 
 import type { WorkspaceStore as WorkspaceStoreType } from '../../src/stores/workspace-store.js';
 import type { PylonMcpServer as PylonMcpServerType } from '../../src/servers/pylon-mcp-server.js';
+import type { MessageStore as MessageStoreType } from '../../src/stores/message-store.js';
 
 let server: PylonMcpServerType | null = null;
 let workspaceStore: WorkspaceStoreType | null = null;
+let messageStore: MessageStoreType | null = null;
 
 // 테스트용 상수
 const TEST_PORT = 19879;
@@ -20,21 +22,27 @@ const TEST_CONVERSATION_ID = 132097;
 const TEST_TOOL_USE_IDS = [
   'toolu_get_status_test_123',
   'toolu_add_prompt_test_123',
+  'toolu_continue_task_test_123',
 ];
 
 export async function setup(): Promise<void> {
   // 동적 import로 모듈 로드 (빌드 전에도 동작하도록)
   const { WorkspaceStore } = await import('../../src/stores/workspace-store.js');
   const { PylonMcpServer } = await import('../../src/servers/pylon-mcp-server.js');
+  const { MessageStore } = await import('../../src/stores/message-store.js');
 
   // WorkspaceStore 설정
   workspaceStore = new WorkspaceStore(PYLON_ID);
   const { workspace } = workspaceStore.createWorkspace('Test Workspace', 'C:\\test');
   workspaceStore.createConversation(workspace.workspaceId, 'Test Conversation');
 
+  // MessageStore 설정 (in-memory)
+  messageStore = new MessageStore(':memory:');
+
   // PylonMcpServer 시작
   server = new PylonMcpServer(workspaceStore, {
     port: TEST_PORT,
+    messageStore,
     getConversationIdByToolUseId: (toolUseId: string) => {
       if (TEST_TOOL_USE_IDS.includes(toolUseId)) {
         return TEST_CONVERSATION_ID;
@@ -42,6 +50,9 @@ export async function setup(): Promise<void> {
       return null;
     },
     onNewSession: () => {
+      // 테스트에서는 실제로 새 세션을 시작하지 않음
+    },
+    onContinueTask: () => {
       // 테스트에서는 실제로 새 세션을 시작하지 않음
     },
   });
@@ -54,5 +65,8 @@ export async function teardown(): Promise<void> {
   if (server) {
     await server.close();
     console.log('[GlobalSetup] Test server stopped');
+  }
+  if (messageStore) {
+    messageStore.close();
   }
 }

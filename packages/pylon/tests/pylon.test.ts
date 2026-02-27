@@ -43,7 +43,7 @@ function createMockDependencies(): PylonDependencies {
 
   return {
     workspaceStore: new WorkspaceStore(PYLON_ID),
-    messageStore: new MessageStore(),
+    messageStore: new MessageStore(':memory:'),
     shareStore,  // ShareStore 추가 (share_history 테스트용)
     relayClient: {
       connect: vi.fn(),
@@ -58,11 +58,15 @@ function createMockDependencies(): PylonDependencies {
       stop: vi.fn(),
       newSession: vi.fn(),
       cleanup: vi.fn(),
+      abortAllSessions: vi.fn().mockReturnValue([]),
       respondPermission: vi.fn(),
       respondQuestion: vi.fn(),
       hasActiveSession: vi.fn().mockReturnValue(false),
       getSessionStartTime: vi.fn().mockReturnValue(null),
       getPendingEvent: vi.fn().mockReturnValue(null),
+      getSessionIdByToolUseId: vi.fn().mockReturnValue(null),
+      getSessionTools: vi.fn().mockReturnValue([]),
+      getSessionSlashCommands: vi.fn().mockReturnValue([]),
     },
     blobHandler: {
       handleBlobStart: vi.fn().mockReturnValue({ success: true }),
@@ -115,6 +119,8 @@ describe('Pylon', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // Close SQLite connection
+    deps.messageStore.close();
   });
 
   // ==========================================================================
@@ -711,7 +717,9 @@ describe('Pylon', () => {
       expect(pylon.getSessionViewerCount(conversation.conversationId)).toBe(0);
     });
 
-    it('should NOT unload message cache when switching away from active session', () => {
+    it('should persist messages when switching sessions (SQLite-based)', () => {
+      // SQLite 기반으로 전환 후 캐시 관리 테스트는 더 이상 필요 없음
+      // 대신 세션 전환 시 메시지가 유지되는지 확인
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const convA = deps.workspaceStore.createConversation(workspace.workspaceId)!;
       const convB = deps.workspaceStore.createConversation(workspace.workspaceId)!;
@@ -727,24 +735,19 @@ describe('Pylon', () => {
         payload: { conversationId: convA.conversationId },
       });
 
-      // Claude가 A에서 작업 중
-      vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
-        (eid: number) => eid === convA.conversationId
-      );
-
-      // 대화 B로 전환 → A의 뷰어가 0명이 되지만 캐시는 유지되어야 함
+      // 대화 B로 전환
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
         payload: { conversationId: convB.conversationId },
       });
 
-      // A의 메시지 캐시가 유지되어야 함
-      expect(deps.messageStore.hasCache(convA.conversationId)).toBe(true);
+      // SQLite 기반: A의 메시지가 DB에 영구 저장되어 있어야 함
       expect(deps.messageStore.getCount(convA.conversationId)).toBe(2);
     });
 
-    it('should unload message cache when switching away from idle session', () => {
+    it('should preserve messages in SQLite across session switches', () => {
+      // SQLite 기반으로 전환 후 idle 세션의 메시지도 유지됨
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const convA = deps.workspaceStore.createConversation(workspace.workspaceId)!;
       const convB = deps.workspaceStore.createConversation(workspace.workspaceId)!;
@@ -759,17 +762,15 @@ describe('Pylon', () => {
         payload: { conversationId: convA.conversationId },
       });
 
-      // Claude는 A에서 idle (기본 mock: hasActiveSession → false)
-
-      // 대화 B로 전환 → A의 캐시는 언로드되어야 함
+      // 대화 B로 전환
       pylon.handleMessage({
         type: 'conversation_select',
         from: { deviceId: 'client-1' },
         payload: { conversationId: convB.conversationId },
       });
 
-      // A의 메시지 캐시가 언로드되어야 함
-      expect(deps.messageStore.hasCache(convA.conversationId)).toBe(false);
+      // SQLite 기반: A의 메시지가 여전히 조회 가능
+      expect(deps.messageStore.getCount(convA.conversationId)).toBe(1);
     });
 
     it('should preserve history when switching back to active session', () => {
@@ -1144,10 +1145,10 @@ describe('Pylon', () => {
       const mockPersistence = {
         loadWorkspaceStore: vi.fn(),
         saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
+        loadShareStore: vi.fn(),
+        saveShareStore: vi.fn().mockResolvedValue(undefined),
+        loadLastAccount: vi.fn(),
+        saveLastAccount: vi.fn().mockResolvedValue(undefined),
       };
 
       deps.persistence = mockPersistence;
@@ -1225,10 +1226,10 @@ describe('Pylon', () => {
       const mockPersistence = {
         loadWorkspaceStore: vi.fn(),
         saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
+        loadShareStore: vi.fn(),
+        saveShareStore: vi.fn().mockResolvedValue(undefined),
+        loadLastAccount: vi.fn(),
+        saveLastAccount: vi.fn().mockResolvedValue(undefined),
       };
 
       deps.persistence = mockPersistence;
@@ -1249,10 +1250,10 @@ describe('Pylon', () => {
       const mockPersistence = {
         loadWorkspaceStore: vi.fn(),
         saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
+        loadShareStore: vi.fn(),
+        saveShareStore: vi.fn().mockResolvedValue(undefined),
+        loadLastAccount: vi.fn(),
+        saveLastAccount: vi.fn().mockResolvedValue(undefined),
       };
 
       deps.persistence = mockPersistence;
@@ -1270,38 +1271,24 @@ describe('Pylon', () => {
       expect(mockPersistence.saveWorkspaceStore).toHaveBeenCalled();
     });
 
-    it('should schedule message save on claude event', async () => {
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
-
+    it('should save messages immediately with SQLite (no debounce needed)', async () => {
+      // SQLite 기반으로 전환 후 메시지는 추가 시 즉시 저장됨
       const sessionId = 12345;
 
-      // textComplete 이벤트 (메시지 저장 트리거)
+      // textComplete 이벤트 전송
       pylon.sendClaudeEvent(sessionId, {
         type: 'textComplete',
         text: 'Hello from Claude',
       });
 
-      // debounce 시간 대기 (2초)
-      await new Promise((resolve) => setTimeout(resolve, 2100));
-      expect(mockPersistence.saveMessageSession).toHaveBeenCalledWith(
-        String(sessionId),
-        expect.any(Object)
-      );
+      // 메시지가 즉시 DB에 저장됨 (debounce 없음)
+      const messages = deps.messageStore.getMessages(sessionId);
+      expect(messages.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should load all message sessions on startup', async () => {
-      // 시작 시 모든 대화의 메시지 세션을 로딩해야 함
-      // 로딩 없이 메시지 추가 시 _ensureCache가 빈 배열을 생성하여 히스토리 소실
+    it('should persist messages in SQLite database', async () => {
+      // SQLite 기반으로 전환 후 메시지는 DB에 영구 저장됨
+      // 기존 JSON 파일 로딩 테스트는 마이그레이션 테스트로 대체
 
       const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
       const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId)!;
@@ -1313,57 +1300,35 @@ describe('Pylon', () => {
       const c1 = deps.workspaceStore.getConversation(eid1)!;
       (c1 as { status: string }).status = 'working';
 
-      // 파일에 저장된 기존 메시지
-      const messages1 = [
-        { id: 'msg_1', role: 'user', type: 'text', content: 'Hello', timestamp: 1000 },
-        { id: 'msg_2', role: 'assistant', type: 'text', content: 'Hi there', timestamp: 2000 },
-      ];
-      const messages2 = [
-        { id: 'msg_3', role: 'user', type: 'text', content: 'Question', timestamp: 3000 },
-      ];
+      // SQLite에 직접 메시지 추가
+      deps.messageStore.addUserMessage(eid1, 'Hello');
+      deps.messageStore.addAssistantText(eid1, 'Hi there');
+      deps.messageStore.addUserMessage(eid2, 'Question');
 
-      const mockPersistence = {
-        loadWorkspaceStore: vi.fn(),
-        saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn().mockImplementation((sessionId: string) => {
-          if (Number(sessionId) === eid1) {
-            return { sessionId: eid1, messages: messages1, updatedAt: 2000 };
-          }
-          if (Number(sessionId) === eid2) {
-            return { sessionId: eid2, messages: messages2, updatedAt: 3000 };
-          }
-          return null;
-        }),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
-      };
-
-      deps.persistence = mockPersistence;
-      pylon = new Pylon(config, deps);
+      // start 시 working 상태의 대화에 session_ended 추가
       await pylon.start();
 
       // conv1: 기존 2개 + session_ended 1개 = 3개 (히스토리 보존)
       const result1 = deps.messageStore.getMessages(eid1);
       expect(result1.length).toBe(3);
-      expect(result1[0].content).toBe('Hello');
-      expect(result1[1].content).toBe('Hi there');
+      expect((result1[0] as { content: string }).content).toBe('Hello');
+      expect((result1[1] as { content: string }).content).toBe('Hi there');
       expect(result1[2].type).toBe('aborted');
 
       // conv2: idle 상태이므로 기존 1개 그대로
       const result2 = deps.messageStore.getMessages(eid2);
       expect(result2.length).toBe(1);
-      expect(result2[0].content).toBe('Question');
+      expect((result2[0] as { content: string }).content).toBe('Question');
     });
 
-    it('should flush pending saves on stop', async () => {
+    it('should save workspace on stop', async () => {
       const mockPersistence = {
         loadWorkspaceStore: vi.fn(),
         saveWorkspaceStore: vi.fn().mockResolvedValue(undefined),
-        loadMessageSession: vi.fn(),
-        saveMessageSession: vi.fn().mockResolvedValue(undefined),
-        deleteMessageSession: vi.fn(),
-        listMessageSessions: vi.fn().mockReturnValue([]),
+        loadShareStore: vi.fn(),
+        saveShareStore: vi.fn().mockResolvedValue(undefined),
+        loadLastAccount: vi.fn(),
+        saveLastAccount: vi.fn().mockResolvedValue(undefined),
       };
 
       deps.persistence = mockPersistence;
@@ -1371,19 +1336,14 @@ describe('Pylon', () => {
 
       const sessionId = 12345;
 
-      // 메시지 추가
+      // 메시지 추가 (SQLite에 즉시 저장됨)
       deps.messageStore.addUserMessage(sessionId, 'Test message');
 
-      // 저장 스케줄링 (debounce 중)
-      pylon.sendClaudeEvent(sessionId, {
-        type: 'textComplete',
-        text: 'Response',
-      });
-
-      // stop 호출 - 즉시 저장해야 함
+      // stop 호출 - 워크스페이스 저장
       await pylon.stop();
 
       expect(mockPersistence.saveWorkspaceStore).toHaveBeenCalled();
+      // 메시지는 이미 SQLite에 저장되어 있음 (saveMessageSession 호출 불필요)
     });
   });
 

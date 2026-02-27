@@ -169,6 +169,9 @@ export interface ClaudeSession {
 
   /** 토큰 사용량 */
   usage: TokenUsage;
+
+  /** 사용 가능한 도구 목록 (init 이벤트에서 수신) */
+  tools: string[];
 }
 
 /**
@@ -859,6 +862,16 @@ export class ClaudeManager {
     return null;
   }
 
+  /**
+   * 세션의 사용 가능한 도구 목록 가져오기
+   *
+   * @param sessionId - 세션 ID
+   * @returns 도구 목록 배열 또는 빈 배열
+   */
+  getSessionTools(sessionId: number): string[] {
+    return this.sessions.get(sessionId)?.tools ?? [];
+  }
+
   // ============================================================================
   // Public 메서드 - 정리
   // ============================================================================
@@ -934,6 +947,7 @@ export class ClaudeManager {
         cacheReadInputTokens: 0,
         cacheCreationInputTokens: 0,
       },
+      tools: [],
     };
     this.sessions.set(sessionId, session);
 
@@ -1062,6 +1076,11 @@ export class ClaudeManager {
   ): void {
     if (msg.subtype === 'init') {
       session.claudeSessionId = msg.session_id || null;
+
+      // tools 배열을 세션에 저장 (history_result에서 사용)
+      if (msg.tools && Array.isArray(msg.tools)) {
+        session.tools = msg.tools;
+      }
 
       this.emitEvent(sessionId, {
         type: 'init',

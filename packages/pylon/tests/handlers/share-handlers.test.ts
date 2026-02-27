@@ -129,7 +129,7 @@ describe('PylonMcpServer Share Actions', () => {
     shareStore = new ShareStore();
 
     // MessageStore 설정
-    messageStore = new MessageStore();
+    messageStore = new MessageStore(':memory:');
 
     TEST_PORT = getRandomPort();
 
@@ -144,6 +144,8 @@ describe('PylonMcpServer Share Actions', () => {
 
   afterEach(async () => {
     await server.close();
+    // Close SQLite connection
+    messageStore.close();
   });
 
   // ============================================================================

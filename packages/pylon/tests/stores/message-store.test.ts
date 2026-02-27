@@ -1,12 +1,15 @@
 /**
  * @file message-store.test.ts
- * @description MessageStore 테스트
+ * @description MessageStore 테스트 (SQLite 기반)
  *
  * 세션별 메시지 히스토리 저장 기능을 테스트합니다.
- * 파일 I/O는 분리하여 모킹 없이 순수 로직을 테스트합니다.
+ * SQLite를 사용하여 즉시 저장하고, 필요한 메시지만 쿼리합니다.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import {
   MessageStore,
   summarizeToolInput,
@@ -21,14 +24,267 @@ import {
   type ResultMessage,
   type AbortedMessage,
   type FileAttachmentMessage,
-  type MessageStoreData,
 } from '../../src/stores/message-store.js';
 
-describe('MessageStore', () => {
-  let store: MessageStore;
+// ============================================================================
+// 테스트 유틸리티
+// ============================================================================
+
+/**
+ * 임시 DB 경로 생성
+ */
+function createTempDbPath(): string {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'message-store-test-'));
+  return path.join(tempDir, 'messages.db');
+}
+
+/**
+ * 임시 디렉토리 정리
+ */
+function cleanupTempDir(dbPath: string): void {
+  const dir = path.dirname(dbPath);
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ============================================================================
+// SQLite 초기화 테스트
+// ============================================================================
+describe('MessageStore - SQLite 초기화', () => {
+  let dbPath: string;
 
   beforeEach(() => {
-    store = new MessageStore();
+    dbPath = createTempDbPath();
+  });
+
+  afterEach(() => {
+    cleanupTempDir(dbPath);
+  });
+
+  it('should create DB file at the specified path', () => {
+    // Given: DB 경로
+    // When: MessageStore 생성
+    const store = new MessageStore(dbPath);
+
+    // Then: DB 파일이 생성됨
+    expect(fs.existsSync(dbPath)).toBe(true);
+
+    store.close();
+  });
+
+  it('should create messages table with correct schema', () => {
+    // Given: MessageStore 생성
+    const store = new MessageStore(dbPath);
+
+    // When: 메시지 추가 시도 (스키마가 없으면 실패)
+    store.addUserMessage(1, 'test message');
+
+    // Then: 메시지가 정상적으로 저장됨
+    const messages = store.getMessages(1);
+    expect(messages).toHaveLength(1);
+
+    store.close();
+  });
+
+  it('should persist data across store instances', () => {
+    // Given: 메시지가 저장된 상태
+    const store1 = new MessageStore(dbPath);
+    store1.addUserMessage(1, 'persisted message');
+    store1.close();
+
+    // When: 새 인스턴스로 다시 열기
+    const store2 = new MessageStore(dbPath);
+    const messages = store2.getMessages(1);
+
+    // Then: 이전 데이터가 유지됨
+    expect(messages).toHaveLength(1);
+    expect((messages[0] as UserTextMessage).content).toBe('persisted message');
+
+    store2.close();
+  });
+
+  it('should support in-memory database with :memory:', () => {
+    // Given: 메모리 DB 사용
+    const store = new MessageStore(':memory:');
+
+    // When: 메시지 추가
+    store.addUserMessage(1, 'in-memory message');
+
+    // Then: 정상 동작
+    expect(store.getCount(1)).toBe(1);
+
+    store.close();
+  });
+});
+
+// ============================================================================
+// 마이그레이션 테스트
+// ============================================================================
+describe('MessageStore - JSON 마이그레이션', () => {
+  let dbPath: string;
+  let migrationDir: string;
+  let backupDir: string;
+
+  beforeEach(() => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-test-'));
+    dbPath = path.join(tempDir, 'messages.db');
+    migrationDir = path.join(tempDir, 'messages');
+    backupDir = path.join(tempDir, 'messages_backup');
+    fs.mkdirSync(migrationDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTempDir(dbPath);
+  });
+
+  it('should migrate existing JSON files to SQLite on first run', () => {
+    // Given: 기존 JSON 파일이 존재
+    const sessionData = {
+      sessionId: 1,
+      messages: [
+        {
+          id: 'msg_legacy_1',
+          role: 'user',
+          type: 'text',
+          content: 'legacy message',
+          timestamp: Date.now(),
+        },
+      ],
+      updatedAt: Date.now(),
+    };
+    fs.writeFileSync(
+      path.join(migrationDir, '1.json'),
+      JSON.stringify(sessionData)
+    );
+
+    // When: MessageStore 생성 (마이그레이션 실행)
+    const store = new MessageStore(dbPath, migrationDir);
+
+    // Then: JSON 데이터가 SQLite로 마이그레이션됨
+    const messages = store.getMessages(1);
+    expect(messages).toHaveLength(1);
+    expect((messages[0] as UserTextMessage).content).toBe('legacy message');
+    expect(messages[0].id).toBe('msg_legacy_1');
+
+    store.close();
+  });
+
+  it('should move JSON files to backup folder after migration', () => {
+    // Given: 기존 JSON 파일
+    const sessionData = {
+      sessionId: 1,
+      messages: [
+        {
+          id: 'msg_1',
+          role: 'user',
+          type: 'text',
+          content: 'test',
+          timestamp: Date.now(),
+        },
+      ],
+      updatedAt: Date.now(),
+    };
+    const jsonPath = path.join(migrationDir, '1.json');
+    fs.writeFileSync(jsonPath, JSON.stringify(sessionData));
+
+    // When: 마이그레이션 실행
+    const store = new MessageStore(dbPath, migrationDir);
+    store.close();
+
+    // Then: 원본 JSON 삭제, 백업 폴더로 이동
+    expect(fs.existsSync(jsonPath)).toBe(false);
+    expect(fs.existsSync(path.join(backupDir, '1.json'))).toBe(true);
+  });
+
+  it('should skip migration if already completed', () => {
+    // Given: 마이그레이션 완료 상태 (JSON 파일 없음, DB 존재)
+    const store1 = new MessageStore(dbPath, migrationDir);
+    store1.addUserMessage(1, 'new message');
+    store1.close();
+
+    // JSON 파일 다시 생성 (마이그레이션 후에 누군가 생성했다고 가정)
+    const lateJson = {
+      sessionId: 2,
+      messages: [
+        {
+          id: 'msg_late',
+          role: 'user',
+          type: 'text',
+          content: 'late message',
+          timestamp: Date.now(),
+        },
+      ],
+      updatedAt: Date.now(),
+    };
+    fs.writeFileSync(
+      path.join(migrationDir, '2.json'),
+      JSON.stringify(lateJson)
+    );
+
+    // When: 다시 열기
+    const store2 = new MessageStore(dbPath, migrationDir);
+
+    // Then: 기존 DB 데이터 유지, 새 JSON은 마이그레이션되지 않음
+    // (마이그레이션은 첫 실행 시에만)
+    expect(store2.getCount(1)).toBe(1);
+    expect(store2.getCount(2)).toBe(0); // 마이그레이션되지 않음
+
+    store2.close();
+  });
+
+  it('should migrate multiple session files', () => {
+    // Given: 여러 세션의 JSON 파일
+    for (let i = 1; i <= 3; i++) {
+      const sessionData = {
+        sessionId: i,
+        messages: [
+          {
+            id: `msg_${i}`,
+            role: 'user',
+            type: 'text',
+            content: `message from session ${i}`,
+            timestamp: Date.now(),
+          },
+        ],
+        updatedAt: Date.now(),
+      };
+      fs.writeFileSync(
+        path.join(migrationDir, `${i}.json`),
+        JSON.stringify(sessionData)
+      );
+    }
+
+    // When: 마이그레이션 실행
+    const store = new MessageStore(dbPath, migrationDir);
+
+    // Then: 모든 세션이 마이그레이션됨
+    expect(store.getCount(1)).toBe(1);
+    expect(store.getCount(2)).toBe(1);
+    expect(store.getCount(3)).toBe(1);
+    expect((store.getMessages(2)[0] as UserTextMessage).content).toBe(
+      'message from session 2'
+    );
+
+    store.close();
+  });
+});
+
+// ============================================================================
+// 기존 API 호환성 테스트 (외부 API 유지)
+// ============================================================================
+describe('MessageStore - API 호환성', () => {
+  let store: MessageStore;
+  let dbPath: string;
+
+  beforeEach(() => {
+    dbPath = createTempDbPath();
+    store = new MessageStore(dbPath);
+  });
+
+  afterEach(() => {
+    store.close();
+    cleanupTempDir(dbPath);
   });
 
   // ============================================================================
@@ -38,31 +294,6 @@ describe('MessageStore', () => {
     it('should have empty initial state', () => {
       expect(store.getCount(1)).toBe(0);
       expect(store.getMessages(1)).toEqual([]);
-    });
-
-    it('should initialize from existing data', () => {
-      const existingData: MessageStoreData = {
-        sessions: {
-          1: {
-            sessionId: 1,
-            messages: [
-              {
-                id: 'msg_existing_1',
-                role: 'user',
-                type: 'text',
-                content: 'Hello',
-                timestamp: Date.now(),
-              },
-            ],
-            updatedAt: Date.now(),
-          },
-        },
-      };
-
-      const loadedStore = new MessageStore(existingData);
-
-      expect(loadedStore.getCount(1)).toBe(1);
-      expect((loadedStore.getMessages(1)[0] as UserTextMessage).content).toBe('Hello');
     });
   });
 
@@ -312,16 +543,16 @@ describe('MessageStore', () => {
       });
 
       it('should support loadBefore option', () => {
-        // loadBefore=8 → 인덱스 0~7 (Message 1~8) 중 마지막 3개
+        // loadBefore=8 -> 인덱스 0~7 (Message 1~8) 중 마지막 3개
         const messages = store.getMessages(1, { limit: 3, loadBefore: 8 });
         expect(messages).toHaveLength(3);
-        // 인덱스 5, 6, 7 → Message 6, 7, 8
+        // 인덱스 5, 6, 7 -> Message 6, 7, 8
         expect((messages[0] as UserTextMessage).content).toBe('Message 6');
         expect((messages[2] as UserTextMessage).content).toBe('Message 8');
       });
 
       it('should return empty array for non-existent session', () => {
-        const messages = store.getMessages('non-existent');
+        const messages = store.getMessages(999);
         expect(messages).toEqual([]);
       });
     });
@@ -346,7 +577,7 @@ describe('MessageStore', () => {
       });
 
       it('should return 0 for non-existent session', () => {
-        expect(store.getCount('non-existent')).toBe(0);
+        expect(store.getCount(999)).toBe(0);
       });
     });
   });
@@ -386,132 +617,6 @@ describe('MessageStore', () => {
         expect(store.getCount(1)).toBe(0);
       });
     });
-
-    describe('hasDirtyData / getDirtySessions', () => {
-      it('should track dirty sessions', () => {
-        expect(store.hasDirtyData()).toBe(false);
-
-        store.addUserMessage(1, 'Message 1');
-
-        expect(store.hasDirtyData()).toBe(true);
-        expect(store.getDirtySessions()).toContain(1);
-      });
-
-      it('should clear dirty flag after markClean', () => {
-        store.addUserMessage(1, 'Message 1');
-        expect(store.hasDirtyData()).toBe(true);
-
-        store.markClean(1);
-
-        expect(store.hasDirtyData()).toBe(false);
-        expect(store.getDirtySessions()).not.toContain(1);
-      });
-    });
-  });
-
-  // ============================================================================
-  // 최대 메시지 수 제한 테스트
-  // ============================================================================
-  describe('최대 메시지 수 제한', () => {
-    it('should trim messages when exceeding max', () => {
-      // MAX_MESSAGES_PER_SESSION = 200
-      for (let i = 1; i <= 210; i++) {
-        store.addUserMessage(1, `Message ${i}`);
-      }
-
-      // trimMessages 호출 후 확인
-      const trimmed = store.trimMessages(1);
-      expect(trimmed).toBe(true);
-      expect(store.getCount(1)).toBeLessThanOrEqual(200);
-    });
-
-    it('should keep recent messages when trimming', () => {
-      for (let i = 1; i <= 210; i++) {
-        store.addUserMessage(1, `Message ${i}`);
-      }
-
-      store.trimMessages(1);
-      const messages = store.getMessages(1);
-
-      // 최신 메시지가 남아있어야 함
-      const lastMsg = messages[messages.length - 1] as UserTextMessage;
-      expect(lastMsg.content).toBe('Message 210');
-    });
-  });
-
-  // ============================================================================
-  // 데이터 직렬화 테스트
-  // ============================================================================
-  describe('데이터 직렬화', () => {
-    describe('toJSON', () => {
-      it('should export all session data', () => {
-        store.addUserMessage(1, 'Hello');
-        store.addUserMessage(2, 'World');
-
-        const data = store.toJSON();
-
-        expect(data.sessions[1]).toBeDefined();
-        expect(data.sessions[2]).toBeDefined();
-        expect(data.sessions[1].messages).toHaveLength(1);
-      });
-    });
-
-    describe('getSessionData', () => {
-      it('should return single session data for file save', () => {
-        store.addUserMessage(1, 'Hello');
-
-        const data = store.getSessionData(1);
-
-        expect(data).not.toBeNull();
-        expect(data!.sessionId).toBe(1);
-        expect(data!.messages).toHaveLength(1);
-        expect(data!.updatedAt).toBeDefined();
-      });
-
-      it('should return null for non-existent session', () => {
-        const data = store.getSessionData('non-existent');
-        expect(data).toBeNull();
-      });
-    });
-
-    describe('loadSessionData', () => {
-      it('should load session data from external source', () => {
-        const sessionData = {
-          sessionId: 1,
-          messages: [
-            {
-              id: 'msg_loaded_1',
-              role: 'user' as const,
-              type: 'text' as const,
-              content: 'Loaded message',
-              timestamp: Date.now(),
-            },
-          ],
-          updatedAt: Date.now(),
-        };
-
-        store.loadSessionData(1, sessionData);
-
-        expect(store.getCount(1)).toBe(1);
-        expect((store.getMessages(1)[0] as UserTextMessage).content).toBe(
-          'Loaded message'
-        );
-      });
-    });
-
-    describe('fromJSON', () => {
-      it('should restore from exported data', () => {
-        store.addUserMessage(1, 'Test');
-        const exported = store.toJSON();
-
-        const restored = MessageStore.fromJSON(exported);
-
-        expect(restored.getCount(1)).toBe(1);
-        expect(
-          (restored.getMessages(1)[0] as UserTextMessage).content
-        ).toBe('Test');
-      });
-    });
   });
 
   // ============================================================================
@@ -532,7 +637,7 @@ describe('MessageStore', () => {
       // When: getSharedMessageHistory 호출
       const result = store.getSharedMessageHistory(1);
 
-      // Then: 시간순 (오래된 것 → 최신) 반환
+      // Then: 시간순 (오래된 것 -> 최신) 반환
       expect(result).toHaveLength(3);
       expect((result[0] as UserTextMessage).content).toBe('first message');
       expect((result[1] as AssistantTextMessage).content).toBe('second message');
@@ -543,14 +648,20 @@ describe('MessageStore', () => {
       store.addUserMessage(1, 'test');
 
       const result = store.getSharedMessageHistory(1);
-      result.push({ id: 'fake', role: 'user', type: 'text', content: 'fake', timestamp: 0 } as UserTextMessage);
+      result.push({
+        id: 'fake',
+        role: 'user',
+        type: 'text',
+        content: 'fake',
+        timestamp: 0,
+      } as UserTextMessage);
 
       // 원본은 영향받지 않아야 함
       expect(store.getCount(1)).toBe(1);
     });
 
     it('should return all messages without pagination limits', () => {
-      // Given: 많은 메시지 추가 (MAX_MESSAGES_PER_SESSION 이상)
+      // Given: 많은 메시지 추가
       for (let i = 0; i < 250; i++) {
         store.addUserMessage(1, `message ${i}`);
       }
@@ -567,7 +678,78 @@ describe('MessageStore', () => {
 });
 
 // ============================================================================
-// 유틸리티 함수 테스트
+// 제거된 API 테스트 (SQLite 전환으로 불필요)
+// ============================================================================
+// 아래 테스트들은 SQLite 기반으로 전환되면서 제거된 API들입니다.
+// 참조용으로 주석 처리하여 보존합니다.
+
+/*
+describe('MessageStore - 제거된 API (참조용)', () => {
+  // hasDirtyData / getDirtySessions / markClean / markAllClean
+  // - SQLite는 즉시 저장하므로 dirty 추적 불필요
+
+  describe('hasDirtyData / getDirtySessions', () => {
+    it('should track dirty sessions', () => {
+      // ...dirty 추적 테스트 제거
+    });
+
+    it('should clear dirty flag after markClean', () => {
+      // ...dirty 추적 테스트 제거
+    });
+  });
+
+  // trimMessages
+  // - DB에서 직접 처리 가능
+
+  describe('trimMessages', () => {
+    it('should trim messages when exceeding max', () => {
+      // ...trim 테스트 제거 (DB에서 처리)
+    });
+  });
+
+  // toJSON / fromJSON
+  // - 마이그레이션 도구에서만 사용, 제거
+
+  describe('toJSON / fromJSON', () => {
+    it('should export all session data', () => {
+      // ...직렬화 테스트 제거
+    });
+
+    it('should restore from exported data', () => {
+      // ...직렬화 테스트 제거
+    });
+  });
+
+  // getSessionData / loadSessionData
+  // - DB가 곧 저장소, 파일 I/O 분리 불필요
+
+  describe('getSessionData / loadSessionData', () => {
+    it('should return single session data for file save', () => {
+      // ...세션 데이터 테스트 제거
+    });
+
+    it('should load session data from external source', () => {
+      // ...세션 데이터 테스트 제거
+    });
+  });
+
+  // hasCache / unloadCache
+  // - 메모리 캐시 불필요 (DB 쿼리 기반)
+
+  describe('hasCache / unloadCache', () => {
+    it('should check cache existence', () => {
+      // ...캐시 테스트 제거
+    });
+
+    it('should unload cache', () => {
+      // ...캐시 테스트 제거
+    });
+  });
+});
+*/
+
+// ============================================================================
+// 유틸리티 함수 테스트 (변경 없음)
 // ============================================================================
 describe('MessageStore 유틸리티 함수', () => {
   describe('summarizeToolInput', () => {
@@ -609,9 +791,9 @@ describe('MessageStore 유틸리티 함수', () => {
 
       expect(result.file_path).toBe('C:\\test\\file.ts');
       expect((result.old_string as string).length).toBeLessThan(longString.length);
-      expect((result.old_string as string)).toContain('...');
+      expect(result.old_string as string).toContain('...');
       expect((result.new_string as string).length).toBeLessThan(longString.length);
-      expect((result.new_string as string)).toContain('...');
+      expect(result.new_string as string).toContain('...');
     });
 
     it('should return file_path and content for Write tool', () => {
@@ -637,7 +819,7 @@ describe('MessageStore 유틸리티 함수', () => {
 
       expect(result.file_path).toBe('C:\\test\\file.ts');
       expect((result.content as string).length).toBeLessThan(longContent.length);
-      expect((result.content as string)).toContain('...');
+      expect(result.content as string).toContain('...');
     });
 
     it('should return notebook_path for NotebookEdit tool', () => {

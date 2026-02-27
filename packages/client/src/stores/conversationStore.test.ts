@@ -729,3 +729,155 @@ describe('useCurrentConversationState', () => {
     });
   });
 });
+
+// ============================================================================
+// Tools 관리 테스트 (SlashAutocomplete 기능)
+// ============================================================================
+
+describe('conversationStore - slashCommands 관리', () => {
+  beforeEach(() => {
+    useConversationStore.getState().reset();
+  });
+
+  describe('setSlashCommands', () => {
+    it('should_store_slashCommands_when_setSlashCommands_called', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      const commands = ['/compact', '/clear', '/help', '/tdd-flow'];
+
+      // Act
+      store.setSlashCommands(1001, commands);
+
+      // Assert
+      expect(store.getSlashCommands(1001)).toEqual(commands);
+    });
+
+    it('should_update_slashCommands_when_setSlashCommands_called_again', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setSlashCommands(1001, ['/compact', '/clear']);
+
+      // Act
+      store.setSlashCommands(1001, ['/compact', '/clear', '/help', '/tdd-flow', '/keybindings-help']);
+
+      // Assert
+      expect(store.getSlashCommands(1001)).toEqual(['/compact', '/clear', '/help', '/tdd-flow', '/keybindings-help']);
+    });
+
+    it('should_store_slashCommands_independently_per_conversation', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setCurrentConversation(1002);
+
+      // Act
+      store.setSlashCommands(1001, ['/compact', '/clear']);
+      store.setSlashCommands(1002, ['/help', '/tdd-flow', '/keybindings-help']);
+
+      // Assert
+      expect(store.getSlashCommands(1001)).toEqual(['/compact', '/clear']);
+      expect(store.getSlashCommands(1002)).toEqual(['/help', '/tdd-flow', '/keybindings-help']);
+    });
+  });
+
+  describe('getSlashCommands', () => {
+    it('should_return_empty_array_when_no_slashCommands', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      // Act
+      const commands = store.getSlashCommands(1001);
+
+      // Assert
+      expect(commands).toEqual([]);
+    });
+
+    it('should_return_empty_array_when_conversation_not_exists', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      // conversationId 9999는 존재하지 않음
+
+      // Act
+      const commands = store.getSlashCommands(9999);
+
+      // Assert
+      expect(commands).toEqual([]);
+    });
+
+    it('should_get_slashCommands_for_conversation', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      const expectedCommands = ['/compact', '/clear', '/help'];
+      store.setSlashCommands(1001, expectedCommands);
+
+      // Act
+      const commands = store.getSlashCommands(1001);
+
+      // Assert
+      expect(commands).toEqual(expectedCommands);
+    });
+  });
+
+  describe('slashCommands와 대화 삭제', () => {
+    it('should_clear_slashCommands_when_conversation_deleted', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setSlashCommands(1001, ['/compact', '/clear', '/help']);
+
+      // Act
+      store.deleteConversation(1001);
+
+      // Assert - 대화 삭제 후 slashCommands도 삭제됨 (getState 반환 null)
+      expect(store.getState(1001)).toBeNull();
+      expect(store.getSlashCommands(1001)).toEqual([]);
+    });
+
+    it('should_clear_slashCommands_when_reset_called', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      store.setSlashCommands(1001, ['/compact', '/clear']);
+      store.setCurrentConversation(1002);
+      store.setSlashCommands(1002, ['/help', '/tdd-flow']);
+
+      // Act
+      store.reset();
+
+      // Assert
+      expect(useConversationStore.getState().getSlashCommands(1001)).toEqual([]);
+      expect(useConversationStore.getState().getSlashCommands(1002)).toEqual([]);
+    });
+  });
+
+  describe('slashCommands 엣지 케이스', () => {
+    it('should_handle_empty_slashCommands_array', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      // Act
+      store.setSlashCommands(1001, []);
+
+      // Assert
+      expect(store.getSlashCommands(1001)).toEqual([]);
+    });
+
+    it('should_handle_slashCommands_with_special_characters', () => {
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+      const commands = ['/tdd-flow', '/keybindings-help', '/my_custom_skill'];
+
+      // Act
+      store.setSlashCommands(1001, commands);
+
+      // Assert
+      expect(store.getSlashCommands(1001)).toEqual(commands);
+    });
+  });
+});

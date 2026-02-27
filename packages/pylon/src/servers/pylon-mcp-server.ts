@@ -103,6 +103,8 @@ export interface PylonMcpServerOptions {
   onNewSession?: (conversationId: number) => void;
   /** 대화 생성 시 호출되는 콜백 (create_conversation 성공 시) */
   onConversationCreate?: (conversationId: number) => void;
+  /** 작업 계속 시 호출되는 콜백 (continue_task 성공 시) */
+  onContinueTask?: (conversationId: number, reason?: string) => void;
 }
 
 /** 요청 타입 */
@@ -119,6 +121,8 @@ interface McpRequest {
   shareId?: string;
   /** 시스템 프롬프트 내용 (set_system_prompt 액션에서 사용) */
   content?: string;
+  /** 재시작 사유 (continue_task 액션에서 사용) */
+  reason?: string;
 }
 
 /** 파일 정보 타입 */
@@ -226,6 +230,15 @@ interface McpSetSystemPromptSuccessResponse {
   newSession: boolean;
 }
 
+/** 성공 응답 타입 (continue_task) */
+interface McpContinueTaskSuccessResponse {
+  success: true;
+  message: string;
+  newSession: boolean;
+  systemMessageAdded: boolean;
+  historyPreserved: boolean;
+}
+
 type McpResponse =
   | McpDocsSuccessResponse
   | McpFileSuccessResponse
@@ -237,6 +250,7 @@ type McpResponse =
   | McpShareDeleteSuccessResponse
   | McpShareHistorySuccessResponse
   | McpSetSystemPromptSuccessResponse
+  | McpContinueTaskSuccessResponse
   | McpErrorResponse;
 
 // ============================================================================
@@ -265,6 +279,7 @@ export class PylonMcpServer {
   private _messageStore?: MessageStore;
   private _onNewSession?: (conversationId: number) => void;
   private _onConversationCreate?: (conversationId: number) => void;
+  private _onContinueTask?: (conversationId: number, reason?: string) => void;
 
   // ============================================================================
   // 생성자
@@ -282,6 +297,7 @@ export class PylonMcpServer {
     this._messageStore = options?.messageStore;
     this._onNewSession = options?.onNewSession;
     this._onConversationCreate = options?.onConversationCreate;
+    this._onContinueTask = options?.onContinueTask;
   }
 
   // ============================================================================
@@ -582,6 +598,9 @@ export class PylonMcpServer {
 
       case 'set_system_prompt':
         return this._handleSetSystemPrompt(conversationId as ConversationId, request.content);
+
+      case 'continue_task':
+        return this._handleContinueTask(conversationId as ConversationId, request.reason);
 
       default:
         return {
@@ -1423,6 +1442,59 @@ export class PylonMcpServer {
         ? '커스텀 시스템 프롬프트가 제거되었습니다. 새 세션이 시작됩니다.'
         : '커스텀 시스템 프롬프트가 설정되었습니다. 새 세션이 시작됩니다.',
       newSession: true,
+    };
+  }
+
+  // ============================================================================
+  // Continue Task 관련 핸들러
+  // ============================================================================
+
+  /**
+   * continue_task 액션 처리
+   * 히스토리에 시스템 메시지를 추가하고 세션을 재시작합니다.
+   *
+   * 동작 순서:
+   * 1. 히스토리에 시스템 메시지 추가 ('[세션 재시작] {reason}')
+   * 2. onContinueTask 콜백 호출 → 새 세션 시작
+   */
+  private _handleContinueTask(
+    conversationId: ConversationId,
+    reason?: string,
+  ): McpResponse {
+    // 대화 존재 확인
+    const conversation = this._workspaceStore.getConversation(conversationId);
+    if (!conversation) {
+      return {
+        success: false,
+        error: 'Conversation not found',
+      };
+    }
+
+    // messageStore 필수
+    if (!this._messageStore) {
+      return {
+        success: false,
+        error: 'MessageStore not configured',
+      };
+    }
+
+    // 시스템 메시지 추가
+    const messageContent = reason && reason.trim() !== ''
+      ? `[세션 재시작] ${reason}`
+      : '[세션 재시작]';
+    this._messageStore.addSystemMessage(conversationId, messageContent);
+
+    // continue task 콜백 호출 (새 세션 시작)
+    if (this._onContinueTask) {
+      this._onContinueTask(conversationId, reason);
+    }
+
+    return {
+      success: true,
+      message: '세션 재시작됨',
+      newSession: true,
+      systemMessageAdded: true,
+      historyPreserved: true,
     };
   }
 

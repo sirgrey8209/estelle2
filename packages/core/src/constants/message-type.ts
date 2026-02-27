@@ -173,6 +173,12 @@ export const MessageType = {
   /** 사용량 조회 응답 */
   USAGE_RESPONSE: 'usage_response',
 
+  // === Slash Commands ===
+  /** 슬래시 명령어 목록 요청 */
+  SLASH_COMMANDS_REQUEST: 'slash_commands_request',
+  /** 슬래시 명령어 목록 응답 */
+  SLASH_COMMANDS_RESULT: 'slash_commands_result',
+
   // === Share ===
   /** 공유 링크 생성 요청 */
   SHARE_CREATE: 'share_create',

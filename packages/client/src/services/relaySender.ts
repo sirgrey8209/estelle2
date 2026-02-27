@@ -462,3 +462,24 @@ export function createShare(conversationId: number): boolean {
     to: [pylonId],
   });
 }
+
+// ============================================================================
+// 슬래시 명령어 관련
+// ============================================================================
+
+/**
+ * 슬래시 명령어 목록 요청
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ *
+ * @description
+ * `/` 입력 시 사용 가능한 슬래시 명령어 목록을 요청합니다.
+ * Pylon은 워크스페이스의 .claude/skills 폴더에서 스킬 파일을 읽어서 반환합니다.
+ */
+export function requestSlashCommands(conversationId: number): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: MessageType.SLASH_COMMANDS_REQUEST,
+    payload: { conversationId },
+    to: [pylonId],
+  });
+}

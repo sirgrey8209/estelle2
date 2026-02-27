@@ -362,4 +362,92 @@ describe('SessionContext', () => {
       expect(result).toContain(newName);
     });
   });
+
+  describe('buildInitialReminder with autorunDoc', () => {
+    it('should_include_autorun_guidance_when_autorunDoc_provided', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['doc/plan.md'];
+      const options = { autorunDoc: 'doc/plan.md' };
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs, options);
+
+      // Assert
+      expect(result).toContain('자동실행');
+      expect(result).toContain('/autorun');
+    });
+
+    it('should_include_autorunDoc_path_in_guidance', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['wip/task-plan.md'];
+      const options = { autorunDoc: 'wip/task-plan.md' };
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs, options);
+
+      // Assert
+      expect(result).toContain('wip/task-plan.md');
+      expect(result).toContain('자동실행');
+    });
+
+    it('should_not_include_autorun_guidance_when_no_autorunDoc', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['doc/normal.md'];
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs);
+
+      // Assert
+      expect(result).not.toContain('자동실행');
+      expect(result).not.toContain('/autorun');
+    });
+
+    it('should_work_with_empty_options', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['doc/example.md'];
+      const options = {};
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs, options);
+
+      // Assert
+      expect(result).toContain('대화명');
+      expect(result).toContain('테스트 대화');
+      expect(result).not.toContain('자동실행');
+    });
+
+    it('should_work_with_undefined_options', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['doc/example.md'];
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs, undefined);
+
+      // Assert
+      expect(result).toContain('대화명');
+      expect(result).toContain('테스트 대화');
+      expect(result).not.toContain('자동실행');
+    });
+
+    it('should_include_autorun_guidance_with_multiple_linked_docs', () => {
+      // Arrange
+      const conversationName = '테스트 대화';
+      const linkedDocs = ['doc/readme.md', 'wip/plan.md', 'doc/spec.md'];
+      const options = { autorunDoc: 'wip/plan.md' };
+
+      // Act
+      const result = buildInitialReminder(conversationName, linkedDocs, options);
+
+      // Assert
+      expect(result).toContain('자동실행');
+      expect(result).toContain('wip/plan.md');
+      expect(result).toContain('doc/readme.md');
+      expect(result).toContain('doc/spec.md');
+    });
+  });
 });

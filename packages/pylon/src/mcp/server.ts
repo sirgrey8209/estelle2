@@ -43,6 +43,10 @@ import {
   executeAddPrompt,
   getAddPromptToolDefinition,
 } from './tools/system-prompt.js';
+import {
+  executeContinueTask,
+  getContinueTaskToolDefinition,
+} from './tools/continue-task.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
 
@@ -105,6 +109,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getDeleteConversationToolDefinition(),
     getRenameConversationToolDefinition(),
     getAddPromptToolDefinition(),
+    getContinueTaskToolDefinition(),
   ],
 }));
 
@@ -156,6 +161,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     case 'add_prompt': {
       const result = await executeAddPrompt(args as { path?: string }, { toolUseId });
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'continue_task': {
+      const result = await executeContinueTask(args as { reason?: string }, { toolUseId });
       return result as unknown as Record<string, unknown>;
     }
     default:

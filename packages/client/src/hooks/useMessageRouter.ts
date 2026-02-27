@@ -238,6 +238,8 @@ export function routeMessage(message: RelayMessage): void {
               convStore.setStatus(targetConversationId, 'idle');
             }
           }
+
+          // slashCommands는 / 입력 시 쿼리로 가져오므로 여기서는 처리하지 않음
         }
       }
       break;
@@ -293,6 +295,19 @@ export function routeMessage(message: RelayMessage): void {
         useConversationStore.getState().deleteConversation(conversationId);
         // 입력 draft도 삭제
         clearDraftText(conversationId);
+      }
+      break;
+    }
+
+    // === 슬래시 명령어 목록 ===
+    case MessageType.SLASH_COMMANDS_RESULT: {
+      const { conversationId, slashCommands } = payload as {
+        conversationId: number;
+        slashCommands: string[];
+      };
+
+      if (conversationId && slashCommands) {
+        useConversationStore.getState().setSlashCommands(conversationId, slashCommands);
       }
       break;
     }
@@ -637,6 +652,12 @@ function handleClaudeEventForConversation(
           } as StoreMessage);
         }
       }
+      break;
+    }
+
+    case 'init': {
+      // init 이벤트 - 현재는 별도 처리 없음
+      // slashCommands는 / 입력 시 쿼리로 가져옴
       break;
     }
 

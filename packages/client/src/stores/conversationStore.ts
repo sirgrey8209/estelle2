@@ -26,6 +26,13 @@ import { createInitialClaudeState } from '@estelle/core';
 export { createInitialClaudeState as getInitialClaudeState };
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/** 빈 슬래시 명령어 목록 (참조 동일성 유지용) */
+export const EMPTY_SLASH_COMMANDS: string[] = [];
+
+// ============================================================================
 // Store Interface
 // ============================================================================
 
@@ -39,6 +46,9 @@ export interface ConversationStoreState {
   /** 현재 선택된 conversationId */
   currentConversationId: number | null;
 
+  /** 대화별 슬래시 명령어 목록 (conversationId → slashCommands) */
+  slashCommandsMap: Map<number, string[]>;
+
   // === Getters ===
 
   /** 특정 대화의 상태 조회 */
@@ -49,6 +59,9 @@ export interface ConversationStoreState {
 
   /** pendingRequests 존재 여부 */
   hasPendingRequests: (conversationId: number) => boolean;
+
+  /** 특정 대화의 슬래시 명령어 목록 조회 */
+  getSlashCommands: (conversationId: number) => string[];
 
   // === Actions: 대화 선택 ===
 
@@ -99,6 +112,11 @@ export interface ConversationStoreState {
   /** 실시간 사용량 업데이트 */
   updateRealtimeUsage: (conversationId: number, usage: Omit<RealtimeUsage, 'lastUpdateType'>) => void;
 
+  // === Actions: slashCommands ===
+
+  /** 대화의 슬래시 명령어 목록 설정 */
+  setSlashCommands: (conversationId: number, slashCommands: string[]) => void;
+
   // === Actions: 대화 관리 ===
 
   /** 대화 상태 삭제 */
@@ -145,6 +163,7 @@ function getOrCreateState(
 export const useConversationStore = create<ConversationStoreState>((set, get) => ({
   states: new Map(),
   currentConversationId: null,
+  slashCommandsMap: new Map(),
 
   // === Getters ===
 
@@ -167,6 +186,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   hasPendingRequests: (conversationId) => {
     const state = get().states.get(conversationId);
     return state ? state.pendingRequests.length > 0 : false;
+  },
+
+  getSlashCommands: (conversationId) => {
+    return get().slashCommandsMap.get(conversationId) ?? EMPTY_SLASH_COMMANDS;
   },
 
   // === Actions: 대화 선택 ===
@@ -376,15 +399,27 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     set({ states });
   },
 
+  // === Actions: slashCommands ===
+
+  setSlashCommands: (conversationId, slashCommands) => {
+    const slashCommandsMap = new Map(get().slashCommandsMap);
+    slashCommandsMap.set(conversationId, slashCommands);
+    set({ slashCommandsMap });
+  },
+
   // === Actions: 대화 관리 ===
 
   deleteConversation: (conversationId) => {
     const states = new Map(get().states);
     states.delete(conversationId);
 
+    const slashCommandsMap = new Map(get().slashCommandsMap);
+    slashCommandsMap.delete(conversationId);
+
     const currentId = get().currentConversationId;
     set({
       states,
+      slashCommandsMap,
       currentConversationId: currentId === conversationId ? null : currentId,
     });
   },
@@ -393,6 +428,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     set({
       states: new Map(),
       currentConversationId: null,
+      slashCommandsMap: new Map(),
     });
   },
 }));
