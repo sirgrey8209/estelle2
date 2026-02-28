@@ -2,6 +2,22 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import fs from 'fs';
+
+/** 빌드 후 version.json 생성 플러그인 */
+function versionJsonPlugin() {
+  return {
+    name: 'version-json',
+    closeBundle() {
+      const outDir = path.resolve(__dirname, '../relay/public');
+      const env = process.env.ESTELLE_BUILD_ENV || 'release';
+      fs.writeFileSync(
+        path.join(outDir, 'version.json'),
+        JSON.stringify({ env, version: '', buildTime: new Date().toISOString() })
+      );
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -42,6 +58,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
     }),
+    versionJsonPlugin(),
   ],
   resolve: {
     alias: {

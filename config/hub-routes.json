@@ -1,0 +1,10 @@
+{
+  "projects": [
+    {
+      "name": "Tower Defense",
+      "path": "/projects/web-td",
+      "port": 3001,
+      "description": "타워 디펜스 게임"
+    }
+  ]
+}

@@ -20,12 +20,13 @@ import {
   updateWorkspace,
   deleteWorkspace,
 } from '../../services/relaySender';
+import { PlatformUtils, type PlatformType } from '../../utils/config';
 
 interface FolderInfo {
   name: string;
   hasChildren: boolean;
   isDrive?: boolean;
-  path?: string;  // 드라이브인 경우 전체 경로 (예: 'C:\\')
+  path?: string;  // 드라이브/루트인 경우 전체 경로 (예: 'C:\\' 또는 '/')
 }
 
 interface FolderState {
@@ -34,6 +35,7 @@ interface FolderState {
   foldersWithChildren: FolderInfo[];
   isLoading: boolean;
   error: string | null;
+  platform: PlatformType;  // Pylon에서 받은 플랫폼 정보
 }
 
 interface WorkspaceData {
@@ -50,7 +52,7 @@ interface WorkspaceDialogProps {
   workspace?: WorkspaceData;
 }
 
-const DEFAULT_PATH = 'C:\\WorkSpace';
+// 기본 경로는 Pylon에서 folder_list_result로 받아옴 (첫 요청 시 path 없이 요청)
 const DEFAULT_NAME = '새 워크스페이스';
 
 /**
@@ -95,15 +97,17 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   const [name, setName] = useState(mode === 'edit' ? workspace?.name || '' : '');
   const [userEditedName, setUserEditedName] = useState(mode === 'edit');
   const [folderState, setFolderState] = useState<FolderState>({
-    path: mode === 'edit' ? workspace?.workingDir || DEFAULT_PATH : DEFAULT_PATH,
+    path: mode === 'edit' ? workspace?.workingDir || '' : '',
     folders: [],
     foldersWithChildren: [],
     isLoading: false,
     error: null,
+    platform: 'windows',  // 기본값, Pylon에서 실제 값을 받아옴
   });
   const [deleteProgress, setDeleteProgress] = useState(0);
 
   const selectedPc = pcs[selectedPcIndex];
+  const platform = folderState.platform;
 
   // 다이얼로그 열릴 때 초기화
   useEffect(() => {
@@ -118,7 +122,8 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
         setSelectedPcIndex(0);
         setName(getUniqueWorkspaceName(existingWorkspaceNames));
         setUserEditedName(false);  // 폴더명 추적 모드
-        loadFolders(DEFAULT_PATH);
+        // path 없이 요청하면 Pylon이 기본 경로로 응답
+        loadFolders();
       }
     }
   }, [open, mode, workspace?.workspaceId]);
@@ -126,8 +131,9 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   // folder_list_result 이벤트 리스너
   useEffect(() => {
     const handleFolderListResult = (event: CustomEvent) => {
-      const { path, folders, foldersWithChildren, error } = event.detail;
+      const { path, folders, foldersWithChildren, error, platform: responsePlatform } = event.detail;
       const newPath = path || '';
+      const newPlatform = (responsePlatform as PlatformType) || folderState.platform;
 
       setFolderState({
         path: newPath,
@@ -135,14 +141,13 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
         foldersWithChildren: foldersWithChildren || [],
         isLoading: false,
         error: error || null,
+        platform: newPlatform,
       });
 
       // 폴더명 추적 모드일 때 경로가 변경되면 이름도 변경
-      // (드라이브 목록이 아닌 경우에만)
-      if (!userEditedName && newPath !== '') {
-        const folderName = newPath.split(/[/\\]/).pop() || '';
-        // 드라이브 루트(예: C:)가 아닌 경우에만 이름 변경
-        if (folderName && !folderName.endsWith(':')) {
+      if (!userEditedName && newPath !== '' && !PlatformUtils.isRootPath(newPath, newPlatform)) {
+        const folderName = PlatformUtils.getFolderName(newPath, newPlatform);
+        if (folderName) {
           setName(folderName);
         }
       }
@@ -152,7 +157,7 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     return () => {
       window.removeEventListener('folder_list_result' as any, handleFolderListResult);
     };
-  }, [userEditedName]);
+  }, [userEditedName, folderState.platform]);
 
   const loadFolders = useCallback((path?: string) => {
     if (!selectedPc) return;
@@ -166,8 +171,8 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     if (pcs.length > 1 && mode === 'new') {
       const nextIndex = (selectedPcIndex + 1) % pcs.length;
       setSelectedPcIndex(nextIndex);
-      // Pylon 변경 시 경로 리셋
-      loadFolders(DEFAULT_PATH);
+      // Pylon 변경 시 경로 리셋 (새 Pylon의 기본 경로로)
+      loadFolders();
       // 폴더명 추적 모드면 기본 이름으로 리셋
       if (!userEditedName) {
         setName(getUniqueWorkspaceName(existingWorkspaceNames));
@@ -177,17 +182,25 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
 
   // 상위 폴더로 이동
   const goToParent = () => {
-    const parts = folderState.path.split(/[/\\]/).filter(Boolean);
-    if (parts.length > 1) {
-      parts.pop();
-      // 드라이브 루트인 경우 (예: ['C:']) 백슬래시 추가
-      const parentPath = parts.length === 1 && parts[0].endsWith(':')
-        ? `${parts[0]}\\`
-        : parts.join('\\');
-      loadFolders(parentPath);
-    } else if (parts.length === 1) {
-      // 드라이브 루트에서 상위 이동 → 드라이브 목록 표시
+    const currentPath = folderState.path;
+
+    // 루트이거나 빈 경로면 이동 불가
+    if (PlatformUtils.isRootPath(currentPath, platform)) {
+      return;
+    }
+
+    const parentPath = PlatformUtils.getParentPath(currentPath, platform);
+
+    if (parentPath === null) {
+      // 더 이상 올라갈 수 없음 (Linux에서 / 위)
+      return;
+    }
+
+    if (parentPath === '') {
+      // Windows: 드라이브 목록으로
       loadFolders('');
+    } else {
+      loadFolders(parentPath);
     }
   };
 
@@ -199,7 +212,7 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
       return;
     }
 
-    const fullPath = `${folderState.path}\\${folder.name}`;
+    const fullPath = PlatformUtils.joinPath(folderState.path, folder.name, platform);
 
     if (folder.hasChildren) {
       // 하위 폴더가 있으면 진입 (이름은 folder_list_result에서 처리)
@@ -220,12 +233,12 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     if (value === '') {
       // 이름을 지우면 폴더명 추적 모드로 전환
       setUserEditedName(false);
-      // 현재 경로의 폴더명으로 설정 (드라이브 루트가 아닌 경우)
-      const folderName = folderState.path.split(/[/\\]/).pop() || '';
-      if (folderName && !folderName.endsWith(':')) {
+      // 현재 경로의 폴더명으로 설정 (루트가 아닌 경우)
+      const folderName = PlatformUtils.getFolderName(folderState.path, platform);
+      if (folderName) {
         setName(folderName);
       } else {
-        // 드라이브 루트이면 기본 이름
+        // 루트이면 기본 이름
         setName(getUniqueWorkspaceName(existingWorkspaceNames));
       }
     } else {
@@ -288,6 +301,22 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     onClose();
   };
 
+  // 경로 표시 텍스트
+  const getPathDisplay = () => {
+    if (folderState.path === '') {
+      return platform === 'windows' ? '드라이브 선택' : '로딩 중...';
+    }
+    return folderState.path || '로딩 중...';
+  };
+
+  // 상위 이동 버튼 비활성화 조건
+  const isParentDisabled = () => {
+    const currentPath = folderState.path;
+    // 빈 문자열(Windows 드라이브 목록) 또는 루트면 비활성화
+    if (currentPath === '') return true;
+    return PlatformUtils.isRootPath(currentPath, platform);
+  };
+
   // PC 없음 상태
   if (pcs.length === 0) {
     return (
@@ -338,9 +367,9 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
           {/* 경로 표시 */}
           <div className="flex items-center gap-2">
             <p className="flex-1 text-sm text-muted-foreground truncate">
-              {folderState.path === '' ? '드라이브 선택' : folderState.path || '로딩 중...'}
+              {getPathDisplay()}
             </p>
-            <Button variant="ghost" size="icon" onClick={goToParent} disabled={folderState.path === ''}>
+            <Button variant="ghost" size="icon" onClick={goToParent} disabled={isParentDisabled()}>
               <ArrowUp className="h-4 w-4" />
             </Button>
           </div>

@@ -4,12 +4,17 @@
  *
  * 웹 클라이언트 배포를 위한 정적 파일 서버입니다.
  * SPA(Single Page Application) 라우팅을 지원합니다.
+ * Dev Hub 대시보드도 제공합니다.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { log } from './utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * MIME 타입 매핑
@@ -141,6 +146,167 @@ export function send404(res: ServerResponse): void {
   res.end('Not Found');
 }
 
+// ============================================================================
+// Hub Dashboard
+// ============================================================================
+
+/**
+ * Hub 라우트 설정 인터페이스
+ */
+interface HubProject {
+  name: string;
+  path: string;
+  port: number;
+  description?: string;
+}
+
+interface HubRoutes {
+  projects: HubProject[];
+}
+
+/**
+ * hub-routes.json 설정 파일 경로
+ */
+function getHubRoutesPath(): string {
+  // packages/relay/src -> packages/relay -> packages -> estelle2 -> config
+  return path.resolve(__dirname, '..', '..', '..', 'config', 'hub-routes.json');
+}
+
+/**
+ * hub-routes.json에서 프로젝트 목록을 로드합니다.
+ * 매 요청마다 파일을 다시 읽어 변경사항을 즉시 반영합니다.
+ */
+function loadHubRoutes(): HubRoutes {
+  const configPath = getHubRoutesPath();
+  try {
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(content) as HubRoutes;
+  } catch (err) {
+    log(`Hub routes config not found or invalid: ${configPath}`);
+    return { projects: [] };
+  }
+}
+
+/**
+ * Hub 대시보드 HTML을 생성합니다.
+ */
+function generateHubDashboard(projects: HubProject[], host: string): string {
+  const projectCards = projects.map(p => `
+    <a href="http://${host.split(':')[0]}:${p.port}" class="project-card" target="_blank">
+      <div class="project-name">${p.name}</div>
+      <div class="project-desc">${p.description || ''}</div>
+      <div class="project-port">:${p.port}</div>
+    </a>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev Hub</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 2rem;
+    }
+    .projects {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .project-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-decoration: none;
+      color: #fff;
+      transition: all 0.3s ease;
+      display: block;
+    }
+    .project-card:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: #3a7bd5;
+      transform: translateY(-4px);
+    }
+    .project-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .project-desc {
+      color: #aaa;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .project-port {
+      font-family: monospace;
+      color: #3a7bd5;
+      font-size: 0.85rem;
+    }
+    .empty {
+      text-align: center;
+      color: #666;
+      padding: 3rem;
+    }
+    .refresh-note {
+      text-align: center;
+      color: #555;
+      font-size: 0.8rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dev Hub</h1>
+    <p class="subtitle">Development Projects Dashboard</p>
+    <div class="projects">
+      ${projectCards || '<div class="empty">No projects configured.<br>Edit config/hub-routes.json to add projects.</div>'}
+    </div>
+    <p class="refresh-note">Refresh to reload project list</p>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Hub 대시보드를 서빙합니다.
+ */
+function serveHubDashboard(req: IncomingMessage, res: ServerResponse): void {
+  const routes = loadHubRoutes();
+  const host = req.headers.host || 'localhost';
+  const html = generateHubDashboard(routes.projects, host);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-cache',
+  });
+  res.end(html);
+}
+
 /**
  * 정적 파일 서버 미들웨어를 생성합니다.
  *
@@ -154,6 +320,12 @@ export function createStaticHandler(
     // WebSocket 업그레이드 요청은 무시
     if (req.headers.upgrade === 'websocket') {
       return;
+    }
+
+    // Hub 대시보드
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname === '/hub' || url.pathname === '/hub/') {
+      return serveHubDashboard(req, res);
     }
 
     // 정적 파일 서빙 시도

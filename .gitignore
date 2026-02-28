@@ -41,6 +41,14 @@ test-permission-check.txt
 # Runtime generated
 packages/relay/public/version.json
 
+# Client build assets (served by relay)
+packages/relay/public/index.html
+packages/relay/public/assets/
+packages/relay/public/sw.js
+packages/relay/public/sw.js.map
+packages/relay/public/workbox-*.js
+packages/relay/public/workbox-*.js.map
+
 # Pylon local data
 packages/pylon/data/
 packages/pylon/uploads/

@@ -143,6 +143,9 @@ importers:
       '@estelle/core':
         specifier: workspace:*
         version: link:../core
+      '@img/sharp-linux-x64':
+        specifier: ^0.34.5
+        version: 0.34.5
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -1586,7 +1589,6 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linuxmusl-arm64@0.33.5':
     resolution: {integrity: sha512-XrHMZwGQGvJg2V/oRSUfSAfjfPxO+4DkiRh6p2AFjLQztWUuY/o8Mq0eMQVIY7HJ1CDQUJlxGGZRw1a5bqmd1g==}
@@ -5704,7 +5706,6 @@ snapshots:
   '@img/sharp-linux-x64@0.34.5':
     optionalDependencies:
       '@img/sharp-libvips-linux-x64': 1.2.4
-    optional: true
 
   '@img/sharp-linuxmusl-arm64@0.33.5':
     optionalDependencies:

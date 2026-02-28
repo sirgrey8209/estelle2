@@ -58,5 +58,8 @@ export {
   FolderManager,
   type FolderFileSystem,
   type ListFoldersResult,
+  type ListDrivesResult,
   type FolderOperationResult,
+  type PlatformType,
+  type PlatformOptions,
 } from './folder-manager.js';
