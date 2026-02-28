@@ -36,6 +36,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
 import { decodeConversationIdFull } from '@estelle/core';
@@ -1168,7 +1169,6 @@ export class Pylon {
    * 2. .claude/skills/skill-name/SKILL.md (폴더 형태)
    */
   private readSkillsFromFolder(workingDir: string): string[] {
-    const os = require('os');
     const homeDir = os.homedir();
 
     // 검색할 스킬 디렉토리 목록
