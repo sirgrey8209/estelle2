@@ -568,6 +568,13 @@ export class WorkspaceStore {
     return true;
   }
 
+  /**
+   * 활성 대화를 해제합니다 (멀티 Pylon 환경에서 다른 Pylon 대화 선택 시)
+   */
+  clearActiveConversation(): void {
+    this._activeConversationId = null;
+  }
+
   // ============================================================================
   // Conversation 상태 업데이트
   // ============================================================================

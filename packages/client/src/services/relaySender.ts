@@ -167,14 +167,13 @@ export function createConversation(workspaceId: number, name?: string): boolean 
 
 /**
  * 대화 선택 (히스토리 로드)
- * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ * - 모든 Pylon에게 브로드캐스트 (멀티 Pylon 환경에서 다른 Pylon은 deselect 처리)
  */
 export function selectConversation(conversationId: number, workspaceId?: number): boolean {
-  const pylonId = getPylonIdFromConversation(conversationId);
   return sendMessage({
     type: MessageType.CONVERSATION_SELECT,
     payload: { conversationId, workspaceId },
-    to: [pylonId],
+    broadcast: 'pylons',
   });
 }
 

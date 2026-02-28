@@ -4,7 +4,7 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { Monitor, Laptop, HelpCircle, Building2, Home } from 'lucide-react';
+import { Monitor, Laptop, HelpCircle, Building2, Home, Cloud } from 'lucide-react';
 
 /**
  * 아이콘 이름 → Lucide 아이콘 매핑
@@ -14,6 +14,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // DeviceConfig 아이콘 이름
   'office-building-outline': Building2,
   'home-outline': Home,
+  'cloud-outline': Cloud,
   'monitor': Monitor,
   // DeviceType (레거시 호환)
   'pylon': Monitor,

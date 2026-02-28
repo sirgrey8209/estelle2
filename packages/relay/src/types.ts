@@ -19,10 +19,11 @@ import type { DeviceType, Message } from '@estelle/core';
  * 원본 estelle에서 사용하던 디바이스 역할입니다.
  * - office: 사무실 디바이스
  * - home: 집 디바이스
+ * - cloud: 클라우드 디바이스
  * - client: 동적으로 연결된 클라이언트
  * - unknown: 알 수 없는 역할
  */
-export type DeviceRole = 'office' | 'home' | 'client' | 'unknown';
+export type DeviceRole = 'office' | 'home' | 'cloud' | 'client' | 'unknown';
 
 /**
  * 등록된 디바이스의 설정 정보

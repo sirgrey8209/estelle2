@@ -32,6 +32,7 @@ import type { DeviceConfig } from './types.js';
 export const DEVICES: Record<number, DeviceConfig> = {
   1: { name: 'Device 1', icon: '🏢', role: 'office', allowedIps: ['*'] },
   2: { name: 'Device 2', icon: '🏠', role: 'home', allowedIps: ['*'] },
+  3: { name: 'Device 3', icon: '☁️', role: 'cloud', allowedIps: ['*'] },
 };
 
 // ============================================================================

@@ -161,13 +161,19 @@ interface DriveInfo {
 }
 
 /**
+ * 플랫폼 타입
+ */
+export type PlatformType = 'windows' | 'linux';
+
+/**
  * FolderManager 인터페이스 (의존성 주입용)
  */
 export interface FolderManagerAdapter {
-  listFolders(path: string): { success: boolean; folders: unknown[] };
-  listDrives(): { success: boolean; drives: DriveInfo[]; error?: string };
+  listFolders(path: string): { success: boolean; folders: unknown[]; platform: PlatformType };
+  listDrives(): { success: boolean; drives: DriveInfo[]; platform: PlatformType; error?: string };
   createFolder(parentPath: string, name: string): { success: boolean };
   renameFolder(folderPath: string, newName: string): { success: boolean };
+  getPlatform(): PlatformType;
 }
 
 /**
@@ -1570,6 +1576,10 @@ export class Pylon {
 
   /**
    * conversation_select 처리
+   *
+   * 멀티 Pylon 환경에서 브로드캐스트로 수신됨:
+   * - 내 대화면: active 설정 + 히스토리 전송
+   * - 다른 Pylon 대화면: activeConversationId를 null로 deselect
    */
   private handleConversationSelect(
     payload: Record<string, unknown> | undefined,
@@ -1583,6 +1593,20 @@ export class Pylon {
     const eid = conversationId as number;
     const wsId = workspaceId as number;
 
+    // 이 대화가 내 Pylon의 것인지 확인
+    const conversation = this.deps.workspaceStore.getConversation(eid as ConversationId);
+    if (!conversation) {
+      // 다른 Pylon의 대화 → 내 activeConversationId를 null로 deselect
+      const currentActive = this.deps.workspaceStore.getActiveState().activeConversationId;
+      if (currentActive !== null) {
+        this.log(`[conversation_select] Deselecting my conversation (other Pylon's conversation selected)`);
+        this.deps.workspaceStore.clearActiveConversation();
+        this.scheduleSaveWorkspaceStore();
+      }
+      return;
+    }
+
+    // 내 대화 → 기존 로직 실행
     // 워크스페이스와 대화 모두 active 상태로 설정
     if (wsId) {
       this.deps.workspaceStore.setActiveWorkspace(wsId);
@@ -1590,8 +1614,7 @@ export class Pylon {
     this.deps.workspaceStore.setActiveConversation(eid as ConversationId);
 
     // unread 해제 및 클라이언트에 알림
-    const conversation = this.deps.workspaceStore.getConversation(eid as ConversationId);
-    if (conversation?.unread) {
+    if (conversation.unread) {
       this.deps.workspaceStore.updateConversationUnread(eid as ConversationId, false);
 
       // 모든 클라이언트에게 unread 변경만 알림 (status는 현재 값 유지)
@@ -2016,16 +2039,38 @@ export class Pylon {
       return;
     }
 
+    // 플랫폼 정보
+    const platform = this.deps.folderManager.getPlatform();
+
     // 드라이브 목록 요청 (빈 문자열, undefined, null, '__DRIVES__')
+    // Windows: 드라이브 목록, Linux: 루트 '/' 경로로 폴더 목록
     const isEmptyPath = targetPath === '' || targetPath === undefined || targetPath === null;
     if (isEmptyPath || targetPath === '__DRIVES__') {
       const driveResult = this.deps.folderManager.listDrives();
+
+      // Linux인 경우 드라이브 목록 대신 루트 '/'의 폴더 목록 반환
+      if (platform === 'linux' && driveResult.drives.length === 1 && driveResult.drives[0].path === '/') {
+        const rootResult = this.deps.folderManager.listFolders('/');
+        if (from?.deviceId !== undefined) {
+          this.send({
+            type: 'folder_list_result',
+            to: [from.deviceId],
+            payload: {
+              deviceId: this.config.deviceId,
+              ...rootResult,  // platform 포함
+            },
+          });
+        }
+        return;
+      }
+
       if (from?.deviceId !== undefined) {
         this.send({
           type: 'folder_list_result',
           to: [from.deviceId],
           payload: {
             deviceId: this.config.deviceId,
+            platform,
             path: '',
             folders: driveResult.drives.map((d) => d.label),
             foldersWithChildren: driveResult.drives.map((d) => ({
@@ -2049,7 +2094,7 @@ export class Pylon {
         to: [from.deviceId],
         payload: {
           deviceId: this.config.deviceId,
-          ...result,
+          ...result,  // platform 포함
         },
       });
     }

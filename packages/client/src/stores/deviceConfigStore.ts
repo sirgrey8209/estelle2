@@ -45,6 +45,7 @@ const initialState = {
   configs: {
     1: { deviceId: 1, name: 'Office', icon: 'office-building-outline' },
     2: { deviceId: 2, name: 'Home', icon: 'home-outline' },
+    3: { deviceId: 3, name: 'Cloud', icon: 'cloud-outline' },
   } as Record<number, DeviceConfig>,
 };
 
