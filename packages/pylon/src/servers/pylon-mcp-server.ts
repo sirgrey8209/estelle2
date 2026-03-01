@@ -123,6 +123,8 @@ interface McpRequest {
   content?: string;
   /** 재시작 사유 (continue_task 액션에서 사용) */
   reason?: string;
+  /** Git 브랜치 (update 액션에서 사용) */
+  branch?: string;
 }
 
 /** 파일 정보 타입 */
@@ -159,6 +161,13 @@ interface McpDeploySuccessResponse {
   target: string;
   output: string;
   logFile?: string;
+}
+
+/** 성공 응답 타입 (update) */
+interface McpUpdateSuccessResponse {
+  success: true;
+  message: string;
+  logs: string[];
 }
 
 /** 워크스페이스 정보 타입 */
@@ -243,6 +252,7 @@ type McpResponse =
   | McpDocsSuccessResponse
   | McpFileSuccessResponse
   | McpDeploySuccessResponse
+  | McpUpdateSuccessResponse
   | McpStatusSuccessResponse
   | McpConversationSuccessResponse
   | McpShareCreateSuccessResponse
@@ -520,6 +530,9 @@ export class PylonMcpServer {
       case 'deploy':
         return this._handleDeploy(conversationId, request.target);
 
+      case 'update':
+        return this._handleUpdate(request);
+
       case 'get_status':
         return this._handleGetStatus(conversationId);
 
@@ -580,6 +593,9 @@ export class PylonMcpServer {
 
       case 'deploy':
         return this._handleDeploy(conversationId as ConversationId, request.target);
+
+      case 'update':
+        return this._handleUpdate(request);
 
       case 'get_status':
         return this._handleGetStatus(conversationId as ConversationId);
@@ -1034,6 +1050,72 @@ export class PylonMcpServer {
         message: `배포가 시작되었습니다. 로그: ${path.basename(logFilePath)}`,
       });
     });
+  }
+
+  /**
+   * update 액션 처리 (비동기)
+   *
+   * estelle-updater를 통해 원격 서버에 업데이트를 트리거합니다.
+   * master 서버에서만 실행 가능합니다.
+   */
+  private async _handleUpdate(request: McpRequest): Promise<McpResponse> {
+    const { target, branch } = request as { target?: string; branch?: string };
+    if (!target) {
+      return {
+        success: false,
+        error: 'Missing target field for update action',
+      };
+    }
+    const result = await this._runUpdateCommand(target, branch || 'master');
+    return result;
+  }
+
+  /**
+   * estelle-updater를 통해 업데이트 명령을 실행합니다.
+   */
+  private async _runUpdateCommand(
+    target: string,
+    branch: string
+  ): Promise<McpResponse> {
+    try {
+      const { startMaster, getExternalIp, loadConfig, parseMasterIp, getDefaultConfigPath } =
+        await import('@estelle/updater');
+
+      const configPath = getDefaultConfigPath();
+      const config = loadConfig(configPath);
+      const masterIp = parseMasterIp(config.masterUrl);
+      const myIp = await getExternalIp();
+      const repoRoot = this._findRepoRoot();
+
+      if (myIp !== masterIp) {
+        return {
+          success: false,
+          error: `Update can only be triggered from master (${masterIp})`,
+        };
+      }
+
+      const url = new URL(config.masterUrl);
+      const master = startMaster({
+        port: parseInt(url.port, 10),
+        whitelist: config.whitelist,
+        repoRoot,
+        myIp,
+      });
+
+      const logs: string[] = [];
+      await master.triggerUpdate(target, branch, (msg) => logs.push(msg));
+
+      return {
+        success: true,
+        message: `Update triggered: target=${target}, branch=${branch}`,
+        logs,
+      } as McpResponse;
+    } catch (err) {
+      return {
+        success: false,
+        error: `Update failed: ${err}`,
+      };
+    }
   }
 
   /**
