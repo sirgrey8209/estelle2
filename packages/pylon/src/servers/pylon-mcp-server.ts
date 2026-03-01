@@ -965,26 +965,8 @@ export class PylonMcpServer {
       };
     }
 
-    // 스크립트 경로 및 인자 결정
+    // 레포지토리 루트 경로
     const repoRoot = this._findRepoRoot();
-    let scriptPath: string;
-    let scriptArgs: string;
-
-    if (target === 'promote') {
-      scriptPath = path.join(repoRoot, 'scripts', 'promote-stage.ps1');
-      scriptArgs = '';
-    } else {
-      scriptPath = path.join(repoRoot, 'scripts', 'build-deploy.ps1');
-      scriptArgs = `-Target ${target}`;
-    }
-
-    // 스크립트 존재 확인
-    if (!fs.existsSync(scriptPath)) {
-      return {
-        success: false,
-        error: `Script not found: ${scriptPath}`,
-      };
-    }
 
     // 로그 파일 경로 결정 (타겟별 dataDir/logs/)
     const dataDirName = target === 'release' || target === 'promote' ? 'release-data' : 'stage-data';
@@ -1004,32 +986,12 @@ export class PylonMcpServer {
 
     // 비동기 실행 (이벤트 루프 blocking 방지)
     try {
-      const result = await this._runScript(
-        scriptPath,
-        scriptArgs ? scriptArgs.split(' ') : [],
-        repoRoot,
-      );
-
-      // 빌드 로그 저장
-      const logContent = result.output || result.error || '';
-      try {
-        fs.writeFileSync(logFilePath, logContent, 'utf-8');
-      } catch {
-        // 로그 저장 실패 무시
-      }
-
-      if (!result.success) {
-        return {
-          success: false,
-          error: result.error || 'Deploy failed',
-          logFile: logFileName,
-        };
-      }
+      const result = await this._runDeployScript(target, repoRoot, logFilePath);
 
       return {
         success: true,
         target,
-        output: result.output?.slice(-500) || 'Deploy completed', // 마지막 500자
+        output: result.message,
         logFile: logFileName,
       };
     } catch (err) {
@@ -1042,70 +1004,34 @@ export class PylonMcpServer {
   }
 
   /**
-   * 스크립트를 비동기로 실행합니다.
-   * spawn을 사용하여 이벤트 루프를 blocking하지 않습니다.
+   * 배포 스크립트를 detached 프로세스로 실행합니다.
+   * 부모(Pylon)가 재시작되어도 배포는 계속 진행됩니다.
    */
-  private _runScript(
-    scriptPath: string,
-    args: string[],
+  private _runDeployScript(
+    target: string,
     cwd: string,
-  ): Promise<{ success: boolean; output?: string; error?: string }> {
+    logFilePath: string,
+  ): Promise<{ success: boolean; message: string }> {
     return new Promise((resolve) => {
-      const child = spawn('powershell.exe', [
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', scriptPath,
-        ...args,
-      ], {
+      const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
+
+      const child = spawn('npx', ['tsx', 'scripts/deploy.ts', target], {
         cwd,
-        windowsHide: true,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
-      let stdout = '';
-      let stderr = '';
+      // 로그 파일에 기록
+      child.stdout?.pipe(logStream);
+      child.stderr?.pipe(logStream);
 
-      child.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
+      // 부모와 분리
+      child.unref();
 
-      child.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      // 3분 타임아웃
-      const timeout = setTimeout(() => {
-        child.kill();
-        resolve({
-          success: false,
-          error: 'Deploy timeout (3 minutes)',
-        });
-      }, 3 * 60 * 1000);
-
-      child.on('close', (code) => {
-        clearTimeout(timeout);
-
-        if (code !== 0) {
-          const errorOutput = stderr || stdout || 'Unknown error';
-          const lines = errorOutput.trim().split('\n');
-          const lastLines = lines.slice(-10).join('\n');
-          resolve({
-            success: false,
-            error: `Deploy failed (exit code: ${code}):\n${lastLines}`,
-          });
-        } else {
-          resolve({
-            success: true,
-            output: stdout,
-          });
-        }
-      });
-
-      child.on('error', (err) => {
-        clearTimeout(timeout);
-        resolve({
-          success: false,
-          error: `Deploy failed: ${err.message}`,
-        });
+      // 즉시 응답 (배포는 백그라운드에서 진행)
+      resolve({
+        success: true,
+        message: `배포가 시작되었습니다. 로그: ${path.basename(logFilePath)}`,
       });
     });
   }
