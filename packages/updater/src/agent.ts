@@ -1,0 +1,70 @@
+// packages/updater/src/agent.ts
+/**
+ * Agent mode - connects to master and executes deploy commands
+ */
+import WebSocket from 'ws';
+import { executeUpdate } from './executor.js';
+import type { UpdateCommand, LogMessage, ResultMessage } from './types.js';
+
+export interface AgentOptions {
+  masterUrl: string;
+  repoRoot: string;
+  myIp?: string;
+}
+
+export function startAgent(options: AgentOptions): WebSocket {
+  const { masterUrl, repoRoot, myIp = 'unknown' } = options;
+
+  console.log(`[Agent] Connecting to master: ${masterUrl}`);
+  const ws = new WebSocket(masterUrl);
+
+  ws.on('open', () => {
+    console.log(`[Agent] Connected to master`);
+  });
+
+  ws.on('message', async (data) => {
+    try {
+      const msg = JSON.parse(data.toString()) as UpdateCommand;
+
+      if (msg.type === 'update') {
+        // Check if this command is for us
+        if (msg.target !== 'all' && msg.target !== myIp) {
+          return; // Not for us
+        }
+
+        console.log(`[Agent] Received update command: branch=${msg.branch}`);
+
+        const result = await executeUpdate({
+          branch: msg.branch,
+          repoRoot,
+          onLog: (message) => {
+            const logMsg: LogMessage = { type: 'log', ip: myIp, message };
+            ws.send(JSON.stringify(logMsg));
+          },
+        });
+
+        const resultMsg: ResultMessage = {
+          type: 'result',
+          ip: myIp,
+          success: result.success,
+          version: result.version,
+          error: result.error,
+        };
+        ws.send(JSON.stringify(resultMsg));
+      }
+    } catch (err) {
+      console.error(`[Agent] Error processing message:`, err);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log(`[Agent] Disconnected from master, reconnecting in 5s...`);
+    setTimeout(() => startAgent(options), 5000);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[Agent] WebSocket error:`, err);
+  });
+
+  return ws;
+}
