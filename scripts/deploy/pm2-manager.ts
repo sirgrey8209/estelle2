@@ -10,7 +10,7 @@
  * handling PM2 process lifecycle management with environment
  * variable support for both Linux and macOS environments.
  */
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 export interface PM2ServiceConfig {
   name: string;
@@ -26,7 +26,7 @@ export interface PM2Result {
 
 export function stopService(name: string): void {
   try {
-    execSync(`pm2 delete ${name}`, { stdio: 'pipe' });
+    spawnSync('pm2', ['delete', name], { stdio: 'pipe' });
   } catch {
     // Ignore errors (service might not exist)
   }
@@ -34,17 +34,16 @@ export function stopService(name: string): void {
 
 export function startService(config: PM2ServiceConfig): PM2Result {
   try {
-    const envStr = config.env
-      ? Object.entries(config.env)
-          .map(([k, v]) => `${k}="${v}"`)
-          .join(' ')
-      : '';
+    const args = ['start', config.script, '--name', config.name, '--cwd', config.cwd];
 
-    const cmd = envStr
-      ? `${envStr} pm2 start ${config.script} --name ${config.name} --cwd ${config.cwd}`
-      : `pm2 start ${config.script} --name ${config.name} --cwd ${config.cwd}`;
+    const result = spawnSync('pm2', args, {
+      stdio: 'inherit',
+      env: config.env ? { ...process.env, ...config.env } : process.env,
+    });
 
-    execSync(cmd, { stdio: 'inherit', shell: true });
+    if (result.status !== 0) {
+      return { success: false, error: result.stderr?.toString() || 'PM2 start failed' };
+    }
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -54,7 +53,7 @@ export function startService(config: PM2ServiceConfig): PM2Result {
 
 export function saveServices(): void {
   try {
-    execSync('pm2 save', { stdio: 'pipe' });
+    spawnSync('pm2', ['save'], { stdio: 'pipe' });
   } catch {
     // Ignore errors
   }
