@@ -122,6 +122,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
   const envConfig = JSON.stringify({
     envId: config.envId,
     pylon: {
+      pylonIndex: config.pylon.pylonIndex,
       relayUrl: config.pylon.relayUrl,
       configDir: expandPath(config.pylon.configDir),
       credentialsBackupDir: expandPath(config.pylon.credentialsBackupDir),
