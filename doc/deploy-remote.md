@@ -167,7 +167,27 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
 - WebSocket 기반 실시간 로그 스트리밍
 - MCP 도구 또는 CLI로 트리거
 
+### 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Master (5.223.72.58:9900)                │
+│  - WebSocket 서버                                            │
+│  - 에이전트 관리 및 명령 브로드캐스트                         │
+│  - 실시간 로그 수집                                          │
+└─────────────────────────────────────────────────────────────┘
+          ▲                           ▲
+          │ WebSocket                 │ WebSocket
+          │                           │
+┌─────────┴─────────┐       ┌─────────┴─────────┐
+│   Agent (Linux)   │       │  Agent (Windows)  │
+│   5.223.72.58     │       │   121.x.x.x       │
+└───────────────────┘       └───────────────────┘
+```
+
 ### 설정
+
+**1. 설정 파일 생성:**
 
 `config/updater.json`:
 ```json
@@ -176,6 +196,27 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
   "whitelist": ["5.223.72.58", "YOUR_IP"]
 }
 ```
+
+> ⚠️ `whitelist`에 연결을 허용할 모든 IP를 추가하세요.
+
+**2. 빌드:**
+
+```bash
+pnpm install
+pnpm --filter @estelle/updater build
+```
+
+**3. PM2로 실행:**
+
+```bash
+pm2 start packages/updater/dist/index.js --name estelle-updater
+pm2 save
+```
+
+**4. 역할 자동 감지:**
+
+- 로컬 IP가 `masterUrl`의 IP와 일치하면 → **Master** 모드로 시작
+- 일치하지 않으면 → **Agent** 모드로 시작 (Master에 자동 연결)
 
 ### 사용법
 
@@ -198,6 +239,13 @@ npx estelle-updater trigger 5.223.72.58 hotfix
 3. `pnpm deploy:release` 자동 실행
 4. 실시간 로그 스트리밍
 5. 완료/실패 알림
+
+### 상태 확인
+
+```bash
+pm2 show estelle-updater    # 프로세스 상태
+pm2 logs estelle-updater    # 실시간 로그
+```
 
 ---
 
