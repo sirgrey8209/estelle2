@@ -12,6 +12,20 @@ export interface AgentOptions {
   myIp?: string;
 }
 
+/**
+ * Safely send a message over WebSocket
+ * Handles connection state and errors gracefully
+ */
+function safeSend(ws: WebSocket, msg: object): void {
+  try {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  } catch (err) {
+    console.error(`[Agent] Failed to send message:`, err);
+  }
+}
+
 export function startAgent(options: AgentOptions): WebSocket {
   const { masterUrl, repoRoot, myIp = 'unknown' } = options;
 
@@ -39,9 +53,12 @@ export function startAgent(options: AgentOptions): WebSocket {
           repoRoot,
           onLog: (message) => {
             const logMsg: LogMessage = { type: 'log', ip: myIp, message };
-            ws.send(JSON.stringify(logMsg));
+            safeSend(ws, logMsg);
           },
-        });
+        }).catch((err) => ({
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }));
 
         const resultMsg: ResultMessage = {
           type: 'result',
@@ -50,7 +67,7 @@ export function startAgent(options: AgentOptions): WebSocket {
           version: result.version,
           error: result.error,
         };
-        ws.send(JSON.stringify(resultMsg));
+        safeSend(ws, resultMsg);
       }
     } catch (err) {
       console.error(`[Agent] Error processing message:`, err);
