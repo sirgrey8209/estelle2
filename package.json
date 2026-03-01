@@ -2,6 +2,20 @@
   "name": "estelle2",
   "private": true,
   "type": "module",
+  "pnpm": {
+    "overrides": {
+      "@img/sharp-darwin-arm64": "0.34.5",
+      "@img/sharp-darwin-x64": "0.34.5",
+      "@img/sharp-linux-arm": "0.34.5",
+      "@img/sharp-linux-arm64": "0.34.5",
+      "@img/sharp-linux-x64": "0.34.5",
+      "@img/sharp-linuxmusl-arm64": "0.34.5",
+      "@img/sharp-linuxmusl-x64": "0.34.5",
+      "@img/sharp-win32-x64": "0.34.5",
+      "@img/sharp-win32-ia32": "0.34.5",
+      "@img/sharp-win32-arm64": "0.34.5"
+    }
+  },
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
@@ -14,7 +28,9 @@
     "dev:logs": "node scripts/dev-server.js logs",
     "dev:relay": "pnpm --filter @estelle/relay dev",
     "dev:pylon": "pnpm --filter @estelle/pylon dev",
-    "dev:client": "pnpm --filter @estelle/client dev"
+    "dev:client": "pnpm --filter @estelle/client dev",
+    "deploy:stage": "npx tsx scripts/deploy.ts stage",
+    "deploy:release": "npx tsx scripts/deploy.ts release"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
