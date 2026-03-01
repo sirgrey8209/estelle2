@@ -1,5 +1,17 @@
-// scripts/deploy/version.ts
+/**
+ * Version Generator for Deploy Process
+ *
+ * Generates build versions in the format: vMMDD_N
+ * - MM: Two-digit month (01-12)
+ * - DD: Two-digit day (01-31)
+ * - N: Build counter for the day (1, 2, 3, ...)
+ *
+ * The counter resets to 1 when a new day begins.
+ * Used to create unique, chronologically sortable version identifiers
+ * for each deployment build.
+ */
 import fs from 'fs';
+import path from 'path';
 
 interface BuildCounter {
   date: string;
@@ -28,6 +40,11 @@ export function generateVersion(counterPath: string): string {
   } else {
     counter.date = today;
     counter.counter = 1;
+  }
+
+  const dir = path.dirname(counterPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 
   fs.writeFileSync(counterPath, JSON.stringify(counter));
