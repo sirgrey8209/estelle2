@@ -56,7 +56,8 @@ export function startAgent(options: AgentOptions): WebSocket {
             safeSend(ws, logMsg);
           },
         }).catch((err) => ({
-          success: false,
+          success: false as const,
+          version: undefined,
           error: err instanceof Error ? err.message : 'Unknown error',
         }));
 
