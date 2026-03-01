@@ -6,6 +6,15 @@ import WebSocket from 'ws';
 import { executeUpdate } from './executor.js';
 import type { UpdateCommand, LogMessage, ResultMessage } from './types.js';
 
+/** Flush-enabled log for PM2 compatibility */
+function log(message: string): void {
+  process.stdout.write(`${message}\n`);
+}
+
+function logError(message: string, err?: unknown): void {
+  process.stderr.write(`${message}${err ? ` ${err}` : ''}\n`);
+}
+
 export interface AgentOptions {
   masterUrl: string;
   repoRoot: string;
@@ -22,18 +31,18 @@ function safeSend(ws: WebSocket, msg: object): void {
       ws.send(JSON.stringify(msg));
     }
   } catch (err) {
-    console.error(`[Agent] Failed to send message:`, err);
+    logError(`[Agent] Failed to send message:`, err);
   }
 }
 
 export function startAgent(options: AgentOptions): WebSocket {
   const { masterUrl, repoRoot, myIp = 'unknown' } = options;
 
-  console.log(`[Agent] Connecting to master: ${masterUrl}`);
+  log(`[Agent] Connecting to master: ${masterUrl}`);
   const ws = new WebSocket(masterUrl);
 
   ws.on('open', () => {
-    console.log(`[Agent] Connected to master`);
+    log(`[Agent] Connected to master`);
   });
 
   ws.on('message', async (data) => {
@@ -46,7 +55,7 @@ export function startAgent(options: AgentOptions): WebSocket {
           return; // Not for us
         }
 
-        console.log(`[Agent] Received update command: branch=${msg.branch}`);
+        log(`[Agent] Received update command: branch=${msg.branch}`);
 
         const result = await executeUpdate({
           branch: msg.branch,
@@ -71,17 +80,17 @@ export function startAgent(options: AgentOptions): WebSocket {
         safeSend(ws, resultMsg);
       }
     } catch (err) {
-      console.error(`[Agent] Error processing message:`, err);
+      logError(`[Agent] Error processing message:`, err);
     }
   });
 
   ws.on('close', () => {
-    console.log(`[Agent] Disconnected from master, reconnecting in 5s...`);
+    log(`[Agent] Disconnected from master, reconnecting in 5s...`);
     setTimeout(() => startAgent(options), 5000);
   });
 
   ws.on('error', (err) => {
-    console.error(`[Agent] WebSocket error:`, err);
+    logError(`[Agent] WebSocket error:`, err);
   });
 
   return ws;

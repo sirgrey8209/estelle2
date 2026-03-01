@@ -1,37 +1,15 @@
 /**
- * External IP detection
+ * Local IP detection using os.networkInterfaces()
+ * No network call needed - instant response
  */
-import https from 'https';
+import os from 'os';
 
-export function getExternalIp(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('IP detection timeout'));
-    }, 10000);
-
-    const req = https.get('https://api.ipify.org', { timeout: 5000 }, (res) => {
-      let data = '';
-      res.setEncoding('utf-8');
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        clearTimeout(timeout);
-        resolve(data.trim());
-      });
-      res.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-    });
-
-    req.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      clearTimeout(timeout);
-      reject(new Error('Request timeout'));
-    });
-  });
+export function getExternalIp(): string {
+  const interfaces = os.networkInterfaces();
+  for (const iface of Object.values(interfaces).flat()) {
+    if (iface && iface.family === 'IPv4' && !iface.internal) {
+      return iface.address;
+    }
+  }
+  return 'unknown';
 }

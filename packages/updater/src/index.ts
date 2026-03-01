@@ -11,6 +11,11 @@ import { startAgent } from './agent.js';
 import path from 'path';
 import fs from 'fs';
 
+/** Flush-enabled log for PM2 compatibility */
+function log(message: string): void {
+  process.stdout.write(`${message}\n`);
+}
+
 export { startMaster, type MasterInstance } from './master.js';
 export { startAgent } from './agent.js';
 export { executeUpdate } from './executor.js';
@@ -20,7 +25,8 @@ export * from './types.js';
 
 function findRepoRoot(): string {
   let dir = process.cwd();
-  while (dir !== '/') {
+  let prevDir = '';
+  while (dir !== prevDir) {  // Cross-platform: stops when dirname no longer changes
     const pkgPath = path.join(dir, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -28,25 +34,28 @@ function findRepoRoot(): string {
         return dir;
       }
     }
+    prevDir = dir;
     dir = path.dirname(dir);
   }
   return process.cwd();
 }
 
 export async function start(): Promise<void> {
+  log(`[Updater] Starting...`);
+
   const configPath = getDefaultConfigPath();
-  console.log(`[Updater] Loading config from: ${configPath}`);
+  log(`[Updater] Loading config from: ${configPath}`);
 
   const config = loadConfig(configPath);
   const masterIp = parseMasterIp(config.masterUrl);
-  const myIp = await getExternalIp();
+  const myIp = getExternalIp();
   const repoRoot = findRepoRoot();
 
-  console.log(`[Updater] My IP: ${myIp}, Master IP: ${masterIp}`);
+  log(`[Updater] My IP: ${myIp}, Master IP: ${masterIp}`);
 
   if (myIp === masterIp) {
     // Master mode
-    console.log(`[Updater] Starting as MASTER`);
+    log(`[Updater] Starting as MASTER`);
     const url = new URL(config.masterUrl);
     startMaster({
       port: parseInt(url.port, 10),
@@ -56,7 +65,7 @@ export async function start(): Promise<void> {
     });
   } else {
     // Agent mode
-    console.log(`[Updater] Starting as AGENT`);
+    log(`[Updater] Starting as AGENT`);
     startAgent({
       masterUrl: config.masterUrl,
       repoRoot,

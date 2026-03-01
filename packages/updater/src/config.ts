@@ -19,7 +19,8 @@ export function parseMasterIp(masterUrl: string): string {
 export function getDefaultConfigPath(): string {
   // Find repo root by looking for package.json with workspaces
   let dir = process.cwd();
-  while (dir !== '/') {
+  let prevDir = '';
+  while (dir !== prevDir) {  // Cross-platform: stops when dirname no longer changes
     const pkgPath = path.join(dir, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -27,6 +28,7 @@ export function getDefaultConfigPath(): string {
         return path.join(dir, 'config', 'updater.json');
       }
     }
+    prevDir = dir;
     dir = path.dirname(dir);
   }
   return path.join(process.cwd(), 'config', 'updater.json');
