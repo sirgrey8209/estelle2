@@ -162,17 +162,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
   }
   logDetail(`Pylon started: ${config.pylon.pm2Name}`);
 
-  // Start Updater
-  log('Phase 5', 'Starting estelle-updater...');
-  const updaterResult = startService({
-    name: config.updater?.pm2Name || 'estelle-updater',
-    script: 'dist/index.js',
-    cwd: path.join(repoRoot, 'packages', 'updater'),
-  });
-  if (!updaterResult.success) {
-    console.warn(`[Warning] Updater start failed: ${updaterResult.error}`);
-  }
-  logDetail(`Updater started: ${config.updater?.pm2Name || 'estelle-updater'}`);
+  // Note: estelle-updater is NOT restarted here
+  // It must stay running to coordinate deployments across machines
+  logDetail(`Updater skipped (must stay running for coordination)`);
 
   saveServices();
 
