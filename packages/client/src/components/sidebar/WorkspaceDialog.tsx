@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Monitor, ArrowUp, Folder, FolderPlus, ChevronRight, Trash2, HardDrive } from 'lucide-react';
+import { ArrowUp, Folder, FolderPlus, ChevronRight, Trash2, HardDrive } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { LoadingSpinner } from '../ui/loading-spinner';
-import { cn } from '../../lib/utils';
 import { useWorkspaceStore } from '../../stores';
 import { useLongPress } from '../../hooks/useLongPress';
 import {
@@ -50,6 +49,8 @@ interface WorkspaceDialogProps {
   onClose: () => void;
   mode: 'new' | 'edit';
   workspace?: WorkspaceData;
+  /** New 모드에서 사용할 Pylon ID (탭에서 선택된 Pylon) */
+  pylonId?: number;
 }
 
 // 기본 경로는 Pylon에서 folder_list_result로 받아옴 (첫 요청 시 path 없이 요청)
@@ -72,28 +73,17 @@ function getUniqueWorkspaceName(existingNames: string[]): string {
 /**
  * 워크스페이스 생성/편집 다이얼로그
  */
-export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDialogProps) {
+export function WorkspaceDialog({ open, onClose, mode, workspace, pylonId }: WorkspaceDialogProps) {
   const { connectedPylons, getAllWorkspaces } = useWorkspaceStore();
-
-  const pcs = connectedPylons.map((p) => ({
-    pcId: p.deviceId,
-    pcName: p.deviceName,
-  }));
 
   // 기존 워크스페이스 이름 목록 (중복 체크용)
   const existingWorkspaceNames = getAllWorkspaces()
     .flatMap(({ workspaces }) => workspaces.map((ws) => ws.name));
 
-  // Edit 모드에서는 해당 Pylon 인덱스 찾기
-  const getInitialPcIndex = () => {
-    if (mode === 'edit' && workspace) {
-      const idx = pcs.findIndex((p) => p.pcId === workspace.pylonId);
-      return idx >= 0 ? idx : 0;
-    }
-    return 0;
-  };
+  // 현재 Pylon ID 결정: Edit 모드는 workspace에서, New 모드는 props에서
+  const currentPylonId = mode === 'edit' ? workspace?.pylonId : pylonId;
+  const currentPylon = connectedPylons.find((p) => p.deviceId === currentPylonId);
 
-  const [selectedPcIndex, setSelectedPcIndex] = useState(getInitialPcIndex);
   const [name, setName] = useState(mode === 'edit' ? workspace?.name || '' : '');
   const [userEditedName, setUserEditedName] = useState(mode === 'edit');
   const [folderState, setFolderState] = useState<FolderState>({
@@ -106,27 +96,24 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   });
   const [deleteProgress, setDeleteProgress] = useState(0);
 
-  const selectedPc = pcs[selectedPcIndex];
   const platform = folderState.platform;
 
   // 다이얼로그 열릴 때 초기화
   useEffect(() => {
-    if (open) {
+    if (open && currentPylonId) {
       if (mode === 'edit' && workspace) {
-        setSelectedPcIndex(getInitialPcIndex());
         setName(workspace.name);
         setUserEditedName(true);  // Edit 모드는 항상 고정 모드
         loadFolders(workspace.workingDir);
       } else {
         // New 모드: 초기 이름은 "새 워크스페이스" (중복 시 숫자)
-        setSelectedPcIndex(0);
         setName(getUniqueWorkspaceName(existingWorkspaceNames));
         setUserEditedName(false);  // 폴더명 추적 모드
         // path 없이 요청하면 Pylon이 기본 경로로 응답
         loadFolders();
       }
     }
-  }, [open, mode, workspace?.workspaceId]);
+  }, [open, mode, workspace?.workspaceId, currentPylonId]);
 
   // folder_list_result 이벤트 리스너
   useEffect(() => {
@@ -160,25 +147,11 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   }, [userEditedName, folderState.platform]);
 
   const loadFolders = useCallback((path?: string) => {
-    if (!selectedPc) return;
+    if (!currentPylonId) return;
 
     setFolderState((prev) => ({ ...prev, isLoading: true, error: null }));
-    requestFolderList(selectedPc.pcId, path);
-  }, [selectedPc]);
-
-  // Pylon cycle (New 모드에서만)
-  const cyclePc = () => {
-    if (pcs.length > 1 && mode === 'new') {
-      const nextIndex = (selectedPcIndex + 1) % pcs.length;
-      setSelectedPcIndex(nextIndex);
-      // Pylon 변경 시 경로 리셋 (새 Pylon의 기본 경로로)
-      loadFolders();
-      // 폴더명 추적 모드면 기본 이름으로 리셋
-      if (!userEditedName) {
-        setName(getUniqueWorkspaceName(existingWorkspaceNames));
-      }
-    }
-  };
+    requestFolderList(currentPylonId, path);
+  }, [currentPylonId]);
 
   // 상위 폴더로 이동
   const goToParent = () => {
@@ -249,17 +222,17 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
   // 새 폴더 생성
   const createFolder = () => {
     const folderName = prompt('새 폴더 이름을 입력하세요');
-    if (folderName && selectedPc) {
-      requestFolderCreate(selectedPc.pcId, folderState.path, folderName);
+    if (folderName && currentPylonId) {
+      requestFolderCreate(currentPylonId, folderState.path, folderName);
       setTimeout(() => loadFolders(folderState.path), 500);
     }
   };
 
   // 생성 (New 모드)
   const handleCreate = () => {
-    if (!name.trim() || !selectedPc) return;
+    if (!name.trim() || !currentPylonId) return;
 
-    requestWorkspaceCreate(selectedPc.pcId, name.trim(), folderState.path);
+    requestWorkspaceCreate(currentPylonId, name.trim(), folderState.path);
     handleClose();
   };
 
@@ -317,8 +290,8 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
     return PlatformUtils.isRootPath(currentPath, platform);
   };
 
-  // PC 없음 상태
-  if (pcs.length === 0) {
+  // Pylon 없음 상태
+  if (!currentPylonId || !currentPylon) {
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
         <DialogContent className="max-w-sm">
@@ -328,7 +301,7 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
             </DialogTitle>
           </DialogHeader>
           <p className="text-center text-muted-foreground py-6">
-            연결된 PC가 없습니다
+            연결된 Pylon이 없습니다
           </p>
         </DialogContent>
       </Dialog>
@@ -345,26 +318,14 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Pylon 선택 + 이름 입력 */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={cyclePc}
-              disabled={pcs.length <= 1 || mode === 'edit'}
-              title={selectedPc?.pcName}
-            >
-              <Monitor className="h-4 w-4" />
-            </Button>
-            <Input
-              placeholder="워크스페이스 이름"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              className="flex-1"
-            />
-          </div>
+          {/* 이름 입력 */}
+          <Input
+            placeholder="워크스페이스 이름"
+            value={name}
+            onChange={(e) => handleNameChange(e.target.value)}
+          />
 
-          {/* 경로 표시 */}
+          {/* 경로 표시 + 네비게이션 버튼 */}
           <div className="flex items-center gap-2">
             <p className="flex-1 text-sm text-muted-foreground truncate">
               {getPathDisplay()}
@@ -372,6 +333,12 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
             <Button variant="ghost" size="icon" onClick={goToParent} disabled={isParentDisabled()}>
               <ArrowUp className="h-4 w-4" />
             </Button>
+            {/* 새 폴더 버튼 (드라이브 목록일 때 숨김) */}
+            {folderState.path !== '' && (
+              <Button variant="ghost" size="icon" onClick={createFolder} title="새 폴더">
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            )}
           </div>
 
           {/* 폴더 목록 */}
@@ -416,16 +383,6 @@ export function WorkspaceDialog({ open, onClose, mode, workspace }: WorkspaceDia
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </button>
                     ))}
-                {/* 드라이브 목록일 때는 새 폴더 버튼 숨김 */}
-                {folderState.path !== '' && (
-                  <button
-                    onClick={createFolder}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
-                  >
-                    <FolderPlus className="h-4 w-4" />
-                    <span>새 폴더</span>
-                  </button>
-                )}
               </div>
             )}
           </div>

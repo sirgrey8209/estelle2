@@ -168,6 +168,22 @@ cp ~/.claude/.credentials.json ~/.claude-credentials/personal.json
 
 ---
 
+## 배포 스크립트
+
+개발 환경에서 stage/release로 배포할 때:
+
+```bash
+# Stage 배포
+pnpm deploy:stage
+
+# Release 배포
+pnpm deploy:release
+```
+
+> 배포 스크립트는 크로스 플랫폼으로 Windows/Linux 모두 지원합니다.
+
+---
+
 ## 다음 단계
 
-모바일에서도 접속하려면 [원격 배포 가이드](./deploy-remote.md)를 참고하세요.
+서버 환경에서 운영하려면 [원격 배포 가이드](./deploy-remote.md)를 참고하세요.

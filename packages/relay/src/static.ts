@@ -157,6 +157,7 @@ interface HubProject {
   name: string;
   path: string;
   port: number;
+  url?: string;
   description?: string;
 }
 
@@ -191,13 +192,17 @@ function loadHubRoutes(): HubRoutes {
  * Hub 대시보드 HTML을 생성합니다.
  */
 function generateHubDashboard(projects: HubProject[], host: string): string {
-  const projectCards = projects.map(p => `
-    <a href="http://${host.split(':')[0]}:${p.port}" class="project-card" target="_blank">
+  const projectCards = projects.map(p => {
+    const projectUrl = p.url || `http://${host.split(':')[0]}:${p.port}`;
+    const portDisplay = p.url ? new URL(p.url).pathname : `:${p.port}`;
+    return `
+    <a href="${projectUrl}" class="project-card" target="_blank">
       <div class="project-name">${p.name}</div>
       <div class="project-desc">${p.description || ''}</div>
-      <div class="project-port">:${p.port}</div>
+      <div class="project-port">${portDisplay}</div>
     </a>
-  `).join('');
+  `;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html lang="ko">

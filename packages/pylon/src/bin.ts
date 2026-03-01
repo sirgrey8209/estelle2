@@ -419,7 +419,7 @@ function createDependencies(): PylonDependencies & {
   const workerManager = new WorkerManager(taskManager);
 
   // FolderManager
-  const folderManager = new FolderManager(folderFileSystem);
+  const folderManager = new FolderManager(folderFileSystem, { defaultPath: defaultWorkingDir });
 
   // CredentialManager
   const credentialManager = new CredentialManager({

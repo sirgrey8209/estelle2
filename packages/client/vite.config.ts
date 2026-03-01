@@ -26,9 +26,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
+        id: '/',
         name: 'Estelle',
         short_name: 'Estelle',
         description: 'Claude Code Remote Controller',
+        lang: 'ko',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
@@ -52,6 +54,7 @@ export default defineConfig({
             purpose: 'maskable',
           },
         ],
+        categories: ['utilities', 'developer tools'],
       },
       workbox: {
         // 앱 쉘만 최소 캐싱 (WebSocket 앱이라 오프라인 의미 없음)

@@ -25,6 +25,7 @@ import {
   type PermissionResult,
   type McpServerConfig,
   type SettingSource,
+  type SdkPluginConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 import type {
   ClaudeAdapter,
@@ -107,6 +108,7 @@ export class ClaudeSDKAdapter implements ClaudeAdapter {
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
       env: options.env,
+      plugins: options.plugins as SdkPluginConfig[] | undefined,
     };
 
     // systemPrompt 전달 (undefined가 아닌 경우에만, 빈 문자열도 전달)

@@ -1,5 +1,5 @@
-import { useState, useEffect, useContext, useCallback } from 'react';
-import { Plus, ChevronRight, Folder } from 'lucide-react';
+import { useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import { Plus, ChevronRight, Folder, Star } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -30,6 +30,8 @@ import { NewConversationDialog } from './NewConversationDialog';
 import { selectConversation, reorderWorkspaces, reorderConversations } from '../../services/relaySender';
 import { getDeviceIcon } from '../../utils/device-icons';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
+import { PylonTabs, type PylonTabValue } from './PylonTabs';
+import { useFavoriteWorkspaces } from '../../hooks/useFavoriteWorkspaces';
 import type { Workspace, Conversation } from '@estelle/core';
 
 interface EditWorkspaceTarget {
@@ -42,6 +44,9 @@ interface EditWorkspaceTarget {
 interface WorkspaceWithPylon extends Workspace {
   pylonId: number;
 }
+
+/** 탭 선택 상태 localStorage 키 */
+const TAB_STORAGE_KEY = 'estelle:selectedPylonTab';
 
 // ============================================================================
 // WorkspaceHeader 컴포넌트 (롱홀드 지원)
@@ -56,9 +61,24 @@ interface WorkspaceHeaderProps {
     attributes: DraggableAttributes;
     listeners: SyntheticListenerMap | undefined;
   };
+  /** 즐겨찾기 탭에서 표시 중인지 여부 (true면 Pylon 아이콘 표시) */
+  showPylonIcon: boolean;
+  /** 즐겨찾기 여부 */
+  isFavorite: boolean;
+  /** 즐겨찾기 토글 콜백 */
+  onToggleFavorite: () => void;
 }
 
-function WorkspaceHeader({ workspace, expanded, onSelect, onLongPress, dragHandleProps }: WorkspaceHeaderProps) {
+function WorkspaceHeader({
+  workspace,
+  expanded,
+  onSelect,
+  onLongPress,
+  dragHandleProps,
+  showPylonIcon,
+  isFavorite,
+  onToggleFavorite,
+}: WorkspaceHeaderProps) {
   const [progress, setProgress] = useState(0);
   const { getIcon } = useDeviceConfigStore();
   const pylonIcon = getIcon(workspace.pylonId);
@@ -68,6 +88,11 @@ function WorkspaceHeader({ workspace, expanded, onSelect, onLongPress, dragHandl
     delay: 500,
     onProgress: setProgress,
   });
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite();
+  };
 
   return (
     <div
@@ -83,28 +108,41 @@ function WorkspaceHeader({ workspace, expanded, onSelect, onLongPress, dragHandl
         />
       )}
       <div className="relative flex items-center gap-2">
-        {/* 아이콘을 드래그 핸들로 사용 */}
-        <div
-          {...dragHandleProps?.attributes}
-          {...dragHandleProps?.listeners}
-          className="cursor-grab active:cursor-grabbing touch-none"
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => {
-            // dnd-kit 리스너 먼저 호출
-            const handler = dragHandleProps?.listeners?.onPointerDown as ((e: React.PointerEvent) => void) | undefined;
-            handler?.(e);
-            // 롱홀드 방지를 위해 전파 중지
-            e.stopPropagation();
-          }}
-          onTouchStart={(e) => {
-            const handler = dragHandleProps?.listeners?.onTouchStart as ((e: React.TouchEvent) => void) | undefined;
-            handler?.(e);
-            e.stopPropagation();
-          }}
-        >
-          <IconComponent className="h-4 w-4 text-primary" />
-        </div>
+        {/* 즐겨찾기 탭: Pylon 아이콘 (드래그 핸들) / Pylon 탭: 즐겨찾기 토글 버튼 */}
+        {showPylonIcon ? (
+          <div
+            {...dragHandleProps?.attributes}
+            {...dragHandleProps?.listeners}
+            className="cursor-grab active:cursor-grabbing touch-none"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              const handler = dragHandleProps?.listeners?.onPointerDown as ((e: React.PointerEvent) => void) | undefined;
+              handler?.(e);
+              e.stopPropagation();
+            }}
+            onTouchStart={(e) => {
+              const handler = dragHandleProps?.listeners?.onTouchStart as ((e: React.TouchEvent) => void) | undefined;
+              handler?.(e);
+              e.stopPropagation();
+            }}
+          >
+            <IconComponent className="h-4 w-4 text-primary" />
+          </div>
+        ) : (
+          <button
+            onClick={handleFavoriteClick}
+            className={cn(
+              'p-0.5 rounded transition-colors',
+              isFavorite
+                ? 'text-yellow-500 hover:text-yellow-600'
+                : 'text-muted-foreground hover:text-yellow-500'
+            )}
+            title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+          >
+            <Star className={cn('h-4 w-4', isFavorite && 'fill-current')} />
+          </button>
+        )}
         <span className="font-semibold text-sm">{workspace.name}</span>
         <ChevronRight
           className={cn(
@@ -189,6 +227,12 @@ interface SortableWorkspaceCardProps {
   closeSidebar: () => void;
   onConversationDragEnd: (workspaceId: string, conversationIds: number[]) => void;
   conversationSensors: ReturnType<typeof useSensors>;
+  /** 즐겨찾기 탭에서 표시 중인지 여부 */
+  showPylonIcon: boolean;
+  /** 즐겨찾기 여부 */
+  isFavorite: boolean;
+  /** 즐겨찾기 토글 콜백 */
+  onToggleFavorite: () => void;
 }
 
 function SortableWorkspaceCard({
@@ -203,6 +247,9 @@ function SortableWorkspaceCard({
   closeSidebar,
   onConversationDragEnd,
   conversationSensors,
+  showPylonIcon,
+  isFavorite,
+  onToggleFavorite,
 }: SortableWorkspaceCardProps) {
   const {
     attributes,
@@ -244,13 +291,16 @@ function SortableWorkspaceCard({
         isDragging && 'opacity-50 shadow-lg'
       )}
     >
-      {/* 워크스페이스 헤더 (아이콘이 드래그 핸들) */}
+      {/* 워크스페이스 헤더 */}
       <WorkspaceHeader
         workspace={workspace}
         expanded={expanded}
         onSelect={onSelect}
         onLongPress={onLongPress}
         dragHandleProps={{ attributes, listeners }}
+        showPylonIcon={showPylonIcon}
+        isFavorite={isFavorite}
+        onToggleFavorite={onToggleFavorite}
       />
 
       {/* 닫힌 워크스페이스에서 선택된 대화만 표시 */}
@@ -335,6 +385,21 @@ export function WorkspaceSidebar() {
     }
   });
 
+  // 탭 상태
+  const [selectedTab, setSelectedTab] = useState<PylonTabValue>(() => {
+    try {
+      const saved = localStorage.getItem(TAB_STORAGE_KEY);
+      if (!saved) return 'favorites';
+      const parsed = JSON.parse(saved);
+      return parsed === 'favorites' ? 'favorites' : Number(parsed);
+    } catch {
+      return 'favorites';
+    }
+  });
+
+  // 즐겨찾기 상태
+  const { isFavorite, toggleFavorite } = useFavoriteWorkspaces();
+
   const {
     getAllWorkspaces,
     selectedConversation,
@@ -374,6 +439,49 @@ export function WorkspaceSidebar() {
   const flatWorkspaces: WorkspaceWithPylon[] = allWorkspaces.flatMap(({ pylonId, workspaces }) =>
     workspaces.map((ws) => ({ ...ws, pylonId }))
   );
+
+  // 탭 변경 핸들러
+  const handleTabChange = useCallback((tab: PylonTabValue) => {
+    setSelectedTab(tab);
+    try {
+      localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(tab));
+    } catch {
+      // 무시
+    }
+  }, []);
+
+  // 즐겨찾기된 워크스페이스 목록
+  const favoriteWorkspaces = useMemo(
+    () => flatWorkspaces.filter((ws) => isFavorite(ws.workspaceId)),
+    [flatWorkspaces, isFavorite]
+  );
+
+  const hasFavorites = favoriteWorkspaces.length > 0;
+
+  // 필터링된 워크스페이스 목록
+  const filteredWorkspaces = useMemo(() => {
+    if (selectedTab === 'favorites') {
+      return favoriteWorkspaces;
+    }
+    return flatWorkspaces.filter((ws) => ws.pylonId === selectedTab);
+  }, [flatWorkspaces, favoriteWorkspaces, selectedTab]);
+
+  // 즐겨찾기 탭인지 여부
+  const isFavoritesTab = selectedTab === 'favorites';
+
+  // 즐겨찾기가 없는데 즐겨찾기 탭이 선택된 경우 → 첫 번째 Pylon 탭으로 전환
+  const { connectedPylons } = useWorkspaceStore();
+  useEffect(() => {
+    if (selectedTab === 'favorites' && !hasFavorites && connectedPylons.length > 0) {
+      const firstPylonId = connectedPylons[0].deviceId;
+      setSelectedTab(firstPylonId);
+      try {
+        localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(firstPylonId));
+      } catch {
+        // 무시
+      }
+    }
+  }, [selectedTab, hasFavorites, connectedPylons]);
 
   // 초기화: 저장된 상태가 없으면 선택된 대화가 있는 워크스페이스를 펼침
   useEffect(() => {
@@ -495,6 +603,9 @@ export function WorkspaceSidebar() {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/* Pylon 탭 */}
+      <PylonTabs selectedTab={selectedTab} onTabChange={handleTabChange} hasFavorites={hasFavorites} />
+
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         <DndContext
           sensors={workspaceSensors}
@@ -502,10 +613,10 @@ export function WorkspaceSidebar() {
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={flatWorkspaces.map((w) => w.workspaceId)}
+            items={filteredWorkspaces.map((w) => w.workspaceId)}
             strategy={verticalListSortingStrategy}
           >
-            {flatWorkspaces.map((workspace) => {
+            {filteredWorkspaces.map((workspace) => {
               const expanded = isExpanded(workspace.workspaceId);
               const selectedConvInWorkspace = !expanded
                 ? workspace.conversations.find((c) =>
@@ -532,6 +643,9 @@ export function WorkspaceSidebar() {
                   closeSidebar={closeSidebar}
                   onConversationDragEnd={handleConversationDragEnd}
                   conversationSensors={conversationSensors}
+                  showPylonIcon={isFavoritesTab}
+                  isFavorite={isFavorite(workspace.workspaceId)}
+                  onToggleFavorite={() => toggleFavorite(workspace.workspaceId)}
                 />
               );
             })}
@@ -539,21 +653,35 @@ export function WorkspaceSidebar() {
         </DndContext>
 
         {/* 빈 상태 */}
-        {flatWorkspaces.length === 0 && (
+        {filteredWorkspaces.length === 0 && (
           <Card className="p-6 text-center">
-            <Folder className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-muted-foreground">연결된 워크스페이스가 없습니다</p>
+            {isFavoritesTab ? (
+              <>
+                <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-muted-foreground">즐겨찾기한 워크스페이스가 없습니다</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pylon 탭에서 ⭐ 버튼을 눌러 추가하세요
+                </p>
+              </>
+            ) : (
+              <>
+                <Folder className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-muted-foreground">워크스페이스가 없습니다</p>
+              </>
+            )}
           </Card>
         )}
 
-        {/* + 워크스페이스 추가 버튼 */}
-        <button
-          onClick={openNewDialog}
-          className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          워크스페이스 추가
-        </button>
+        {/* + 워크스페이스 추가 버튼 (Pylon 탭에서만 표시) */}
+        {!isFavoritesTab && (
+          <button
+            onClick={openNewDialog}
+            className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            워크스페이스 추가
+          </button>
+        )}
       </div>
 
       {/* 워크스페이스 다이얼로그 (New/Edit 통합) */}
@@ -562,6 +690,7 @@ export function WorkspaceSidebar() {
         onClose={closeWorkspaceDialog}
         mode={workspaceDialogMode || 'new'}
         workspace={editWorkspaceTarget || undefined}
+        pylonId={typeof selectedTab === 'number' ? selectedTab : undefined}
       />
 
       {/* 새 대화 다이얼로그 */}

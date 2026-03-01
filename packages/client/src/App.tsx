@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useRelayStore } from './stores';
 import { useAuthStore } from './stores/authStore';
 import { RelayConfig, AppConfig } from './utils/config';
@@ -188,6 +188,17 @@ function useRelayConnection() {
   }, [setConnected, handleMessage, isGoogleAuthenticated, idToken, isSharePage]);
 }
 
+/**
+ * /hub 경로는 서버에서 별도로 서빙하는 Dev Hub 대시보드
+ * SPA에서 접근 시 전체 페이지 리로드로 서버 응답을 받음
+ */
+function HubRedirect() {
+  useEffect(() => {
+    window.location.href = '/hub';
+  }, []);
+  return null;
+}
+
 export function App() {
   useVersionInfo();
   useDocumentTitle();
@@ -198,6 +209,8 @@ export function App() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/share/:shareId" element={<SharePage />} />
+      {/* /hub는 서버에서 별도로 서빙하므로 전체 페이지 리로드 */}
+      <Route path="/hub" element={<HubRedirect />} />
     </Routes>
   );
 }

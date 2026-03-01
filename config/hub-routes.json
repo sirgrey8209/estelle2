@@ -5,6 +5,19 @@
       "path": "/projects/web-td",
       "port": 3001,
       "description": "타워 디펜스 게임"
+    },
+    {
+      "name": "EB Navigation",
+      "path": "/projects/eb-navigation-web",
+      "port": 3002,
+      "description": "Flow Field 기반 군중 시뮬레이션 (1000+ 에이전트)"
+    },
+    {
+      "name": "Voxel Engine",
+      "path": "/projects/voxel-engine",
+      "port": 3003,
+      "url": "https://estelle-hub.mooo.com/voxel-engine/",
+      "description": "WebGPU 기반 복셀 게임 엔진 (마인크래프트 스타일) - HTTPS 필수"
     }
   ]
 }

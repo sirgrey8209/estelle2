@@ -7,25 +7,29 @@ Estelle을 사용하면 PC에서 실행 중인 Claude Code를 어디서든 - 휴
 ## 아키텍처
 
 ```
-                         ┌─────────────────┐
-                         │  Estelle Relay  │
-                         │   (클라우드)     │
-                         └────────┬────────┘
-                                  │ WebSocket
-         ┌────────────────────────┼────────────────────────┐
-         │                        │                        │
-   ┌─────┴─────┐            ┌─────┴─────┐            ┌─────┴─────┐
-   │  Pylon    │            │  Pylon    │            │  Client   │
-   │  (집 PC)  │            │ (회사 PC) │            │ (모바일)  │
-   └───────────┘            └───────────┘            └───────────┘
-        │                        │
-   Claude Code             Claude Code
+┌─────────────────────────────────────────────────────┐
+│                    서버 (Hetzner)                    │
+│                                                      │
+│  ┌──────────┐    ┌──────────┐                       │
+│  │  Pylon   │◄──►│  Relay   │◄────────┐             │
+│  │ (PM2)    │    │ (PM2)    │         │             │
+│  └──────────┘    └──────────┘         │             │
+│       │                         WebSocket           │
+│  Claude Code                          │             │
+└───────────────────────────────────────┼─────────────┘
+                                        │
+              ┌─────────────────────────┼────────────┐
+              │                         │            │
+        ┌─────┴─────┐            ┌─────┴─────┐ ┌────┴────┐
+        │  Client   │            │  Client   │ │ Client  │
+        │ (브라우저)│            │ (모바일)  │ │ (다른PC)│
+        └───────────┘            └───────────┘ └─────────┘
 ```
 
 | 컴포넌트 | 설명 |
 |----------|------|
-| **Relay** | 클라우드 메시지 라우터 (Fly.io) - 상태 없음, 인증 및 라우팅만 담당 |
-| **Pylon** | PC 백그라운드 서비스 - Claude SDK를 통해 Claude Code 세션 관리 |
+| **Relay** | 메시지 라우터 (PM2) - 상태 없음, 인증 및 라우팅만 담당 |
+| **Pylon** | 백그라운드 서비스 (PM2) - Claude SDK를 통해 Claude Code 세션 관리 |
 | **Client** | 웹 앱 (PWA) - 브라우저가 있는 모든 기기에서 동작 |
 
 ## 현재 상태
@@ -54,7 +58,7 @@ Estelle을 로컬 환경으로 설치해줘
 
 자세한 내용: [로컬 배포 가이드](doc/deploy-local.md)
 
-### 원격 환경 (모바일/외부 접속)
+### 원격 환경 (서버 배포)
 
 Claude Code에게 요청:
 ```
@@ -62,8 +66,8 @@ Estelle을 원격 환경으로 설치해줘
 ```
 
 **사용자가 준비해야 할 것:**
-1. Fly.io 계정 (무료)
-2. Google Cloud Console에서 OAuth Client ID
+- Linux 서버 (Ubuntu 20.04+)
+- Node.js 20+, pnpm, PM2
 
 자세한 내용: [원격 배포 가이드](doc/deploy-remote.md)
 
@@ -97,11 +101,11 @@ cp ~/.claude/.credentials.json ~/.claude-credentials/personal.json
 estelle2/
 ├── packages/
 │   ├── core/      # 공유 타입 및 메시지 스키마
-│   ├── relay/     # Relay 서버 (Fly.io 배포)
+│   ├── relay/     # Relay 서버 (PM2)
 │   ├── pylon/     # Pylon 서비스 (Claude SDK 통합)
 │   └── client/    # React 웹 클라이언트 (Vite + shadcn/ui)
 ├── config/        # 환경 설정
-├── scripts/       # 빌드 및 배포 스크립트
+├── scripts/       # 빌드 및 배포 스크립트 (크로스 플랫폼)
 └── doc/           # 설계 문서
 ```
 
@@ -118,11 +122,13 @@ estelle2/
 ### 명령어
 
 ```bash
-pnpm install      # 의존성 설치
-pnpm build        # 전체 빌드
-pnpm test         # 테스트 실행
-pnpm dev          # 개발 서버 시작
-pnpm dev:stop     # 개발 서버 종료
+pnpm install        # 의존성 설치
+pnpm build          # 전체 빌드
+pnpm test           # 테스트 실행
+pnpm dev            # 개발 서버 시작
+pnpm dev:stop       # 개발 서버 종료
+pnpm deploy:stage   # Stage 환경 배포
+pnpm deploy:release # Release 환경 배포
 ```
 
 ### MCP 포트

@@ -248,6 +248,9 @@ export interface SendMessageOptions {
 
   /** 시스템 리마인더 (새 세션용, resume 시 무시됨) */
   systemReminder?: string;
+
+  /** 플러그인 설정 */
+  plugins?: Array<{ type: 'local'; path: string }>;
 }
 
 /**
@@ -328,6 +331,9 @@ export interface ClaudeQueryOptions {
 
   /** 환경변수 (SDK에 전달) */
   env?: Record<string, string>;
+
+  /** 플러그인 설정 (SDK에 전달) */
+  plugins?: Array<{ type: 'local'; path: string }>;
 
   /** 도구 사용 가능 여부 콜백 */
   canUseTool?: (
@@ -597,6 +603,7 @@ export class ClaudeManager {
           claudeSessionId,
           systemPrompt: options.systemPrompt,
           systemReminder: options.systemReminder,
+          plugins: options.plugins,
         },
         message
       );
@@ -928,6 +935,7 @@ export class ClaudeManager {
       claudeSessionId?: string;
       systemPrompt?: string | SystemPromptPreset;
       systemReminder?: string;
+      plugins?: Array<{ type: 'local'; path: string }>;
     },
     message: string
   ): Promise<void> {
@@ -965,7 +973,7 @@ export class ClaudeManager {
       abortController,
       conversationId: sessionId,
       includePartialMessages: true,
-      settingSources: ['project'],
+      settingSources: ['user', 'project', 'local'],
       canUseTool: async (toolName, input) => {
         return this.handlePermission(sessionId, toolName, input);
       },
@@ -985,6 +993,11 @@ export class ClaudeManager {
         ...process.env as Record<string, string>,
         CLAUDE_CONFIG_DIR: this.claudeConfigDir,
       };
+    }
+
+    // 플러그인 설정
+    if (sessionInfo.plugins) {
+      queryOptions.plugins = sessionInfo.plugins;
     }
 
     // 세션 재개

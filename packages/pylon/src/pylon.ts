@@ -109,6 +109,7 @@ export interface ClaudeManagerAdapter {
     claudeSessionId?: string;
     systemPrompt?: string | SystemPromptPreset;
     systemReminder?: string;
+    plugins?: Array<{ type: 'local'; path: string }>;
   }): Promise<void>;
   stop(conversationId: number): void;
   newSession(conversationId: number): void;
@@ -174,6 +175,7 @@ export interface FolderManagerAdapter {
   createFolder(parentPath: string, name: string): { success: boolean };
   renameFolder(folderPath: string, newName: string): { success: boolean };
   getPlatform(): PlatformType;
+  getDefaultPath(): string;
 }
 
 /**
@@ -2042,10 +2044,28 @@ export class Pylon {
     // 플랫폼 정보
     const platform = this.deps.folderManager.getPlatform();
 
-    // 드라이브 목록 요청 (빈 문자열, undefined, null, '__DRIVES__')
-    // Windows: 드라이브 목록, Linux: 루트 '/' 경로로 폴더 목록
+    // 드라이브 목록 요청 (__DRIVES__) vs 초기 경로 요청 (빈 문자열, undefined, null)
     const isEmptyPath = targetPath === '' || targetPath === undefined || targetPath === null;
-    if (isEmptyPath || targetPath === '__DRIVES__') {
+
+    // 빈 경로: 기본 작업 디렉토리로 시작 (새 워크스페이스 다이얼로그 초기 상태)
+    if (isEmptyPath) {
+      const defaultPath = this.deps.folderManager.getDefaultPath();
+      const result = this.deps.folderManager.listFolders(defaultPath);
+      if (from?.deviceId !== undefined) {
+        this.send({
+          type: 'folder_list_result',
+          to: [from.deviceId],
+          payload: {
+            deviceId: this.config.deviceId,
+            ...result,  // platform 포함
+          },
+        });
+      }
+      return;
+    }
+
+    // __DRIVES__: 드라이브/루트 목록 요청
+    if (targetPath === '__DRIVES__') {
       const driveResult = this.deps.folderManager.listDrives();
 
       // Linux인 경우 드라이브 목록 대신 루트 '/'의 폴더 목록 반환
