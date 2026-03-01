@@ -3,6 +3,8 @@
  * Git pull + deploy executor
  */
 import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 export interface ExecuteOptions {
   branch: string;
@@ -47,6 +49,43 @@ function runCommand(
   });
 }
 
+function runDetached(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  onLog: (msg: string) => void
+): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const logDir = path.join(cwd, 'release-data', 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logFile = path.join(logDir, `deploy-${Date.now()}.log`);
+    const out = fs.openSync(logFile, 'a');
+    const err = fs.openSync(logFile, 'a');
+
+    onLog(`Deploy log: ${logFile}`);
+
+    const child = spawn(cmd, args, {
+      cwd,
+      detached: true,
+      stdio: ['ignore', out, err],
+    });
+
+    child.unref();
+
+    // Give it a moment to start, then report success
+    setTimeout(() => {
+      onLog(`Deploy started (pid: ${child.pid}, detached)`);
+      resolve({ success: true });
+    }, 1000);
+
+    child.on('error', (e) => {
+      resolve({ success: false, error: e.message });
+    });
+  });
+}
+
 export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteResult> {
   const { branch, repoRoot, onLog } = options;
 
@@ -71,9 +110,9 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     return { success: false, error: `git pull failed: ${pullResult.error}` };
   }
 
-  // Step 4: pnpm deploy:release
-  onLog(`[4/4] pnpm deploy:release...`);
-  const deployResult = await runCommand('pnpm', ['deploy:release'], repoRoot, onLog);
+  // Step 4: pnpm deploy:release (detached - survives parent restart)
+  onLog(`[4/4] pnpm deploy:release (detached)...`);
+  const deployResult = await runDetached('pnpm', ['deploy:release'], repoRoot, onLog);
   if (!deployResult.success) {
     return { success: false, error: `deploy failed: ${deployResult.error}` };
   }

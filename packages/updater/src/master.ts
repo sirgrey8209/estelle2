@@ -52,16 +52,21 @@ export function startMaster(options: MasterOptions): MasterInstance {
 
     ws.on('message', (data) => {
       try {
-        const msg = JSON.parse(data.toString()) as AgentMessage;
+        const msg = JSON.parse(data.toString());
 
-        if (msg.type === 'log') {
-          const logLine = `[${msg.ip}] ${msg.message}`;
+        if (msg.type === 'update') {
+          // Received trigger command from CLI or MCP
+          console.log(`[Master] Received trigger: target=${msg.target}, branch=${msg.branch}`);
+          triggerUpdate(msg.target, msg.branch);
+        } else if (msg.type === 'log') {
+          const logLine = `[${(msg as LogMessage).ip}] ${(msg as LogMessage).message}`;
           console.log(logLine);
           currentLogCallback?.(logLine);
         } else if (msg.type === 'result') {
-          const status = msg.success ? '✓' : '✗';
-          const detail = msg.success ? msg.version : msg.error;
-          const logLine = `[${msg.ip}] ${status} ${detail}`;
+          const rm = msg as ResultMessage;
+          const status = rm.success ? '✓' : '✗';
+          const detail = rm.success ? rm.version : rm.error;
+          const logLine = `[${rm.ip}] ${status} ${detail}`;
           console.log(logLine);
           currentLogCallback?.(logLine);
         }

@@ -8,28 +8,10 @@
  *   npx estelle-updater trigger all master
  *   npx estelle-updater trigger 5.223.72.58 hotfix
  */
-import { start, startMaster } from './index.js';
+import { start } from './index.js';
 import { loadConfig, parseMasterIp, getDefaultConfigPath } from './config.js';
-import { getExternalIp } from './ip.js';
-import path from 'path';
-import fs from 'fs';
-
-function findRepoRoot(): string {
-  let dir = process.cwd();
-  let prevDir = '';
-  while (dir !== prevDir) {  // Cross-platform: stops when dirname no longer changes
-    const pkgPath = path.join(dir, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      if (pkg.workspaces) {
-        return dir;
-      }
-    }
-    prevDir = dir;
-    dir = path.dirname(dir);
-  }
-  return process.cwd();
-}
+import { WebSocket } from 'ws';
+import type { UpdateCommand } from './types.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -41,39 +23,38 @@ async function main(): Promise<void> {
   }
 
   if (args[0] === 'trigger') {
-    // Trigger mode: trigger <target> <branch>
+    // Trigger mode: connect to running master and send command
     const target = args[1] || 'all';
     const branch = args[2] || 'master';
 
     const configPath = getDefaultConfigPath();
     const config = loadConfig(configPath);
-    const masterIp = parseMasterIp(config.masterUrl);
-    const myIp = getExternalIp();
-    const repoRoot = findRepoRoot();
 
-    if (myIp !== masterIp) {
-      console.error(`[CLI] Error: trigger command can only be run on master (${masterIp})`);
-      process.exit(1);
-    }
+    // Connect to the already-running master as a client
+    const httpUrl = config.masterUrl.replace('ws://', 'http://');
+    console.log(`[CLI] Connecting to master: ${config.masterUrl}`);
 
-    console.log(`[CLI] Triggering update: target=${target}, branch=${branch}`);
+    const ws = new WebSocket(config.masterUrl);
 
-    const url = new URL(config.masterUrl);
-    const master = startMaster({
-      port: parseInt(url.port, 10),
-      whitelist: config.whitelist,
-      repoRoot,
-      myIp,
+    ws.on('open', () => {
+      console.log(`[CLI] Connected. Triggering update: target=${target}, branch=${branch}`);
+
+      const cmd: UpdateCommand = { type: 'update', target, branch };
+      ws.send(JSON.stringify(cmd));
+
+      // Wait for response then exit
+      setTimeout(() => {
+        console.log(`[CLI] Command sent. Check pm2 logs estelle-updater for progress.`);
+        ws.close();
+        process.exit(0);
+      }, 1000);
     });
 
-    // Wait a bit for agents to connect, then trigger
-    setTimeout(async () => {
-      await master.triggerUpdate(target, branch, (msg) => {
-        console.log(msg);
-      });
-      console.log(`[CLI] Update complete`);
-      process.exit(0);
-    }, 2000);
+    ws.on('error', (err) => {
+      console.error(`[CLI] Connection failed: ${err.message}`);
+      console.error(`[CLI] Is estelle-updater running? Check: pm2 status`);
+      process.exit(1);
+    });
 
     return;
   }
