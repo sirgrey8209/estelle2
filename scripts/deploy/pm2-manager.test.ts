@@ -1,36 +1,49 @@
+/**
+ * PM2 Manager Tests
+ *
+ * Tests for the PM2 service management module using spawnSync.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  spawnSync: vi.fn(),
 }));
 
 describe('pm2Manager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   describe('stopService', () => {
     it('should stop pm2 service by name', async () => {
-      const mockExecSync = vi.mocked(execSync);
-      mockExecSync.mockReturnValue(Buffer.from(''));
+      const mockSpawnSync = vi.mocked(spawnSync);
+      mockSpawnSync.mockReturnValue({
+        status: 0,
+        stdout: Buffer.from(''),
+        stderr: Buffer.from(''),
+        pid: 123,
+        output: [],
+        signal: null,
+      });
 
       const { stopService } = await import('./pm2-manager.js');
       stopService('estelle-pylon');
 
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'pm2 delete estelle-pylon',
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        'pm2',
+        ['delete', 'estelle-pylon'],
         expect.any(Object)
       );
     });
 
     it('should not throw on already stopped service', async () => {
-      const mockExecSync = vi.mocked(execSync);
-      mockExecSync.mockImplementation(() => {
+      const mockSpawnSync = vi.mocked(spawnSync);
+      mockSpawnSync.mockImplementation(() => {
         throw new Error('Process not found');
       });
 
-      vi.resetModules();
       const { stopService } = await import('./pm2-manager.js');
 
       // Should not throw
@@ -40,10 +53,16 @@ describe('pm2Manager', () => {
 
   describe('startService', () => {
     it('should start pm2 service with config', async () => {
-      const mockExecSync = vi.mocked(execSync);
-      mockExecSync.mockReturnValue(Buffer.from(''));
+      const mockSpawnSync = vi.mocked(spawnSync);
+      mockSpawnSync.mockReturnValue({
+        status: 0,
+        stdout: Buffer.from(''),
+        stderr: Buffer.from(''),
+        pid: 123,
+        output: [],
+        signal: null,
+      });
 
-      vi.resetModules();
       const { startService } = await import('./pm2-manager.js');
       const result = startService({
         name: 'estelle-relay',
@@ -53,7 +72,35 @@ describe('pm2Manager', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockExecSync).toHaveBeenCalled();
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        'pm2',
+        ['start', 'dist/bin.js', '--name', 'estelle-relay', '--cwd', '/app/relay'],
+        expect.objectContaining({
+          stdio: 'inherit',
+          env: expect.objectContaining({ PORT: '8080' }),
+        })
+      );
+    });
+
+    it('should return error on failed start', async () => {
+      const mockSpawnSync = vi.mocked(spawnSync);
+      mockSpawnSync.mockReturnValue({
+        status: 1,
+        stdout: Buffer.from(''),
+        stderr: Buffer.from('Failed to start'),
+        pid: 123,
+        output: [],
+        signal: null,
+      });
+
+      const { startService } = await import('./pm2-manager.js');
+      const result = startService({
+        name: 'estelle-relay',
+        script: 'dist/bin.js',
+        cwd: '/app/relay',
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 });
