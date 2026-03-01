@@ -59,6 +59,8 @@ export default defineConfig({
       workbox: {
         // 앱 쉘만 최소 캐싱 (WebSocket 앱이라 오프라인 의미 없음)
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // /hub는 서버에서 별도 서빙하는 Dev Hub 대시보드이므로 SPA fallback 제외
+        navigateFallbackDenylist: [/^\/hub/],
       },
     }),
     versionJsonPlugin(),
