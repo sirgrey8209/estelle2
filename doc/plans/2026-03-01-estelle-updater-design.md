@@ -16,7 +16,7 @@ Git 기반 크로스 플랫폼 배포 시스템. Windows와 Linux 환경 간 코
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│              Hetzner (5.223.72.58)                           │
+│              Hetzner (89.167.4.124)                           │
 │              myIp == masterIp → Master 모드                  │
 │                                                              │
 │   - WebSocket 서버 (포트 9900)                               │
@@ -53,8 +53,8 @@ if (myIp === masterIp) {
 ```json
 // config/updater.json (Git 커밋)
 {
-  "masterUrl": "ws://5.223.72.58:9900",
-  "whitelist": ["5.223.72.58", "121.x.x.x"]
+  "masterUrl": "ws://89.167.4.124:9900",
+  "whitelist": ["89.167.4.124", "121.x.x.x"]
 }
 ```
 
@@ -98,11 +98,11 @@ npx estelle-updater trigger 121.x.x.x hotfix-123
 ```
 Agent → Master → CLI/MCP
 
-[5.223.72.58] git pull origin master...
-[5.223.72.58] Already up to date.
-[5.223.72.58] pnpm deploy:release...
+[89.167.4.124] git pull origin master...
+[89.167.4.124] Already up to date.
+[89.167.4.124] pnpm deploy:release...
 [121.x.x.x] git pull origin master...
-[5.223.72.58] ✓ 완료 v0301_4
+[89.167.4.124] ✓ 완료 v0301_4
 [121.x.x.x] Building...
 [121.x.x.x] ✓ 완료 v0301_4
 ```

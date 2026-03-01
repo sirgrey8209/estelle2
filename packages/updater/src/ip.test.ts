@@ -13,14 +13,14 @@ describe('ip', () => {
   it('should get local IPv4 address from network interfaces', async () => {
     vi.mocked(os.networkInterfaces).mockReturnValue({
       eth0: [
-        { address: '5.223.72.58', family: 'IPv4', internal: false } as any,
+        { address: '89.167.4.124', family: 'IPv4', internal: false } as any,
       ],
     });
 
     const { getExternalIp } = await import('./ip.js');
     const ip = getExternalIp();
 
-    expect(ip).toBe('5.223.72.58');
+    expect(ip).toBe('89.167.4.124');
   });
 
   it('should skip internal addresses', async () => {

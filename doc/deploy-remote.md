@@ -7,7 +7,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              Hetzner 서버 (5.223.72.58)             │
+│              Hetzner 서버 (89.167.4.124)             │
 │                                                      │
 │  ┌──────────┐    ┌──────────┐                       │
 │  │  Pylon   │◄──►│  Relay   │◄────────┐             │
@@ -171,7 +171,7 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Master (5.223.72.58:9900)                │
+│                    Master (89.167.4.124:9900)                │
 │  - WebSocket 서버                                            │
 │  - 에이전트 관리 및 명령 브로드캐스트                         │
 │  - 실시간 로그 수집                                          │
@@ -181,7 +181,7 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
           │                           │
 ┌─────────┴─────────┐       ┌─────────┴─────────┐
 │   Agent (Linux)   │       │  Agent (Windows)  │
-│   5.223.72.58     │       │   121.x.x.x       │
+│   89.167.4.124     │       │   121.x.x.x       │
 └───────────────────┘       └───────────────────┘
 ```
 
@@ -192,8 +192,8 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
 `config/updater.json`:
 ```json
 {
-  "masterUrl": "ws://5.223.72.58:9900",
-  "whitelist": ["5.223.72.58", "YOUR_IP"]
+  "masterUrl": "ws://89.167.4.124:9900",
+  "whitelist": ["89.167.4.124", "YOUR_IP"]
 }
 ```
 
@@ -231,7 +231,7 @@ update({ target: '121.x.x.x', branch: 'hotfix' })
 **CLI:**
 ```bash
 npx estelle-updater trigger all master
-npx estelle-updater trigger 5.223.72.58 hotfix
+npx estelle-updater trigger 89.167.4.124 hotfix
 ```
 
 ### 동작 방식

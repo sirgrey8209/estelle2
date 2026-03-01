@@ -61,7 +61,7 @@ git commit -m "fix: 계정 변경을 office Pylon 전용으로 변경"
           variant="outline"
           size="sm"
           className="w-full mt-3"
-          onClick={() => window.open('http://5.223.72.58:8080/hub', '_blank')}
+          onClick={() => window.open('http://89.167.4.124:8080/hub', '_blank')}
         >
           🌐 Hub 열기
         </Button>
@@ -84,5 +84,5 @@ git commit -m "feat: 설정창에 Hub 링크 버튼 추가"
 ## 완료 조건
 
 - [ ] 계정 변경이 `to: [1]`로 전송됨
-- [ ] Hub 버튼 클릭 시 외부 브라우저로 `http://5.223.72.58:8080/hub` 열림
+- [ ] Hub 버튼 클릭 시 외부 브라우저로 `http://89.167.4.124:8080/hub` 열림
 - [ ] 빌드 성공

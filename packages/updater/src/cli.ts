@@ -6,7 +6,7 @@
  * Usage:
  *   npx estelle-updater              # Start as master or agent (auto-detect)
  *   npx estelle-updater trigger all master
- *   npx estelle-updater trigger 5.223.72.58 hotfix
+ *   npx estelle-updater trigger 89.167.4.124 hotfix
  */
 import { start } from './index.js';
 import { loadConfig, parseMasterIp, getDefaultConfigPath } from './config.js';
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
 
 Examples:
   npx estelle-updater trigger all master
-  npx estelle-updater trigger 5.223.72.58 hotfix-123
+  npx estelle-updater trigger 89.167.4.124 hotfix-123
 `);
 }
 

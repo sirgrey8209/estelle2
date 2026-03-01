@@ -23,9 +23,9 @@ describe('agent', () => {
     vi.mocked(WebSocket).mockImplementation(() => mockWs as any);
 
     const { startAgent } = await import('./agent.js');
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app' });
 
-    expect(WebSocket).toHaveBeenCalledWith('ws://5.223.72.58:9900');
+    expect(WebSocket).toHaveBeenCalledWith('ws://89.167.4.124:9900');
   });
 
   it('should execute update on command and send result', async () => {
@@ -39,7 +39,7 @@ describe('agent', () => {
     const { startAgent } = await import('./agent.js');
     const { executeUpdate } = await import('./executor.js');
 
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app', myIp: '1.2.3.4' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app', myIp: '1.2.3.4' });
 
     // Simulate receiving update command
     const cmd = JSON.stringify({ type: 'update', target: 'all', branch: 'master' });
@@ -76,7 +76,7 @@ describe('agent', () => {
     });
 
     const { startAgent } = await import('./agent.js');
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app', myIp: '1.2.3.4' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app', myIp: '1.2.3.4' });
 
     // Simulate receiving update command
     const cmd = JSON.stringify({ type: 'update', target: 'all', branch: 'master' });
@@ -108,7 +108,7 @@ describe('agent', () => {
     const { startAgent } = await import('./agent.js');
     const { executeUpdate } = await import('./executor.js');
 
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app', myIp: '1.2.3.4' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app', myIp: '1.2.3.4' });
 
     // Command for different IP
     const cmd = JSON.stringify({ type: 'update', target: '9.9.9.9', branch: 'master' });
@@ -132,7 +132,7 @@ describe('agent', () => {
     vi.mocked(executeUpdate).mockRejectedValue(new Error('Deploy failed'));
 
     const { startAgent } = await import('./agent.js');
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app', myIp: '1.2.3.4' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app', myIp: '1.2.3.4' });
 
     const cmd = JSON.stringify({ type: 'update', target: 'all', branch: 'master' });
     mockWs.emit('message', cmd);

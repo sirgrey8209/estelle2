@@ -11,7 +11,7 @@ export function loadConfig(configPath: string): UpdaterConfig {
 }
 
 export function parseMasterIp(masterUrl: string): string {
-  // ws://5.223.72.58:9900 → 5.223.72.58
+  // ws://89.167.4.124:9900 → 89.167.4.124
   const url = new URL(masterUrl);
   return url.hostname;
 }

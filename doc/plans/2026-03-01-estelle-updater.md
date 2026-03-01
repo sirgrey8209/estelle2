@@ -131,23 +131,23 @@ describe('config', () => {
 
   it('should load config from file', async () => {
     const mockConfig = {
-      masterUrl: 'ws://5.223.72.58:9900',
-      whitelist: ['5.223.72.58', '121.0.0.1'],
+      masterUrl: 'ws://89.167.4.124:9900',
+      whitelist: ['89.167.4.124', '121.0.0.1'],
     };
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
 
     const { loadConfig } = await import('./config.js');
     const config = loadConfig('/path/to/config.json');
 
-    expect(config.masterUrl).toBe('ws://5.223.72.58:9900');
-    expect(config.whitelist).toContain('5.223.72.58');
+    expect(config.masterUrl).toBe('ws://89.167.4.124:9900');
+    expect(config.whitelist).toContain('89.167.4.124');
   });
 
   it('should parse masterUrl to extract IP', async () => {
     vi.resetModules();
     const { parseMasterIp } = await import('./config.js');
 
-    expect(parseMasterIp('ws://5.223.72.58:9900')).toBe('5.223.72.58');
+    expect(parseMasterIp('ws://89.167.4.124:9900')).toBe('89.167.4.124');
     expect(parseMasterIp('ws://192.168.1.1:8080')).toBe('192.168.1.1');
   });
 });
@@ -175,7 +175,7 @@ export function loadConfig(configPath: string): UpdaterConfig {
 }
 
 export function parseMasterIp(masterUrl: string): string {
-  // ws://5.223.72.58:9900 → 5.223.72.58
+  // ws://89.167.4.124:9900 → 89.167.4.124
   const url = new URL(masterUrl);
   return url.hostname;
 }
@@ -202,8 +202,8 @@ export function getDefaultConfigPath(): string {
 ```json
 // config/updater.json
 {
-  "masterUrl": "ws://5.223.72.58:9900",
-  "whitelist": ["5.223.72.58"]
+  "masterUrl": "ws://89.167.4.124:9900",
+  "whitelist": ["89.167.4.124"]
 }
 ```
 
@@ -245,7 +245,7 @@ describe('ip', () => {
     vi.mocked(https.get).mockImplementation((url, callback: any) => {
       callback(mockResponse);
       process.nextTick(() => {
-        mockResponse.emit('data', '5.223.72.58');
+        mockResponse.emit('data', '89.167.4.124');
         mockResponse.emit('end');
       });
       return new EventEmitter() as any;
@@ -254,7 +254,7 @@ describe('ip', () => {
     const { getExternalIp } = await import('./ip.js');
     const ip = await getExternalIp();
 
-    expect(ip).toBe('5.223.72.58');
+    expect(ip).toBe('89.167.4.124');
   });
 });
 ```
@@ -494,9 +494,9 @@ describe('agent', () => {
     vi.mocked(WebSocket).mockImplementation(() => mockWs as any);
 
     const { startAgent } = await import('./agent.js');
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app' });
 
-    expect(WebSocket).toHaveBeenCalledWith('ws://5.223.72.58:9900');
+    expect(WebSocket).toHaveBeenCalledWith('ws://89.167.4.124:9900');
   });
 
   it('should execute update on command', async () => {
@@ -510,7 +510,7 @@ describe('agent', () => {
     const { startAgent } = await import('./agent.js');
     const { executeUpdate } = await import('./executor.js');
 
-    startAgent({ masterUrl: 'ws://5.223.72.58:9900', repoRoot: '/app' });
+    startAgent({ masterUrl: 'ws://89.167.4.124:9900', repoRoot: '/app' });
 
     // Simulate receiving update command
     const cmd = JSON.stringify({ type: 'update', target: 'all', branch: 'master' });
@@ -651,9 +651,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     expect(WebSocketServer).toHaveBeenCalledWith({ port: 9900 });
@@ -669,9 +669,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const mockSocket = new EventEmitter() as any;
@@ -930,7 +930,7 @@ git commit -m "feat(updater): add main entry with auto role detection"
  * Usage:
  *   npx estelle-updater              # Start as master or agent (auto-detect)
  *   npx estelle-updater trigger all master
- *   npx estelle-updater trigger 5.223.72.58 hotfix
+ *   npx estelle-updater trigger 89.167.4.124 hotfix
  */
 import { start, startMaster } from './index.js';
 import { loadConfig, parseMasterIp, getDefaultConfigPath } from './config.js';
@@ -1007,7 +1007,7 @@ async function main(): Promise<void> {
 
 Examples:
   npx estelle-updater trigger all master
-  npx estelle-updater trigger 5.223.72.58 hotfix-123
+  npx estelle-updater trigger 89.167.4.124 hotfix-123
 `);
 }
 
@@ -1196,8 +1196,8 @@ estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
 `config/updater.json`:
 ```json
 {
-  "masterUrl": "ws://5.223.72.58:9900",
-  "whitelist": ["5.223.72.58", "YOUR_IP"]
+  "masterUrl": "ws://89.167.4.124:9900",
+  "whitelist": ["89.167.4.124", "YOUR_IP"]
 }
 ```
 
@@ -1212,7 +1212,7 @@ update({ target: '121.x.x.x', branch: 'hotfix' })
 **CLI:**
 ```bash
 npx estelle-updater trigger all master
-npx estelle-updater trigger 5.223.72.58 hotfix
+npx estelle-updater trigger 89.167.4.124 hotfix
 ```
 
 ### 동작 방식

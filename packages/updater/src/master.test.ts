@@ -23,9 +23,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     expect(WebSocketServer).toHaveBeenCalledWith({ port: 9900 });
@@ -40,9 +40,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const mockSocket = new EventEmitter() as any;
@@ -64,9 +64,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     const master = startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const mockSocket = new EventEmitter() as any;
@@ -74,7 +74,7 @@ describe('master', () => {
     mockSocket.send = vi.fn();
     mockSocket.readyState = WebSocket.OPEN;
 
-    const mockReq = { socket: { remoteAddress: '5.223.72.58' } };
+    const mockReq = { socket: { remoteAddress: '89.167.4.124' } };
     mockWss.emit('connection', mockSocket, mockReq);
 
     expect(mockSocket.close).not.toHaveBeenCalled();
@@ -90,9 +90,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     const master = startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58', '1.2.3.4'],
+      whitelist: ['89.167.4.124', '1.2.3.4'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     // Connect two agents
@@ -106,7 +106,7 @@ describe('master', () => {
     mockSocket2.send = vi.fn();
     mockSocket2.readyState = WebSocket.OPEN;
 
-    mockWss.emit('connection', mockSocket1, { socket: { remoteAddress: '5.223.72.58' } });
+    mockWss.emit('connection', mockSocket1, { socket: { remoteAddress: '89.167.4.124' } });
     mockWss.emit('connection', mockSocket2, { socket: { remoteAddress: '1.2.3.4' } });
 
     // Broadcast
@@ -131,9 +131,9 @@ describe('master', () => {
 
     const master = startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const logs: string[] = [];
@@ -156,9 +156,9 @@ describe('master', () => {
     const { startMaster } = await import('./master.js');
     const master = startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const mockSocket = new EventEmitter() as any;
@@ -166,7 +166,7 @@ describe('master', () => {
     mockSocket.send = vi.fn();
     mockSocket.readyState = WebSocket.OPEN;
 
-    mockWss.emit('connection', mockSocket, { socket: { remoteAddress: '5.223.72.58' } });
+    mockWss.emit('connection', mockSocket, { socket: { remoteAddress: '89.167.4.124' } });
     expect(master.agents.size).toBe(1);
 
     // Simulate disconnect
@@ -184,9 +184,9 @@ describe('master', () => {
     const logs: string[] = [];
     const master = startMaster({
       port: 9900,
-      whitelist: ['5.223.72.58'],
+      whitelist: ['89.167.4.124'],
       repoRoot: '/app',
-      myIp: '5.223.72.58',
+      myIp: '89.167.4.124',
     });
 
     const mockSocket = new EventEmitter() as any;
@@ -194,13 +194,13 @@ describe('master', () => {
     mockSocket.send = vi.fn();
     mockSocket.readyState = WebSocket.OPEN;
 
-    mockWss.emit('connection', mockSocket, { socket: { remoteAddress: '5.223.72.58' } });
+    mockWss.emit('connection', mockSocket, { socket: { remoteAddress: '89.167.4.124' } });
 
     // Set up log callback via triggerUpdate
     master.triggerUpdate('none', 'master', (msg) => logs.push(msg));
 
     // Simulate receiving log message
-    const logMsg = JSON.stringify({ type: 'log', ip: '5.223.72.58', message: 'Building...' });
+    const logMsg = JSON.stringify({ type: 'log', ip: '89.167.4.124', message: 'Building...' });
     mockSocket.emit('message', logMsg);
 
     expect(logs.some((log) => log.includes('Building...'))).toBe(true);

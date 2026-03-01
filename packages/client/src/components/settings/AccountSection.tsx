@@ -103,7 +103,7 @@ export function AccountSection() {
           variant="outline"
           size="sm"
           className="w-full mt-3"
-          onClick={() => window.open('http://5.223.72.58:8080/hub', '_blank')}
+          onClick={() => window.open('http://89.167.4.124:8080/hub', '_blank')}
         >
           🌐 Hub 열기
         </Button>

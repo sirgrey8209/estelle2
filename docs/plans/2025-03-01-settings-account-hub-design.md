@@ -7,7 +7,7 @@
 ## 요구사항
 
 1. **계정 변경 라우팅 수정**: 현재 모든 Pylon에게 브로드캐스트되는 계정 변경 요청을 office Pylon(pylonId = 1) 전용으로 변경
-2. **Hub 링크 추가**: 계정 섹션 하단에 Hub 페이지(`http://5.223.72.58:8080/hub`)를 외부 브라우저로 여는 버튼 추가
+2. **Hub 링크 추가**: 계정 섹션 하단에 Hub 페이지(`http://89.167.4.124:8080/hub`)를 외부 브라우저로 여는 버튼 추가
 
 ## 설계
 
@@ -46,7 +46,7 @@ export function requestAccountSwitch(account: AccountType): boolean {
   variant="outline"
   size="sm"
   className="w-full mt-3"
-  onClick={() => window.open('http://5.223.72.58:8080/hub', '_blank')}
+  onClick={() => window.open('http://89.167.4.124:8080/hub', '_blank')}
 >
   🌐 Hub 열기
 </Button>
