@@ -33,6 +33,10 @@ export function startMaster(options: MasterOptions): MasterInstance {
   console.log(`[Master] Starting WebSocket server on port ${port}`);
   const wss = new WebSocketServer({ port });
 
+  wss.on('error', (err) => {
+    console.error(`[Master] WebSocket server error:`, err);
+  });
+
   wss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress?.replace('::ffff:', '') || 'unknown';
 
@@ -75,7 +79,13 @@ export function startMaster(options: MasterOptions): MasterInstance {
   function broadcast(msg: UpdateCommand): void {
     const payload = JSON.stringify(msg);
     for (const agent of agents.values()) {
-      agent.ws.send(payload);
+      try {
+        if (agent.ws.readyState === WebSocket.OPEN) {
+          agent.ws.send(payload);
+        }
+      } catch (err) {
+        console.error(`[Master] Failed to send to ${agent.ip}:`, err);
+      }
     }
   }
 
