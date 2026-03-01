@@ -98,6 +98,15 @@ export function AccountSection() {
         <p className="text-xs text-muted-foreground text-center mt-2">
           ⚠️ 계정 변경 시 모든 세션이 재시작됩니다
         </p>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-3"
+          onClick={() => window.open('http://5.223.72.58:8080/hub', '_blank')}
+        >
+          🌐 Hub 열기
+        </Button>
       </CardContent>
     </Card>
   );
