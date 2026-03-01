@@ -65,7 +65,13 @@ export async function start(): Promise<void> {
   }
 }
 
-// Auto-start if run directly
-if (process.argv[1]?.includes('updater')) {
-  start().catch(console.error);
+// Auto-start if run directly (works with both direct execution and PM2)
+const isMainModule = process.argv[1]?.includes('updater') ||
+                     process.argv[1]?.includes('index.js');
+
+if (isMainModule) {
+  start().catch((err) => {
+    console.error('[Updater] Fatal error:', err);
+    process.exit(1);
+  });
 }

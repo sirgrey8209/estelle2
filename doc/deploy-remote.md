@@ -209,9 +209,11 @@ pnpm --filter @estelle/updater build
 **3. PM2로 실행:**
 
 ```bash
-pm2 start packages/updater/dist/index.js --name estelle-updater
+pm2 start packages/updater/start.cjs --name estelle-updater
 pm2 save
 ```
+
+> ⚠️ ESM 모듈 호환성을 위해 `start.cjs` wrapper를 사용합니다.
 
 **4. 역할 자동 감지:**
 
