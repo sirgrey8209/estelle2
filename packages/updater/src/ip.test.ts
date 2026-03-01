@@ -1,9 +1,8 @@
 // packages/updater/src/ip.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import https from 'https';
-import { EventEmitter } from 'events';
+import os from 'os';
 
-vi.mock('https');
+vi.mock('os');
 
 describe('ip', () => {
   beforeEach(() => {
@@ -11,49 +10,55 @@ describe('ip', () => {
     vi.resetModules();
   });
 
-  it('should get external IP from ipify', async () => {
-    const mockResponse = new EventEmitter() as any;
-    mockResponse.setEncoding = vi.fn();
-
-    vi.mocked(https.get).mockImplementation((url, callback: any) => {
-      callback(mockResponse);
-      process.nextTick(() => {
-        mockResponse.emit('data', '5.223.72.58');
-        mockResponse.emit('end');
-      });
-      return new EventEmitter() as any;
+  it('should get local IPv4 address from network interfaces', async () => {
+    vi.mocked(os.networkInterfaces).mockReturnValue({
+      eth0: [
+        { address: '5.223.72.58', family: 'IPv4', internal: false } as any,
+      ],
     });
 
     const { getExternalIp } = await import('./ip.js');
-    const ip = await getExternalIp();
+    const ip = getExternalIp();
 
     expect(ip).toBe('5.223.72.58');
   });
 
-  it('should reject on HTTPS request error', async () => {
-    const mockError = new Error('Connection refused');
-
-    vi.mocked(https.get).mockImplementation(() => {
-      const requestEmitter = new EventEmitter() as any;
-      process.nextTick(() => requestEmitter.emit('error', mockError));
-      return requestEmitter;
+  it('should skip internal addresses', async () => {
+    vi.mocked(os.networkInterfaces).mockReturnValue({
+      lo: [
+        { address: '127.0.0.1', family: 'IPv4', internal: true } as any,
+      ],
+      eth0: [
+        { address: '10.0.0.1', family: 'IPv4', internal: false } as any,
+      ],
     });
 
     const { getExternalIp } = await import('./ip.js');
-    await expect(getExternalIp()).rejects.toThrow('Connection refused');
+    const ip = getExternalIp();
+
+    expect(ip).toBe('10.0.0.1');
   });
 
-  it('should reject on response stream error', async () => {
-    const mockResponse = new EventEmitter() as any;
-    mockResponse.setEncoding = vi.fn();
-
-    vi.mocked(https.get).mockImplementation((url, callback: any) => {
-      callback(mockResponse);
-      process.nextTick(() => mockResponse.emit('error', new Error('Stream error')));
-      return new EventEmitter() as any;
+  it('should skip IPv6 addresses', async () => {
+    vi.mocked(os.networkInterfaces).mockReturnValue({
+      eth0: [
+        { address: 'fe80::1', family: 'IPv6', internal: false } as any,
+        { address: '192.168.1.100', family: 'IPv4', internal: false } as any,
+      ],
     });
 
     const { getExternalIp } = await import('./ip.js');
-    await expect(getExternalIp()).rejects.toThrow('Stream error');
+    const ip = getExternalIp();
+
+    expect(ip).toBe('192.168.1.100');
+  });
+
+  it('should return unknown if no valid interface found', async () => {
+    vi.mocked(os.networkInterfaces).mockReturnValue({});
+
+    const { getExternalIp } = await import('./ip.js');
+    const ip = getExternalIp();
+
+    expect(ip).toBe('unknown');
   });
 });

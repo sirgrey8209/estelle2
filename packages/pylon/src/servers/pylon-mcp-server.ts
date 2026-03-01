@@ -1084,7 +1084,7 @@ export class PylonMcpServer {
       const configPath = getDefaultConfigPath();
       const config = loadConfig(configPath);
       const masterIp = parseMasterIp(config.masterUrl);
-      const myIp = await getExternalIp();
+      const myIp = getExternalIp();
       const repoRoot = this._findRepoRoot();
 
       if (myIp !== masterIp) {

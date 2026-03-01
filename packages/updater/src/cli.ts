@@ -16,7 +16,8 @@ import fs from 'fs';
 
 function findRepoRoot(): string {
   let dir = process.cwd();
-  while (dir !== '/') {
+  let prevDir = '';
+  while (dir !== prevDir) {  // Cross-platform: stops when dirname no longer changes
     const pkgPath = path.join(dir, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -24,6 +25,7 @@ function findRepoRoot(): string {
         return dir;
       }
     }
+    prevDir = dir;
     dir = path.dirname(dir);
   }
   return process.cwd();
@@ -46,7 +48,7 @@ async function main(): Promise<void> {
     const configPath = getDefaultConfigPath();
     const config = loadConfig(configPath);
     const masterIp = parseMasterIp(config.masterUrl);
-    const myIp = await getExternalIp();
+    const myIp = getExternalIp();
     const repoRoot = findRepoRoot();
 
     if (myIp !== masterIp) {
