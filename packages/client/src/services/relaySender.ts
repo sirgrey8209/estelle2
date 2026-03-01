@@ -441,7 +441,7 @@ export function requestAccountSwitch(account: AccountType): boolean {
   return sendMessage({
     type: MessageType.ACCOUNT_SWITCH,
     payload: { account },
-    broadcast: 'pylons',
+    to: [1],  // office Pylon 전용
   });
 }
 
