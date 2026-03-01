@@ -6,29 +6,33 @@
 ## 구조
 
 ```
-                    ┌─────────────────┐
-                    │  Estelle Relay  │
-                    │   (Fly.io)      │
-                    └────────┬────────┘
-                             │ WebSocket (WSS)
-              ┌──────────────┼──────────────┐
-              │              │              │
-        ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
-        │  Pylon    │  │  Client   │  │  Client   │
-        │ (로컬 PC) │  │ (브라우저)│  │ (모바일)  │
-        └───────────┘  └───────────┘  └───────────┘
-              │
-         Claude Code
+┌─────────────────────────────────────────────────────┐
+│              Hetzner 서버 (5.223.72.58)             │
+│                                                      │
+│  ┌──────────┐    ┌──────────┐                       │
+│  │  Pylon   │◄──►│  Relay   │◄────────┐             │
+│  │ (PM2)    │    │ (PM2)    │         │             │
+│  └──────────┘    └──────────┘         │             │
+│       │                               │             │
+│  Claude Code                    WebSocket           │
+└───────────────────────────────────────┼─────────────┘
+                                        │
+              ┌─────────────────────────┼────────────┐
+              │                         │            │
+        ┌─────┴─────┐            ┌─────┴─────┐ ┌────┴────┐
+        │  Client   │            │  Client   │ │ Client  │
+        │ (브라우저)│            │ (모바일)  │ │ (다른PC)│
+        └───────────┘            └───────────┘ └─────────┘
 ```
 
 **특징:**
 - 어디서든 접속 가능 (모바일, 다른 PC)
-- HTTPS/WSS 보안 연결
-- Google OAuth 인증
+- Relay + Pylon이 같은 서버에서 실행
+- PM2로 프로세스 관리
 
 **필요한 것:**
-- Fly.io 계정 (무료)
-- Google Cloud Console 프로젝트 (무료)
+- Linux 서버 (Ubuntu 20.04+)
+- Node.js 20+, pnpm, PM2
 
 ---
 
@@ -41,94 +45,61 @@
 node --version   # 20+ 필요
 pnpm --version   # 8+ 필요
 pm2 --version
-fly version
+jq --version     # JSON 파싱용
 ```
 
 **설치 안내 (필요시):**
-- Node.js: "https://nodejs.org/ 에서 LTS 버전 설치"
+- Node.js: `curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs`
 - pnpm: `npm install -g pnpm`
 - PM2: `npm install -g pm2`
-- Fly.io CLI: "https://fly.io/docs/flyctl/install/ 참고"
+- jq: `sudo apt install -y jq`
 
-### 2단계: 사용자 정보 요청
-
-**사용자에게 요청:**
-
-1. **Fly.io 앱 이름** (전 세계 고유해야 함)
-   > "Fly.io 앱 이름을 입력해주세요 (예: my-estelle-relay):"
-
-2. **Google OAuth Client ID**
-   > "Google Cloud Console에서 OAuth Client ID를 생성하고 입력해주세요."
-   >
-   > 생성 방법:
-   > 1. https://console.cloud.google.com/ 접속
-   > 2. APIs & Services → Credentials → Create Credentials → OAuth client ID
-   > 3. Application type: Web application
-   > 4. Authorized JavaScript origins에 `https://{앱이름}.fly.dev` 추가
-   > 5. Client ID 복사 (형식: `123456789-xxx.apps.googleusercontent.com`)
-
-### 3단계: Fly.io 앱 생성
-
-```bash
-# Fly.io 로그인 (브라우저 열림)
-fly auth login
-
-# 앱 생성
-fly apps create {사용자가_입력한_앱이름}
-```
-
-### 4단계: 설정 파일 생성 및 수정
+### 2단계: 설정 파일 생성
 
 ```bash
 # 설정 파일 생성
-# Windows
-copy .env.example .env
-copy config\environments.example.json config\environments.json
-
-# Mac/Linux
 cp .env.example .env
 cp config/environments.example.json config/environments.json
 ```
 
-**`.env` 파일 수정:**
-```env
-VITE_GOOGLE_CLIENT_ID={사용자가_입력한_Client_ID}
-GOOGLE_CLIENT_ID={사용자가_입력한_Client_ID}
-```
-
-**`config/environments.json` 파일의 `release` 섹션 수정:**
+**`config/environments.json` 파일의 `release` 섹션 확인:**
 ```json
 {
   "release": {
     "relay": {
-      "url": "wss://{앱이름}.fly.dev",
-      "flyApp": "{앱이름}"
+      "port": 8080,
+      "url": "ws://localhost:8080",
+      "pm2Name": "estelle-relay"
+    },
+    "pylon": {
+      "relayUrl": "ws://localhost:8080",
+      "pm2Name": "estelle-pylon",
+      "mcpPort": 9876
     }
   }
 }
 ```
 
-### 5단계: 빌드 및 배포
+### 3단계: 빌드 및 배포
 
 ```bash
 # 의존성 설치
 pnpm install
 
-# 배포 (PowerShell)
-.\scripts\build-deploy.ps1 -Target release
+# 배포 (크로스 플랫폼)
+pnpm deploy:release
 ```
 
 **성공 시:**
-- Fly.io에 Relay 배포 완료
-- PM2로 Pylon 시작됨
+- PM2로 Relay + Pylon 시작됨
+- `pm2 status`로 확인 가능
 
-### 6단계: MCP 서버 연결
+### 4단계: MCP 서버 연결
 
 Claude Code 설정 파일에 추가:
 
 **설정 파일 위치:**
-- Windows: `%USERPROFILE%\.claude\settings.json`
-- Mac/Linux: `~/.claude/settings.json`
+- `~/.claude/settings.json`
 
 ```json
 {
@@ -145,8 +116,7 @@ Claude Code 설정 파일에 추가:
 > ⚠️ release 환경은 포트 `9876` (dev는 `9878`)
 
 **사용자에게 안내:**
-> 브라우저에서 https://{앱이름}.fly.dev 로 접속하세요.
-> Google 계정으로 로그인하면 Estelle을 사용할 수 있습니다.
+> 브라우저에서 http://{서버IP}:8080 으로 접속하세요.
 
 ---
 
@@ -188,28 +158,70 @@ cp ~/.claude/.credentials.json ~/.claude-credentials/personal.json
 
 ---
 
-## 운영 관리
+## 원격 배포 (estelle-updater)
 
-### Pylon (PM2)
+### 개요
 
-```bash
-pm2 status                    # 상태 확인
-pm2 logs estelle-pylon        # 로그 보기
-pm2 restart estelle-pylon     # 재시작
+estelle-updater는 Git 기반 크로스 플랫폼 배포 시스템입니다.
+- Windows와 Linux 환경 간 코드 동기화
+- WebSocket 기반 실시간 로그 스트리밍
+- MCP 도구 또는 CLI로 트리거
+
+### 설정
+
+`config/updater.json`:
+```json
+{
+  "masterUrl": "ws://5.223.72.58:9900",
+  "whitelist": ["5.223.72.58", "YOUR_IP"]
+}
 ```
 
-### Relay (Fly.io)
+### 사용법
+
+**MCP 도구:**
+```typescript
+update({ target: 'all', branch: 'master' })
+update({ target: '121.x.x.x', branch: 'hotfix' })
+```
+
+**CLI:**
+```bash
+npx estelle-updater trigger all master
+npx estelle-updater trigger 5.223.72.58 hotfix
+```
+
+### 동작 방식
+
+1. 명령 수신
+2. `git fetch && git checkout {branch} && git pull`
+3. `pnpm deploy:release` 자동 실행
+4. 실시간 로그 스트리밍
+5. 완료/실패 알림
+
+---
+
+## 운영 관리
+
+### PM2 관리
 
 ```bash
-fly status -a {앱이름}        # 상태 확인
-fly logs -a {앱이름}          # 로그 보기
+pm2 status                    # 전체 상태 확인
+pm2 logs estelle-pylon        # Pylon 로그 보기
+pm2 logs estelle-relay        # Relay 로그 보기
+pm2 restart all               # 전체 재시작
 ```
 
 ### 업데이트 배포
 
-```powershell
-.\scripts\build-deploy.ps1 -Target release
+```bash
+# 크로스 플랫폼 (Linux/Windows 모두)
+pnpm deploy:release
 ```
+
+**MCP를 통한 배포:**
+Claude Code에서 `deploy` MCP 도구를 사용하면 자동 배포됩니다.
+배포는 detached 프로세스로 실행되어 Pylon 재시작 후에도 계속됩니다.
 
 ---
 
@@ -218,7 +230,7 @@ fly logs -a {앱이름}          # 로그 보기
 **사용자에게 안내:**
 
 **iPhone (Safari):**
-1. Safari로 `https://{앱이름}.fly.dev` 접속
+1. Safari로 `http://{서버IP}:8080` 접속
 2. 공유 버튼 (□↑) → "홈 화면에 추가"
 
 **Android (Chrome):**
@@ -231,14 +243,8 @@ fly logs -a {앱이름}          # 로그 보기
 
 | 문제 | 해결 |
 |------|------|
-| Fly.io 배포 실패 | `fly logs -a {앱이름}` 으로 로그 확인 |
-| Google 로그인 안됨 | Authorized JavaScript origins에 URL 확인 |
-| WebSocket 연결 실패 | Fly.io 앱 상태, PM2 상태 확인 |
+| PM2 서비스 안 뜸 | `pm2 logs` 로 에러 확인 |
+| WebSocket 연결 실패 | `pm2 status`로 Relay 상태 확인 |
+| MCP 연결 실패 | Pylon 실행 여부 및 포트 확인 |
+| 배포 실패 | `release-data/logs/build-*.log` 확인 |
 | 계정 전환 안됨 | 백업 파일 존재 여부 확인 |
-
----
-
-## 비용
-
-- **Fly.io**: 무료 티어로 충분 (3개 VM, 256MB RAM)
-- **Google OAuth**: 완전 무료
