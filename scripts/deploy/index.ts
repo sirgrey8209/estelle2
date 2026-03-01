@@ -41,6 +41,9 @@ interface EnvironmentConfig {
     dataDir: string;
     defaultWorkingDir: string;
   };
+  updater?: {
+    pm2Name: string;
+  };
   envId: number;
 }
 
@@ -158,6 +161,18 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
     return { success: false, error: `Pylon start failed: ${pylonResult.error}` };
   }
   logDetail(`Pylon started: ${config.pylon.pm2Name}`);
+
+  // Start Updater
+  log('Phase 5', 'Starting estelle-updater...');
+  const updaterResult = startService({
+    name: config.updater?.pm2Name || 'estelle-updater',
+    script: 'dist/index.js',
+    cwd: path.join(repoRoot, 'packages', 'updater'),
+  });
+  if (!updaterResult.success) {
+    console.warn(`[Warning] Updater start failed: ${updaterResult.error}`);
+  }
+  logDetail(`Updater started: ${config.updater?.pm2Name || 'estelle-updater'}`);
 
   saveServices();
 
