@@ -116,10 +116,12 @@ export function ChatArea() {
     // 첨부파일이 있고 File 객체가 있으면 업로드 플로우 실행
     const attachmentsWithFile = attachments?.filter((a) => a.file);
     if (attachmentsWithFile && attachmentsWithFile.length > 0) {
-      // 타겟 Pylon 찾기
-      const targetPylon = connectedPylons[0];
+      // 타겟 Pylon 찾기: 현재 선택된 대화의 pylonId와 일치하는 Pylon 사용
+      const targetPylon = connectedPylons.find(
+        (p) => p.deviceId === selectedConversation.pylonId
+      );
       if (!targetPylon) {
-        console.error('[ChatArea] No connected Pylon');
+        console.error('[ChatArea] Target Pylon not connected:', selectedConversation.pylonId);
         return;
       }
 
