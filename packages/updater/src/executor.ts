@@ -25,7 +25,8 @@ function runCommand(
   onLog: (msg: string) => void
 ): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd });
+    // shell: true enables cross-platform command resolution (Windows .cmd/.bat)
+    const child = spawn(cmd, args, { cwd, shell: true });
 
     child.stdout?.on('data', (data) => {
       onLog(data.toString());
@@ -66,9 +67,11 @@ function runDetached(
 
     onLog(`Deploy log: ${logFile}`);
 
+    // shell: true enables cross-platform command resolution (Windows .cmd/.bat)
     const child = spawn(cmd, args, {
       cwd,
       detached: true,
+      shell: true,
       stdio: ['ignore', out, err],
     });
 
