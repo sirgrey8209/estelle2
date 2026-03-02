@@ -27,6 +27,11 @@ export interface ResultMessage {
   error?: string;
 }
 
+export interface WelcomeMessage {
+  type: 'welcome';
+  yourIp: string;  // IP as seen by master (after NAT)
+}
+
 export type AgentMessage = LogMessage | ResultMessage;
 
-export type MasterMessage = UpdateCommand;
+export type MasterMessage = UpdateCommand | WelcomeMessage;

@@ -50,6 +50,13 @@ export function startMaster(options: MasterOptions): MasterInstance {
     console.log(`[Master] Agent connected: ${ip}`);
     agents.set(ip, { ws, ip });
 
+    // Send welcome message with the agent's IP (as seen after NAT)
+    try {
+      ws.send(JSON.stringify({ type: 'welcome', yourIp: ip }));
+    } catch (err) {
+      console.error(`[Master] Failed to send welcome to ${ip}:`, err);
+    }
+
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());

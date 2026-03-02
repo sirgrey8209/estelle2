@@ -4,7 +4,7 @@
  */
 import WebSocket from 'ws';
 import { executeUpdate } from './executor.js';
-import type { UpdateCommand, LogMessage, ResultMessage } from './types.js';
+import type { UpdateCommand, LogMessage, ResultMessage, WelcomeMessage, MasterMessage } from './types.js';
 
 /** Flush-enabled log for PM2 compatibility */
 function log(message: string): void {
@@ -36,7 +36,10 @@ function safeSend(ws: WebSocket, msg: object): void {
 }
 
 export function startAgent(options: AgentOptions): WebSocket {
-  const { masterUrl, repoRoot, myIp = 'unknown' } = options;
+  const { masterUrl, repoRoot, myIp: localIp = 'unknown' } = options;
+
+  // myIp will be updated when we receive welcome message from master
+  let myIp = localIp;
 
   log(`[Agent] Connecting to master: ${masterUrl}`);
   const ws = new WebSocket(masterUrl);
@@ -47,18 +50,28 @@ export function startAgent(options: AgentOptions): WebSocket {
 
   ws.on('message', async (data) => {
     try {
-      const msg = JSON.parse(data.toString()) as UpdateCommand;
+      const msg = JSON.parse(data.toString()) as MasterMessage;
+
+      if (msg.type === 'welcome') {
+        // Master tells us our IP as seen after NAT
+        const welcomeMsg = msg as WelcomeMessage;
+        myIp = welcomeMsg.yourIp;
+        log(`[Agent] Master says my IP is: ${myIp}`);
+        return;
+      }
 
       if (msg.type === 'update') {
+        const updateMsg = msg as UpdateCommand;
         // Check if this command is for us
-        if (msg.target !== 'all' && msg.target !== myIp) {
+        if (updateMsg.target !== 'all' && updateMsg.target !== myIp) {
+          log(`[Agent] Ignoring update for ${updateMsg.target} (I am ${myIp})`);
           return; // Not for us
         }
 
-        log(`[Agent] Received update command: branch=${msg.branch}`);
+        log(`[Agent] Received update command: branch=${updateMsg.branch}`);
 
         const result = await executeUpdate({
-          branch: msg.branch,
+          branch: updateMsg.branch,
           repoRoot,
           onLog: (message) => {
             const logMsg: LogMessage = { type: 'log', ip: myIp, message };
