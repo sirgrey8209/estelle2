@@ -48,6 +48,34 @@ interface WorkspaceWithPylon extends Workspace {
 /** 탭 선택 상태 localStorage 키 */
 const TAB_STORAGE_KEY = 'estelle:selectedPylonTab';
 
+/** 탭별 선택된 대화 localStorage 키 */
+const TAB_CONVERSATION_STORAGE_KEY = 'estelle:tabSelectedConversation';
+
+/**
+ * 탭별 저장된 대화 ID를 로드
+ */
+function loadTabConversations(): Record<string, number> {
+  try {
+    const saved = localStorage.getItem(TAB_CONVERSATION_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 특정 탭의 대화 ID를 저장
+ */
+function saveTabConversation(tab: PylonTabValue, conversationId: number): void {
+  try {
+    const current = loadTabConversations();
+    current[String(tab)] = conversationId;
+    localStorage.setItem(TAB_CONVERSATION_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // 무시
+  }
+}
+
 // ============================================================================
 // WorkspaceHeader 컴포넌트 (롱홀드 지원)
 // ============================================================================
