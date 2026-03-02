@@ -614,8 +614,11 @@ export function WorkspaceSidebar() {
     // Pylon에 대화 선택 알림 (히스토리 로드 요청) - conversationId 사용
     selectConversation(conversation.conversationId);
 
+    // 현재 탭에 선택된 대화 저장
+    saveTabConversation(selectedTab, conversation.conversationId);
+
     closeSidebar();
-  }, [selectInStore, closeSidebar]);
+  }, [selectInStore, closeSidebar, selectedTab]);
 
   // 대화 드래그 종료 핸들러
   const handleConversationDragEnd = useCallback((workspaceId: string, conversationIds: number[]) => {
