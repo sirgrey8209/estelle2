@@ -43,7 +43,7 @@ export const deployToolDefinition = {
   description: `빌드 및 배포를 실행합니다.
 
 - stage: 소스에서 stage 환경으로 빌드/배포
-- release: 소스에서 release 환경으로 빌드/배포
+- release: estelle-updater를 통해 모든 머신에 git pull + deploy (master 서버에서만 가능)
 - promote: stage 빌드를 release로 승격 (재빌드 없이)
 
 제약: 자기 자신 환경으로는 배포 불가 (예: release에서 release 배포 불가)

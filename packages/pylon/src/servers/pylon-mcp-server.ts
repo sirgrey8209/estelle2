@@ -248,6 +248,12 @@ interface McpContinueTaskSuccessResponse {
   historyPreserved: boolean;
 }
 
+/** 성공 응답 타입 (clear_docs) */
+interface McpClearDocsSuccessResponse {
+  success: true;
+  cleared: number;
+}
+
 type McpResponse =
   | McpDocsSuccessResponse
   | McpFileSuccessResponse
@@ -261,6 +267,7 @@ type McpResponse =
   | McpShareHistorySuccessResponse
   | McpSetSystemPromptSuccessResponse
   | McpContinueTaskSuccessResponse
+  | McpClearDocsSuccessResponse
   | McpErrorResponse;
 
 // ============================================================================
@@ -521,6 +528,9 @@ export class PylonMcpServer {
       case 'unlink':
         return this._handleUnlink(conversationId, request.path);
 
+      case 'clear_docs':
+        return this._handleClearDocs(conversationId);
+
       case 'list':
         return this._handleList(conversationId);
 
@@ -584,6 +594,9 @@ export class PylonMcpServer {
 
       case 'unlink':
         return this._handleUnlink(conversationId as ConversationId, request.path);
+
+      case 'clear_docs':
+        return this._handleClearDocs(conversationId as ConversationId);
 
       case 'list':
         return this._handleList(conversationId as ConversationId);
@@ -727,6 +740,31 @@ export class PylonMcpServer {
     return {
       success: true,
       docs,
+    };
+  }
+
+  /**
+   * clear_docs 액션 처리 - 모든 연결된 문서 삭제
+   */
+  private _handleClearDocs(conversationId: ConversationId): McpResponse {
+    // 대화 존재 확인
+    const conversation = this._workspaceStore.getConversation(conversationId);
+    if (!conversation) {
+      return {
+        success: false,
+        error: 'Conversation not found',
+      };
+    }
+
+    // 모든 문서 연결 해제
+    const count = this._workspaceStore.clearLinkedDocuments(conversationId);
+
+    // 변경 알림
+    this._onChange?.();
+
+    return {
+      success: true,
+      cleared: count,
     };
   }
 
@@ -931,6 +969,7 @@ export class PylonMcpServer {
    * 제약사항:
    * - 자기 환경으로 배포 불가 (release에서 release, stage에서 stage)
    * - promote는 stage → release 승격 (stage에서만 실행 가능)
+   * - release는 estelle-updater를 통해 모든 머신에 배포 (master에서만 가능)
    */
   private async _handleDeploy(
     conversationId: ConversationId,
@@ -983,12 +1022,33 @@ export class PylonMcpServer {
       };
     }
 
-    // 레포지토리 루트 경로
+    // release 배포는 estelle-updater를 통해 처리
+    if (target === 'release') {
+      return this._handleDeployViaUpdater('all', 'master');
+    }
+
+    // promote는 먼저 로컬에서 promote 실행 후 updater 트리거
+    if (target === 'promote') {
+      // 1. 로컬에서 promote 스크립트 실행
+      const repoRoot = this._findRepoRoot();
+      const promoteResult = await this._runLocalPromote(repoRoot);
+
+      if (!promoteResult.success) {
+        return {
+          success: false,
+          error: `Promote failed: ${promoteResult.error}`,
+        };
+      }
+
+      // 2. updater를 통해 모든 머신에 배포
+      return this._handleDeployViaUpdater('all', 'master');
+    }
+
+    // stage 배포는 기존 로컬 스크립트 방식 유지
     const repoRoot = this._findRepoRoot();
 
-    // 로그 파일 경로 결정 (타겟별 dataDir/logs/)
-    const dataDirName = target === 'release' || target === 'promote' ? 'release-data' : 'stage-data';
-    const logDir = path.join(repoRoot, dataDirName, 'logs');
+    // 로그 파일 경로 결정
+    const logDir = path.join(repoRoot, 'stage-data', 'logs');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const logFileName = `build-${target}-${timestamp}.log`;
     const logFilePath = path.join(logDir, logFileName);
@@ -1019,6 +1079,87 @@ export class PylonMcpServer {
         error: `Deploy failed: ${errorMsg}`,
       };
     }
+  }
+
+  /**
+   * estelle-updater를 통해 배포합니다.
+   * master 서버에서만 실행 가능합니다.
+   */
+  private async _handleDeployViaUpdater(
+    target: string,
+    branch: string,
+  ): Promise<McpResponse> {
+    try {
+      const { startMaster, getExternalIp, loadConfig, parseMasterIp, getDefaultConfigPath } =
+        await import('@estelle/updater');
+
+      const configPath = getDefaultConfigPath();
+      const config = loadConfig(configPath);
+      const masterIp = parseMasterIp(config.masterUrl);
+      const myIp = getExternalIp();
+      const repoRoot = this._findRepoRoot();
+
+      if (myIp !== masterIp) {
+        return {
+          success: false,
+          error: `배포는 master 서버(${masterIp})에서만 실행할 수 있어요. (현재: ${myIp})`,
+        };
+      }
+
+      const url = new URL(config.masterUrl);
+      const master = startMaster({
+        port: parseInt(url.port, 10),
+        whitelist: config.whitelist,
+        repoRoot,
+        myIp,
+      });
+
+      const logs: string[] = [];
+      await master.triggerUpdate(target, branch, (msg) => logs.push(msg));
+
+      return {
+        success: true,
+        target: 'release',
+        output: `배포가 트리거되었습니다. 모든 머신에서 git pull + pnpm deploy:release 실행 중...\n${logs.join('\n')}`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Deploy via updater failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  /**
+   * 로컬에서 promote 스크립트를 실행합니다.
+   * stage → release 승격을 위해 rsync를 실행합니다.
+   */
+  private async _runLocalPromote(
+    repoRoot: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const child = spawn('npx', ['tsx', 'scripts/deploy.ts', 'promote'], {
+        cwd: repoRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stderr = '';
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: stderr || `Exit code: ${code}` });
+        }
+      });
+
+      child.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
+    });
   }
 
   /**

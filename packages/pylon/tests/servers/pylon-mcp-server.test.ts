@@ -1003,6 +1003,10 @@ describe('PylonMcpServer', () => {
     const TEST_TOOL_USE_ID = 'toolu_test_deploy_123';
 
     beforeEach(async () => {
+      // 기존 서버 종료
+      await server.close();
+      // 새 포트 할당 (포트 충돌 방지)
+      TEST_PORT = getRandomPort();
       // toolUseId → conversationId 조회 콜백 설정
       const serverWithLookup = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1014,7 +1018,6 @@ describe('PylonMcpServer', () => {
         },
       });
       // 기존 서버 교체
-      await server.close();
       server = serverWithLookup;
       await server.listen();
       await waitForPort(TEST_PORT);
@@ -1276,6 +1279,10 @@ describe('PylonMcpServer', () => {
     const TEST_TOOL_USE_ID_STATUS = 'toolu_test_status_123';
 
     beforeEach(async () => {
+      // 기존 서버 종료
+      await server.close();
+      // 새 포트 할당 (포트 충돌 방지)
+      TEST_PORT = getRandomPort();
       // toolUseId → conversationId 조회 콜백 설정
       const serverWithLookup = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1287,7 +1294,6 @@ describe('PylonMcpServer', () => {
         },
       });
       // 기존 서버 교체
-      await server.close();
       server = serverWithLookup;
       await server.listen();
       await waitForPort(TEST_PORT);
@@ -1367,6 +1373,9 @@ describe('PylonMcpServer', () => {
       let callbackCalled = false;
       let receivedConversationId: number | null = null;
 
+      await server.close();
+      TEST_PORT = getRandomPort();
+
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
         getConversationIdByToolUseId: (toolUseId: string) => {
@@ -1381,7 +1390,6 @@ describe('PylonMcpServer', () => {
         },
       });
 
-      await server.close();
       server = serverWithCallback;
       await server.listen();
       await waitForPort(TEST_PORT);
@@ -1408,6 +1416,9 @@ describe('PylonMcpServer', () => {
       // Arrange
       const receivedIds: number[] = [];
 
+      await server.close();
+      TEST_PORT = getRandomPort();
+
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
         getConversationIdByToolUseId: (toolUseId: string) => {
@@ -1421,7 +1432,6 @@ describe('PylonMcpServer', () => {
         },
       });
 
-      await server.close();
       server = serverWithCallback;
       await server.listen();
       await waitForPort(TEST_PORT);
@@ -1449,6 +1459,9 @@ describe('PylonMcpServer', () => {
 
     it('should_create_conversation_normally_when_callback_not_provided', async () => {
       // Arrange - onConversationCreate 콜백 없이 서버 생성
+      await server.close();
+      TEST_PORT = getRandomPort();
+
       const serverWithoutCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
         getConversationIdByToolUseId: (toolUseId: string) => {
@@ -1460,7 +1473,6 @@ describe('PylonMcpServer', () => {
         // onConversationCreate 없음
       });
 
-      await server.close();
       server = serverWithoutCallback;
       await server.listen();
       await waitForPort(TEST_PORT);
@@ -1487,6 +1499,9 @@ describe('PylonMcpServer', () => {
       // Arrange
       let callbackCalled = false;
 
+      await server.close();
+      TEST_PORT = getRandomPort();
+
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
         getConversationIdByToolUseId: (_toolUseId: string) => {
@@ -1498,7 +1513,6 @@ describe('PylonMcpServer', () => {
         },
       });
 
-      await server.close();
       server = serverWithCallback;
       await server.listen();
       await waitForPort(TEST_PORT);
