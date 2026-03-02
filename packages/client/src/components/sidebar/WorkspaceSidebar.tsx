@@ -476,7 +476,46 @@ export function WorkspaceSidebar() {
     } catch {
       // 무시
     }
-  }, []);
+
+    // 새 탭의 워크스페이스 목록 계산
+    const newTabWorkspaces = tab === 'favorites'
+      ? flatWorkspaces.filter((ws) => isFavorite(ws.workspaceId))
+      : flatWorkspaces.filter((ws) => ws.pylonId === tab);
+
+    if (newTabWorkspaces.length === 0) return;
+
+    // 저장된 대화 ID 조회
+    const savedConversations = loadTabConversations();
+    const savedConvId = savedConversations[String(tab)];
+
+    // 저장된 대화가 새 탭에 존재하는지 확인
+    let targetWorkspace: WorkspaceWithPylon | undefined;
+    let targetConversation: Conversation | undefined;
+
+    if (savedConvId !== undefined) {
+      for (const ws of newTabWorkspaces) {
+        const conv = ws.conversations.find((c) => c.conversationId === savedConvId);
+        if (conv) {
+          targetWorkspace = ws;
+          targetConversation = conv;
+          break;
+        }
+      }
+    }
+
+    // 저장된 대화가 없으면 첫 번째 대화 선택
+    if (!targetWorkspace || !targetConversation) {
+      targetWorkspace = newTabWorkspaces[0];
+      targetConversation = targetWorkspace.conversations[0];
+    }
+
+    if (targetWorkspace && targetConversation) {
+      // 대화 선택
+      selectInStore(targetWorkspace.pylonId, targetConversation.conversationId);
+      useConversationStore.getState().setCurrentConversation(targetConversation.conversationId);
+      selectConversation(targetConversation.conversationId);
+    }
+  }, [flatWorkspaces, isFavorite, selectInStore]);
 
   // 즐겨찾기된 워크스페이스 목록
   const favoriteWorkspaces = useMemo(
