@@ -6,6 +6,7 @@
  * 파일 I/O는 FileSystem 인터페이스로 추상화하여 모킹 없이 테스트합니다.
  */
 
+import path from 'path';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   TaskManager,
@@ -16,39 +17,54 @@ import {
 } from '../../src/managers/task-manager.js';
 
 // ============================================================================
+// 플랫폼 독립적 경로 헬퍼
+// ============================================================================
+
+/** 플랫폼별 경로 구분자 */
+const SEP = path.sep;
+
+/** 경로를 플랫폼에 맞게 정규화 */
+function normalizePath(p: string): string {
+  return p.replace(/[\\/]/g, SEP);
+}
+
+// ============================================================================
 // 테스트용 인메모리 파일 시스템
 // ============================================================================
 
 /**
  * 테스트용 인메모리 파일 시스템
  * 실제 파일 I/O 없이 TaskManager를 테스트할 수 있게 합니다.
+ * 경로는 플랫폼 독립적으로 처리됩니다.
  */
 class InMemoryFileSystem implements FileSystem {
   private files: Map<string, string> = new Map();
   private directories: Set<string> = new Set();
 
   constructor() {
-    // 기본 루트 디렉토리
-    this.directories.add('C:\\workspace');
+    // 기본 루트 디렉토리 (플랫폼 독립적)
+    this.directories.add(normalizePath('/workspace'));
   }
 
-  existsSync(path: string): boolean {
-    return this.files.has(path) || this.directories.has(path);
+  existsSync(p: string): boolean {
+    const normalized = normalizePath(p);
+    return this.files.has(normalized) || this.directories.has(normalized);
   }
 
-  mkdirSync(path: string): void {
-    this.directories.add(path);
+  mkdirSync(p: string): void {
+    this.directories.add(normalizePath(p));
   }
 
-  readdirSync(path: string): string[] {
-    const prefix = path.endsWith('\\') ? path : path + '\\';
+  readdirSync(p: string): string[] {
+    const normalized = normalizePath(p);
+    const prefix = normalized.endsWith(SEP) ? normalized : normalized + SEP;
     const result: string[] = [];
 
     for (const filePath of this.files.keys()) {
       if (filePath.startsWith(prefix)) {
         const relativePath = filePath.slice(prefix.length);
         // 직접 하위 파일만 (하위 디렉토리의 파일은 제외)
-        if (!relativePath.includes('\\')) {
+        if (!relativePath.includes(SEP)) {
           result.push(relativePath);
         }
       }
@@ -57,26 +73,27 @@ class InMemoryFileSystem implements FileSystem {
     return result;
   }
 
-  readFileSync(path: string): string {
-    const content = this.files.get(path);
+  readFileSync(p: string): string {
+    const normalized = normalizePath(p);
+    const content = this.files.get(normalized);
     if (content === undefined) {
-      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+      throw new Error(`ENOENT: no such file or directory, open '${normalized}'`);
     }
     return content;
   }
 
-  writeFileSync(path: string, content: string): void {
-    this.files.set(path, content);
+  writeFileSync(p: string, content: string): void {
+    this.files.set(normalizePath(p), content);
   }
 
   // 테스트 헬퍼: 파일 직접 설정
-  _setFile(path: string, content: string): void {
-    this.files.set(path, content);
+  _setFile(p: string, content: string): void {
+    this.files.set(normalizePath(p), content);
   }
 
   // 테스트 헬퍼: 디렉토리 직접 설정
-  _setDirectory(path: string): void {
-    this.directories.add(path);
+  _setDirectory(p: string): void {
+    this.directories.add(normalizePath(p));
   }
 
   // 테스트 헬퍼: 파일 개수
@@ -85,8 +102,8 @@ class InMemoryFileSystem implements FileSystem {
   }
 
   // 테스트 헬퍼: 파일 내용 가져오기
-  _getFile(path: string): string | undefined {
-    return this.files.get(path);
+  _getFile(p: string): string | undefined {
+    return this.files.get(normalizePath(p));
   }
 }
 
@@ -97,7 +114,8 @@ class InMemoryFileSystem implements FileSystem {
 describe('TaskManager', () => {
   let fs: InMemoryFileSystem;
   let taskManager: TaskManager;
-  const workingDir = 'C:\\workspace\\project';
+  const workingDir = normalizePath('/workspace/project');
+  const taskDir = path.join(workingDir, 'task');
 
   beforeEach(() => {
     fs = new InMemoryFileSystem();
@@ -123,8 +141,8 @@ error:
 ## 목표
 테스트 본문입니다.`;
 
-      fs._setDirectory(`${workingDir}\\task`);
-      fs._setFile(`${workingDir}\\task\\20260124-test-task.md`, content);
+      fs._setDirectory(`${taskDir}`);
+      fs._setFile(`${taskDir}\\20260124-test-task.md`, content);
 
       const result = taskManager.getTask(workingDir, 'test-id-123');
 
@@ -146,8 +164,8 @@ completedAt:
 error:
 ---`;
 
-      fs._setDirectory(`${workingDir}\\task`);
-      fs._setFile(`${workingDir}\\task\\20260124-no-body.md`, content);
+      fs._setDirectory(`${taskDir}`);
+      fs._setFile(`${taskDir}\\20260124-no-body.md`, content);
 
       const result = taskManager.getTask(workingDir, 'test-id');
 
@@ -162,22 +180,22 @@ error:
   describe('Task 폴더 관리', () => {
     it('should return correct task folder path', () => {
       const path = taskManager.getTaskFolderPath(workingDir);
-      expect(path).toBe(`${workingDir}\\task`);
+      expect(path).toBe(`${taskDir}`);
     });
 
     it('should create task folder if not exists', () => {
       const path = taskManager.ensureTaskFolder(workingDir);
 
-      expect(path).toBe(`${workingDir}\\task`);
-      expect(fs.existsSync(`${workingDir}\\task`)).toBe(true);
+      expect(path).toBe(`${taskDir}`);
+      expect(fs.existsSync(`${taskDir}`)).toBe(true);
     });
 
     it('should not recreate existing task folder', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       const path = taskManager.ensureTaskFolder(workingDir);
 
-      expect(path).toBe(`${workingDir}\\task`);
+      expect(path).toBe(`${taskDir}`);
     });
   });
 
@@ -193,7 +211,7 @@ error:
     });
 
     it('should return empty list when task folder is empty', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       const result = taskManager.listTasks(workingDir);
 
@@ -202,11 +220,11 @@ error:
     });
 
     it('should list tasks sorted by filename (newest first)', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       // 오래된 태스크
       fs._setFile(
-        `${workingDir}\\task\\20260120-old-task.md`,
+        `${taskDir}\\20260120-old-task.md`,
         `---
 id: old-id
 title: Old Task
@@ -222,7 +240,7 @@ Old content`
 
       // 새 태스크
       fs._setFile(
-        `${workingDir}\\task\\20260124-new-task.md`,
+        `${taskDir}\\20260124-new-task.md`,
         `---
 id: new-id
 title: New Task
@@ -246,9 +264,9 @@ New content`
     });
 
     it('should only include .md files', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-task.md`,
+        `${taskDir}\\20260124-task.md`,
         `---
 id: task-id
 title: Task
@@ -261,7 +279,7 @@ error:
 
 content`
       );
-      fs._setFile(`${workingDir}\\task\\readme.txt`, 'This is not a task');
+      fs._setFile(`${taskDir}\\readme.txt`, 'This is not a task');
 
       const result = taskManager.listTasks(workingDir);
 
@@ -276,9 +294,9 @@ content`
   // ============================================================================
   describe('getTask', () => {
     it('should return task with content', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-test.md`,
+        `${taskDir}\\20260124-test.md`,
         `---
 id: test-id
 title: Test Task
@@ -304,7 +322,7 @@ error:
     });
 
     it('should return error for non-existent task', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       const result = taskManager.getTask(workingDir, 'non-existent');
 
@@ -321,9 +339,9 @@ error:
 
     it('should truncate long content', () => {
       const longContent = 'A'.repeat(15000);
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-long.md`,
+        `${taskDir}\\20260124-long.md`,
         `---
 id: long-id
 title: Long Task
@@ -388,7 +406,7 @@ ${longContent}`
     it('should create task folder if not exists', () => {
       taskManager.createTask(workingDir, 'New Task', 'content');
 
-      expect(fs.existsSync(`${workingDir}\\task`)).toBe(true);
+      expect(fs.existsSync(`${taskDir}`)).toBe(true);
     });
 
     it('should write task file with correct content', () => {
@@ -398,7 +416,7 @@ ${longContent}`
         '## 본문'
       );
 
-      const filePath = `${workingDir}\\task\\${result.task?.fileName}`;
+      const filePath = `${taskDir}\\${result.task?.fileName}`;
       const content = fs._getFile(filePath);
 
       expect(content).toContain('id:');
@@ -425,8 +443,8 @@ error:
 본문`;
 
     beforeEach(() => {
-      fs._setDirectory(`${workingDir}\\task`);
-      fs._setFile(`${workingDir}\\task\\20260124-update-test.md`, taskContent);
+      fs._setDirectory(`${taskDir}`);
+      fs._setFile(`${taskDir}\\20260124-update-test.md`, taskContent);
     });
 
     it('should update status to running', () => {
@@ -493,11 +511,11 @@ error:
   // ============================================================================
   describe('getNextPendingTask', () => {
     it('should return oldest pending task (FIFO)', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       // 나중에 생성된 pending 태스크
       fs._setFile(
-        `${workingDir}\\task\\20260125-newer.md`,
+        `${taskDir}\\20260125-newer.md`,
         `---
 id: newer-id
 title: Newer Task
@@ -512,7 +530,7 @@ content`
 
       // 먼저 생성된 pending 태스크
       fs._setFile(
-        `${workingDir}\\task\\20260120-older.md`,
+        `${taskDir}\\20260120-older.md`,
         `---
 id: older-id
 title: Older Task
@@ -533,9 +551,9 @@ content`
     });
 
     it('should return null when no pending tasks', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-done.md`,
+        `${taskDir}\\20260124-done.md`,
         `---
 id: done-id
 title: Done Task
@@ -554,9 +572,9 @@ content`
     });
 
     it('should skip running tasks', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-running.md`,
+        `${taskDir}\\20260124-running.md`,
         `---
 id: running-id
 title: Running Task
@@ -577,9 +595,9 @@ content`
 
   describe('getRunningTask', () => {
     it('should return currently running task', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-running.md`,
+        `${taskDir}\\20260124-running.md`,
         `---
 id: running-id
 title: Running Task
@@ -600,9 +618,9 @@ content`
     });
 
     it('should return null when no running task', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-pending.md`,
+        `${taskDir}\\20260124-pending.md`,
         `---
 id: pending-id
 title: Pending Task
@@ -626,9 +644,9 @@ content`
   // ============================================================================
   describe('getTaskFilePath', () => {
     it('should return file path for existing task', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-test.md`,
+        `${taskDir}\\20260124-test.md`,
         `---
 id: test-id
 title: Test
@@ -641,13 +659,13 @@ error:
 content`
       );
 
-      const path = taskManager.getTaskFilePath(workingDir, 'test-id');
+      const filePath = taskManager.getTaskFilePath(workingDir, 'test-id');
 
-      expect(path).toBe(`${workingDir}\\task\\20260124-test.md`);
+      expect(filePath).toBe(path.join(taskDir, '20260124-test.md'));
     });
 
     it('should return null for non-existent task', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
 
       const path = taskManager.getTaskFilePath(workingDir, 'non-existent');
 

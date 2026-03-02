@@ -10,12 +10,22 @@
  * - getLinkedDocuments: 연결된 문서 목록 조회
  */
 
+import os from 'os';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { WorkspaceStore } from '../../src/stores/workspace-store.js';
 import { encodeConversationId } from '@estelle/core';
 import type { ConversationId, LinkedDocument } from '@estelle/core';
 
 const PYLON_ID = 1;
+
+/** 플랫폼별 경로 구분자 */
+const IS_WINDOWS = os.platform() === 'win32';
+const SEP = IS_WINDOWS ? '\\' : '/';
+
+/** 경로를 플랫폼에 맞게 변환 */
+function p(path: string): string {
+  return IS_WINDOWS ? path.replace(/\//g, '\\') : path.replace(/\\/g, '/');
+}
 
 describe('WorkspaceStore - LinkedDocument', () => {
   let store: WorkspaceStore;
@@ -24,7 +34,7 @@ describe('WorkspaceStore - LinkedDocument', () => {
 
   beforeEach(() => {
     store = new WorkspaceStore(PYLON_ID);
-    const { workspace } = store.createWorkspace('Test', 'C:\\test');
+    const { workspace } = store.createWorkspace('Test', p('C:\\test'));
     workspaceId = workspace.workspaceId;
     const conversation = store.createConversation(workspaceId)!;
     conversationId = conversation.conversationId;
@@ -37,16 +47,17 @@ describe('WorkspaceStore - LinkedDocument', () => {
     // 정상 케이스
     it('should_link_document_when_valid_path_provided', () => {
       // Arrange
-      const path = 'src\\app.ts';
+      const inputPath = 'src/app.ts';
+      const expectedPath = p('src/app.ts');
 
       // Act
-      const result = store.linkDocument(conversationId, path);
+      const result = store.linkDocument(conversationId, inputPath);
 
       // Assert
       expect(result).toBe(true);
       const docs = store.getLinkedDocuments(conversationId);
       expect(docs).toHaveLength(1);
-      expect(docs[0].path).toBe(path);
+      expect(docs[0].path).toBe(expectedPath);
     });
 
     it('should_set_addedAt_timestamp_when_linking_document', () => {
@@ -65,21 +76,22 @@ describe('WorkspaceStore - LinkedDocument', () => {
 
     it('should_link_multiple_documents_to_same_conversation', () => {
       // Arrange
-      const paths = ['src\\a.ts', 'src\\b.ts', 'docs\\readme.md'];
+      const inputPaths = ['src/a.ts', 'src/b.ts', 'docs/readme.md'];
+      const expectedPaths = inputPaths.map(p);
 
       // Act
-      paths.forEach((p) => store.linkDocument(conversationId, p));
+      inputPaths.forEach((path) => store.linkDocument(conversationId, path));
 
       // Assert
       const docs = store.getLinkedDocuments(conversationId);
       expect(docs).toHaveLength(3);
-      expect(docs.map((d) => d.path)).toEqual(expect.arrayContaining(paths));
+      expect(docs.map((d) => d.path)).toEqual(expect.arrayContaining(expectedPaths));
     });
 
-    it('should_normalize_forward_slashes_to_backslashes', () => {
+    it('should_normalize_path_separators_to_platform_convention', () => {
       // Arrange
       const inputPath = 'src/components/Header.tsx';
-      const expectedPath = 'src\\components\\Header.tsx';
+      const expectedPath = p('src/components/Header.tsx');
 
       // Act
       store.linkDocument(conversationId, inputPath);
@@ -92,13 +104,13 @@ describe('WorkspaceStore - LinkedDocument', () => {
     // 중복 처리 케이스
     it('should_ignore_duplicate_path_when_already_linked', () => {
       // Arrange
-      const path = 'src\\app.ts';
-      store.linkDocument(conversationId, path);
+      const inputPath = 'src/app.ts';
+      store.linkDocument(conversationId, inputPath);
       const docsBefore = store.getLinkedDocuments(conversationId);
       const originalAddedAt = docsBefore[0].addedAt;
 
       // Act - 잠시 대기 후 재연결 시도
-      const result = store.linkDocument(conversationId, path);
+      const result = store.linkDocument(conversationId, inputPath);
 
       // Assert
       expect(result).toBe(false); // 중복이므로 false 반환
@@ -108,11 +120,11 @@ describe('WorkspaceStore - LinkedDocument', () => {
     });
 
     it('should_treat_same_path_with_different_slashes_as_duplicate', () => {
-      // Arrange
-      store.linkDocument(conversationId, 'src\\app.ts');
+      // Arrange - 둘 중 어떤 형태로 먼저 입력해도 정규화됨
+      store.linkDocument(conversationId, 'src/app.ts');
 
-      // Act
-      const result = store.linkDocument(conversationId, 'src/app.ts');
+      // Act - 반대 슬래시 형태로 재입력
+      const result = store.linkDocument(conversationId, 'src\\app.ts');
 
       // Assert
       expect(result).toBe(false);
@@ -157,8 +169,8 @@ describe('WorkspaceStore - LinkedDocument', () => {
 
     it('should_trim_whitespace_from_path', () => {
       // Arrange
-      const pathWithSpaces = '  src\\app.ts  ';
-      const expectedPath = 'src\\app.ts';
+      const pathWithSpaces = '  src/app.ts  ';
+      const expectedPath = p('src/app.ts');
 
       // Act
       store.linkDocument(conversationId, pathWithSpaces);
@@ -176,11 +188,11 @@ describe('WorkspaceStore - LinkedDocument', () => {
     // 정상 케이스
     it('should_unlink_document_when_path_exists', () => {
       // Arrange
-      const path = 'src\\app.ts';
-      store.linkDocument(conversationId, path);
+      const inputPath = 'src/app.ts';
+      store.linkDocument(conversationId, inputPath);
 
       // Act
-      const result = store.unlinkDocument(conversationId, path);
+      const result = store.unlinkDocument(conversationId, inputPath);
 
       // Assert
       expect(result).toBe(true);
@@ -190,25 +202,25 @@ describe('WorkspaceStore - LinkedDocument', () => {
 
     it('should_unlink_only_specified_document', () => {
       // Arrange
-      store.linkDocument(conversationId, 'src\\a.ts');
-      store.linkDocument(conversationId, 'src\\b.ts');
-      store.linkDocument(conversationId, 'src\\c.ts');
+      store.linkDocument(conversationId, 'src/a.ts');
+      store.linkDocument(conversationId, 'src/b.ts');
+      store.linkDocument(conversationId, 'src/c.ts');
 
       // Act
-      store.unlinkDocument(conversationId, 'src\\b.ts');
+      store.unlinkDocument(conversationId, 'src/b.ts');
 
       // Assert
       const docs = store.getLinkedDocuments(conversationId);
       expect(docs).toHaveLength(2);
-      expect(docs.map((d) => d.path)).toEqual(['src\\a.ts', 'src\\c.ts']);
+      expect(docs.map((d) => d.path)).toEqual([p('src/a.ts'), p('src/c.ts')]);
     });
 
-    it('should_normalize_forward_slashes_when_unlinking', () => {
+    it('should_normalize_path_separators_when_unlinking', () => {
       // Arrange
-      store.linkDocument(conversationId, 'src\\app.ts');
+      store.linkDocument(conversationId, 'src/app.ts');
 
-      // Act - 슬래시 형태로 해제 시도
-      const result = store.unlinkDocument(conversationId, 'src/app.ts');
+      // Act - 반대 슬래시 형태로 해제 시도
+      const result = store.unlinkDocument(conversationId, 'src\\app.ts');
 
       // Assert
       expect(result).toBe(true);
@@ -219,10 +231,10 @@ describe('WorkspaceStore - LinkedDocument', () => {
     // 에러 케이스
     it('should_return_false_when_path_not_found', () => {
       // Arrange
-      store.linkDocument(conversationId, 'src\\a.ts');
+      store.linkDocument(conversationId, 'src/a.ts');
 
       // Act
-      const result = store.unlinkDocument(conversationId, 'src\\nonexistent.ts');
+      const result = store.unlinkDocument(conversationId, 'src/nonexistent.ts');
 
       // Assert
       expect(result).toBe(false);
@@ -264,8 +276,8 @@ describe('WorkspaceStore - LinkedDocument', () => {
     // 정상 케이스
     it('should_return_all_linked_documents', () => {
       // Arrange
-      store.linkDocument(conversationId, 'src\\a.ts');
-      store.linkDocument(conversationId, 'src\\b.ts');
+      store.linkDocument(conversationId, 'src/a.ts');
+      store.linkDocument(conversationId, 'src/b.ts');
 
       // Act
       const docs = store.getLinkedDocuments(conversationId);
@@ -319,8 +331,8 @@ describe('WorkspaceStore - LinkedDocument', () => {
   describe('직렬화 및 복원', () => {
     it('should_preserve_linked_documents_after_toJSON_and_fromJSON', () => {
       // Arrange
-      store.linkDocument(conversationId, 'src\\a.ts');
-      store.linkDocument(conversationId, 'src\\b.ts');
+      store.linkDocument(conversationId, 'src/a.ts');
+      store.linkDocument(conversationId, 'src/b.ts');
       const data = store.toJSON();
 
       // Act
@@ -329,8 +341,8 @@ describe('WorkspaceStore - LinkedDocument', () => {
 
       // Assert
       expect(docs).toHaveLength(2);
-      expect(docs[0].path).toBe('src\\a.ts');
-      expect(docs[1].path).toBe('src\\b.ts');
+      expect(docs[0].path).toBe(p('src/a.ts'));
+      expect(docs[1].path).toBe(p('src/b.ts'));
     });
 
     it('should_preserve_addedAt_timestamps_after_restore', () => {

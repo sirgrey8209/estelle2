@@ -6,9 +6,20 @@
  * TaskManager와의 연동을 통해 태스크 실행을 관리합니다.
  */
 
+import nodePath from 'path';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WorkerManager, type WorkerState } from '../../src/managers/worker-manager.js';
 import { TaskManager, type FileSystem } from '../../src/managers/task-manager.js';
+
+// ============================================================================
+// 플랫폼 독립적 경로 헬퍼
+// ============================================================================
+
+const SEP = nodePath.sep;
+
+function normalizePath(p: string): string {
+  return p.replace(/[\\/]/g, SEP);
+}
 
 // ============================================================================
 // 테스트용 인메모리 파일 시스템
@@ -19,25 +30,27 @@ class InMemoryFileSystem implements FileSystem {
   private directories: Set<string> = new Set();
 
   constructor() {
-    this.directories.add('C:\\workspace');
+    this.directories.add(normalizePath('/workspace'));
   }
 
-  existsSync(path: string): boolean {
-    return this.files.has(path) || this.directories.has(path);
+  existsSync(p: string): boolean {
+    const normalized = normalizePath(p);
+    return this.files.has(normalized) || this.directories.has(normalized);
   }
 
-  mkdirSync(path: string): void {
-    this.directories.add(path);
+  mkdirSync(p: string): void {
+    this.directories.add(normalizePath(p));
   }
 
-  readdirSync(path: string): string[] {
-    const prefix = path.endsWith('\\') ? path : path + '\\';
+  readdirSync(p: string): string[] {
+    const normalized = normalizePath(p);
+    const prefix = normalized.endsWith(SEP) ? normalized : normalized + SEP;
     const result: string[] = [];
 
     for (const filePath of this.files.keys()) {
       if (filePath.startsWith(prefix)) {
         const relativePath = filePath.slice(prefix.length);
-        if (!relativePath.includes('\\')) {
+        if (!relativePath.includes(SEP)) {
           result.push(relativePath);
         }
       }
@@ -46,28 +59,29 @@ class InMemoryFileSystem implements FileSystem {
     return result;
   }
 
-  readFileSync(path: string): string {
-    const content = this.files.get(path);
+  readFileSync(p: string): string {
+    const normalized = normalizePath(p);
+    const content = this.files.get(normalized);
     if (content === undefined) {
-      throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+      throw new Error(`ENOENT: no such file or directory, open '${normalized}'`);
     }
     return content;
   }
 
-  writeFileSync(path: string, content: string): void {
-    this.files.set(path, content);
+  writeFileSync(p: string, content: string): void {
+    this.files.set(normalizePath(p), content);
   }
 
-  _setFile(path: string, content: string): void {
-    this.files.set(path, content);
+  _setFile(p: string, content: string): void {
+    this.files.set(normalizePath(p), content);
   }
 
-  _setDirectory(path: string): void {
-    this.directories.add(path);
+  _setDirectory(p: string): void {
+    this.directories.add(normalizePath(p));
   }
 
-  _getFile(path: string): string | undefined {
-    return this.files.get(path);
+  _getFile(p: string): string | undefined {
+    return this.files.get(normalizePath(p));
   }
 }
 
@@ -80,7 +94,8 @@ describe('WorkerManager', () => {
   let taskManager: TaskManager;
   let workerManager: WorkerManager;
   const workspaceId = 'ws-123';
-  const workingDir = 'C:\\workspace\\project';
+  const workingDir = normalizePath('/workspace/project');
+  const taskDir = nodePath.join(workingDir, 'task');
 
   beforeEach(() => {
     fs = new InMemoryFileSystem();
@@ -122,9 +137,9 @@ describe('WorkerManager', () => {
   // ============================================================================
   describe('getWorkerStatus', () => {
     it('should return worker status with queue info', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-task.md`,
+        `${taskDir}\\20260124-task.md`,
         `---
 id: task-1
 title: Task 1
@@ -147,9 +162,9 @@ content`
     });
 
     it('should include current task when running', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-running.md`,
+        `${taskDir}\\20260124-running.md`,
         `---
 id: running-task
 title: Running Task
@@ -180,9 +195,9 @@ content`
   // ============================================================================
   describe('canStartWorker', () => {
     it('should return true when idle and pending tasks exist', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-pending.md`,
+        `${taskDir}\\20260124-pending.md`,
         `---
 id: pending-task
 title: Pending Task
@@ -213,7 +228,7 @@ content`
     });
 
     it('should return false when no pending tasks', () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       // pending 태스크 없음
 
       const result = workerManager.canStartWorker(workspaceId, workingDir);
@@ -239,8 +254,8 @@ error:
 Task content`;
 
     beforeEach(() => {
-      fs._setDirectory(`${workingDir}\\task`);
-      fs._setFile(`${workingDir}\\task\\20260124-pending.md`, pendingTaskContent);
+      fs._setDirectory(`${taskDir}`);
+      fs._setFile(`${taskDir}\\20260124-pending.md`, pendingTaskContent);
     });
 
     it('should start worker with next pending task', async () => {
@@ -345,9 +360,9 @@ Task content`;
   // ============================================================================
   describe('completeWorker', () => {
     beforeEach(() => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-running.md`,
+        `${taskDir}\\20260124-running.md`,
         `---
 id: running-task
 title: Running Task
@@ -413,9 +428,9 @@ content`
   // ============================================================================
   describe('checkAndStartNext', () => {
     it('should start next task when available', async () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-pending.md`,
+        `${taskDir}\\20260124-pending.md`,
         `---
 id: pending-task
 title: Pending Task
@@ -444,7 +459,7 @@ content`
     });
 
     it('should not start when no pending tasks', async () => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       // pending 태스크 없음
 
       const mockCallback = vi.fn();
@@ -463,9 +478,9 @@ content`
       const state = workerManager.getWorkerState(workspaceId);
       state.status = 'running';
 
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-pending.md`,
+        `${taskDir}\\20260124-pending.md`,
         `---
 id: pending-task
 title: Pending Task
@@ -496,9 +511,9 @@ content`
   // ============================================================================
   describe('stopWorker', () => {
     beforeEach(() => {
-      fs._setDirectory(`${workingDir}\\task`);
+      fs._setDirectory(`${taskDir}`);
       fs._setFile(
-        `${workingDir}\\task\\20260124-running.md`,
+        `${taskDir}\\20260124-running.md`,
         `---
 id: running-task
 title: Running Task

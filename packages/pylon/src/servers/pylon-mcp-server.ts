@@ -792,10 +792,12 @@ export class PylonMcpServer {
       };
     }
 
-    // 파일 정보 수집
-    const ext = path.extname(filePath).toLowerCase();
+    // 파일 정보 수집 (크로스 플랫폼: Windows/Linux 경로 모두 지원)
+    // Windows 백슬래시와 Unix 슬래시 모두를 구분자로 인식
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    const ext = path.extname(normalizedPath).toLowerCase();
     const mimeType = MIME_TYPES[ext] ?? 'application/octet-stream';
-    const filename = path.basename(filePath);
+    const filename = normalizedPath.split('/').pop() || filePath;
 
     // 실제 파일 크기 (존재하는 경우) 또는 기본값
     let size = 0;

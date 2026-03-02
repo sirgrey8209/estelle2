@@ -29,6 +29,7 @@ import { createConnection } from 'net';
 // 아직 구현되지 않은 모듈 - 테스트 실패 예상
 import { PylonMcpServer } from '../../src/servers/pylon-mcp-server.js';
 import { WorkspaceStore } from '../../src/stores/workspace-store.js';
+import { toNativePath } from '../utils/path-utils.js';
 
 // ============================================================================
 // 헬퍼 함수
@@ -229,7 +230,7 @@ describe('PylonMcpServer', () => {
       // Assert
       expect(response.success).toBe(true);
       expect(response.docs).toHaveLength(1);
-      expect(response.docs[0].path).toBe('docs\\spec.md'); // 경로 정규화
+      expect(response.docs[0].path).toBe(toNativePath('docs\\spec.md')); // 경로 정규화
     });
 
     it('should_link_multiple_documents', async () => {
@@ -465,9 +466,9 @@ describe('PylonMcpServer', () => {
       expect(response.success).toBe(true);
       expect(response.docs).toHaveLength(3);
       // 추가 순서대로 반환
-      expect(response.docs[0].path).toBe('docs\\first.md');
-      expect(response.docs[1].path).toBe('docs\\second.md');
-      expect(response.docs[2].path).toBe('docs\\third.md');
+      expect(response.docs[0].path).toBe(toNativePath('docs\\first.md'));
+      expect(response.docs[1].path).toBe(toNativePath('docs\\second.md'));
+      expect(response.docs[2].path).toBe(toNativePath('docs\\third.md'));
     });
 
     it('should_return_error_when_conversation_id_not_found', async () => {
@@ -1229,7 +1230,7 @@ describe('PylonMcpServer', () => {
       // Assert
       expect(response.success).toBe(true);
       expect(response.status.linkedDocuments).toHaveLength(1);
-      expect(response.status.linkedDocuments[0].path).toBe('docs\\spec.md');
+      expect(response.status.linkedDocuments[0].path).toBe(toNativePath('docs\\spec.md'));
     });
 
     it('should_return_error_when_conversationId_not_found', async () => {

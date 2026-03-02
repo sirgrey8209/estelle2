@@ -12,6 +12,7 @@ import type { PylonConfig, PylonDependencies } from '../src/pylon.js';
 import { WorkspaceStore } from '../src/stores/workspace-store.js';
 import { MessageStore } from '../src/stores/message-store.js';
 import { ShareStore } from '../src/stores/share-store.js';
+import { toNativePath } from './utils/path-utils.js';
 
 const PYLON_ID = 1;
 
@@ -88,6 +89,9 @@ function createMockDependencies(): PylonDependencies {
       listFolders: vi.fn().mockReturnValue({ success: true, folders: [] }),
       createFolder: vi.fn().mockReturnValue({ success: true }),
       renameFolder: vi.fn().mockReturnValue({ success: true }),
+      getPlatform: vi.fn().mockReturnValue('windows'),
+      getDefaultPath: vi.fn().mockReturnValue('C:\\'),
+      getParentPath: vi.fn().mockReturnValue('C:\\'),
     },
     logger: {
       log: vi.fn(),
@@ -1046,6 +1050,7 @@ describe('Pylon', () => {
         payload: { path: 'C:\\test' },
       });
 
+      // Pylon은 경로를 변환 없이 그대로 FolderManager에 전달
       expect(deps.folderManager.listFolders).toHaveBeenCalledWith('C:\\test');
     });
 
@@ -1056,6 +1061,7 @@ describe('Pylon', () => {
         payload: { path: 'C:\\test', name: 'new-folder' },
       });
 
+      // Pylon은 경로를 변환 없이 그대로 FolderManager에 전달
       expect(deps.folderManager.createFolder).toHaveBeenCalledWith('C:\\test', 'new-folder');
     });
   });
@@ -1074,7 +1080,7 @@ describe('Pylon', () => {
         payload: { workspaceId: workspace.workspaceId },
       });
 
-      expect(deps.taskManager.listTasks).toHaveBeenCalledWith('C:\\test');
+      expect(deps.taskManager.listTasks).toHaveBeenCalledWith(toNativePath('C:\\test'));
     });
 
     it('should handle task_get request', () => {
@@ -1086,7 +1092,7 @@ describe('Pylon', () => {
         payload: { workspaceId: workspace.workspaceId, taskId: 'task-1' },
       });
 
-      expect(deps.taskManager.getTask).toHaveBeenCalledWith('C:\\test', 'task-1');
+      expect(deps.taskManager.getTask).toHaveBeenCalledWith(toNativePath('C:\\test'), 'task-1');
     });
   });
 
@@ -1380,7 +1386,7 @@ describe('Pylon', () => {
           conversation.conversationId,
           'Hello Claude',
           expect.objectContaining({
-            workingDir: 'C:\\test',
+            workingDir: toNativePath('C:\\test'),
             systemPrompt: expect.stringContaining('release'),
           })
         );
@@ -1479,7 +1485,7 @@ describe('Pylon', () => {
           conversation.conversationId,
           expect.stringContaining('readme.md'),
           expect.objectContaining({
-            workingDir: 'C:\\test',
+            workingDir: toNativePath('C:\\test'),
           })
         );
       });
@@ -1538,7 +1544,7 @@ describe('Pylon', () => {
           conversation.conversationId,
           expect.stringContaining('readme.md'),
           expect.objectContaining({
-            workingDir: 'C:\\test',
+            workingDir: toNativePath('C:\\test'),
           })
         );
       });
@@ -1576,7 +1582,7 @@ describe('Pylon', () => {
           conversation.conversationId,
           expect.stringMatching(/Old Name.*New Name/),
           expect.objectContaining({
-            workingDir: 'C:\\test',
+            workingDir: toNativePath('C:\\test'),
           })
         );
       });

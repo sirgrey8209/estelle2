@@ -259,6 +259,33 @@ export class FolderManager {
   }
 
   /**
+   * 설정된 플랫폼에 맞게 경로 정규화
+   * Node.js의 path.normalize는 실행 플랫폼에 따라 동작하므로,
+   * 설정된 플랫폼에 맞게 경로 구분자를 통일합니다.
+   */
+  private normalizePath(inputPath: string): string {
+    if (this.platform === 'windows') {
+      // Windows: 슬래시를 백슬래시로 변환
+      return inputPath.replace(/\//g, '\\');
+    } else {
+      // Linux: 백슬래시를 슬래시로 변환
+      return inputPath.replace(/\\/g, '/');
+    }
+  }
+
+  /**
+   * 설정된 플랫폼에 맞게 경로 결합
+   * Node.js의 path.join은 실행 플랫폼에 따라 동작하므로,
+   * 설정된 플랫폼에 맞게 경로를 결합합니다.
+   */
+  private joinPath(...parts: string[]): string {
+    const sep = this.platform === 'windows' ? '\\' : '/';
+    const normalizedParts = parts.map(p => this.normalizePath(p));
+    // path.join과 유사하게 동작하되, 설정된 플랫폼의 구분자 사용
+    return normalizedParts.join(sep).replace(/[/\\]+/g, sep);
+  }
+
+  /**
    * 폴더명 유효성 검사 패턴 반환
    */
   private getInvalidCharsPattern(): RegExp {
@@ -287,8 +314,8 @@ export class FolderManager {
       // 빈 경로면 기본 경로 사용
       const effectivePath = targetPath || this.defaultPath;
 
-      // 경로 정규화
-      const normalizedPath = path.normalize(effectivePath);
+      // 경로 정규화 (플랫폼에 맞게)
+      const normalizedPath = this.normalizePath(effectivePath);
 
       // 경로 존재 확인
       if (!this.fs.existsSync(normalizedPath)) {
@@ -326,7 +353,7 @@ export class FolderManager {
 
       // 각 폴더의 하위 폴더 유무 확인
       const foldersWithChildren: FolderInfo[] = folderNames.map((name) => {
-        const folderPath = path.join(normalizedPath, name);
+        const folderPath = this.joinPath(normalizedPath, name);
         const hasChildren = this.checkHasChildren(folderPath);
         return { name, hasChildren };
       });
@@ -472,8 +499,8 @@ export class FolderManager {
         };
       }
 
-      const normalizedParent = path.normalize(parentPath);
-      const newFolderPath = path.join(normalizedParent, folderName.trim());
+      const normalizedParent = this.normalizePath(parentPath);
+      const newFolderPath = this.joinPath(normalizedParent, folderName.trim());
 
       // 부모 경로 존재 확인
       if (!this.fs.existsSync(normalizedParent)) {
@@ -533,7 +560,7 @@ export class FolderManager {
         };
       }
 
-      const normalizedPath = path.normalize(folderPath);
+      const normalizedPath = this.normalizePath(folderPath);
 
       // 경로 존재 확인
       if (!this.fs.existsSync(normalizedPath)) {
@@ -546,8 +573,8 @@ export class FolderManager {
         return { success: false, error: '디렉토리가 아닙니다.' };
       }
 
-      const parentDir = path.dirname(normalizedPath);
-      const newPath = path.join(parentDir, newName.trim());
+      const parentDir = this.getParentPath(normalizedPath);
+      const newPath = this.joinPath(parentDir, newName.trim());
 
       // 이미 존재하는지 확인
       if (this.fs.existsSync(newPath)) {
@@ -587,15 +614,27 @@ export class FolderManager {
    * @returns 상위 경로
    */
   getParentPath(currentPath: string): string {
-    const normalizedPath = path.normalize(currentPath);
-    const parentPath = path.dirname(normalizedPath);
+    const normalizedPath = this.normalizePath(currentPath);
+    const sep = this.platform === 'windows' ? '\\' : '/';
 
-    // 루트까지 올라갔으면 현재 경로 반환
-    if (parentPath === normalizedPath) {
+    // 마지막 구분자 위치 찾기
+    const lastSepIndex = normalizedPath.lastIndexOf(sep);
+
+    // 구분자가 없거나 루트인 경우 현재 경로 반환
+    if (lastSepIndex <= 0) {
+      // Windows 드라이브 루트 (예: C:\) 처리
+      if (this.platform === 'windows' && normalizedPath.match(/^[A-Za-z]:\\?$/)) {
+        return normalizedPath.endsWith('\\') ? normalizedPath : normalizedPath + '\\';
+      }
       return normalizedPath;
     }
 
-    return parentPath;
+    // Windows 드라이브 루트 바로 아래인 경우 (예: C:\folder → C:\)
+    if (this.platform === 'windows' && lastSepIndex === 2 && normalizedPath[1] === ':') {
+      return normalizedPath.substring(0, 3); // C:\
+    }
+
+    return normalizedPath.substring(0, lastSepIndex);
   }
 
   /**

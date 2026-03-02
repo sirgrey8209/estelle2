@@ -56,6 +56,9 @@ class InMemoryFolderFileSystem implements FolderFileSystem {
     const results: Array<{ isDirectory(): boolean; name: string }> = [];
 
     for (const [filePath, entry] of this.files) {
+      // 자기 자신은 제외
+      if (filePath === normalizedPath) continue;
+
       // 직접 하위 항목만 가져오기
       const parent = this._getParent(filePath);
       if (parent === normalizedPath) {
@@ -109,14 +112,23 @@ class InMemoryFolderFileSystem implements FolderFileSystem {
 
   // 경로 정규화 (Windows 스타일)
   private _normalizePath(p: string): string {
-    // 백슬래시로 통일, 마지막 슬래시 제거
-    return p.replace(/\//g, '\\').replace(/\\$/, '');
+    // 백슬래시로 통일
+    let normalized = p.replace(/\//g, '\\');
+    // 드라이브 루트(C:\)가 아닌 경우만 마지막 슬래시 제거
+    if (!normalized.match(/^[A-Za-z]:\\$/)) {
+      normalized = normalized.replace(/\\$/, '');
+    }
+    return normalized;
   }
 
   // 부모 경로 가져오기
   private _getParent(p: string): string {
     const lastSlash = p.lastIndexOf('\\');
-    if (lastSlash <= 2) return p.substring(0, lastSlash + 1); // C:\ 같은 루트
+    // 드라이브 루트인 경우 (C:\)
+    if (lastSlash === 2 && p[1] === ':') {
+      return p.substring(0, 3); // C:\
+    }
+    if (lastSlash <= 0) return p;
     return p.substring(0, lastSlash);
   }
 
@@ -194,7 +206,8 @@ describe('FolderManager', () => {
 
   beforeEach(() => {
     fs = new InMemoryFolderFileSystem();
-    folderManager = new FolderManager(fs);
+    // Windows 플랫폼으로 명시적 설정 (테스트가 Windows 경로 기반)
+    folderManager = new FolderManager(fs, { platform: 'windows', defaultPath: 'C:\\workspace' });
   });
 
   // ============================================================================

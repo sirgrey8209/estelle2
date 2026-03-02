@@ -9,6 +9,7 @@
  * - executeAddPrompt: 정상 케이스, 에러 케이스
  */
 
+import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
@@ -24,6 +25,14 @@ const addPromptToolDefinition = getAddPromptToolDefinition();
 // ============================================================================
 
 const TEST_TOOL_USE_ID = 'toolu_add_prompt_test_123';
+
+/** 테스트용 워킹 디렉토리: fixtures 폴더를 기준으로 설정 (플랫폼 독립적) */
+const TEST_FIXTURES_DIR = path.resolve(__dirname, '../../fixtures');
+
+/** 테스트용 파일들의 절대 경로 */
+const TEST_FILE_PATH = path.join(TEST_FIXTURES_DIR, 'doc', 'project-overview.md');
+const TEST_EMPTY_FILE_PATH = path.join(TEST_FIXTURES_DIR, 'doc', 'empty.md');
+const TEST_DOC_DIR = path.join(TEST_FIXTURES_DIR, 'doc');
 
 // ============================================================================
 // 도구 정의 테스트
@@ -62,10 +71,10 @@ describe('addPromptToolDefinition', () => {
 
 describe('executeAddPrompt', () => {
   beforeEach(() => {
-    // 환경변수 설정
+    // 환경변수 설정 (플랫폼 독립적 경로 사용)
     vi.stubEnv('ESTELLE_MCP_PORT', '19879');
     vi.stubEnv('ESTELLE_ENV', 'test');
-    vi.stubEnv('ESTELLE_WORKING_DIR', 'C:\\WorkSpace\\estelle2');
+    vi.stubEnv('ESTELLE_WORKING_DIR', TEST_FIXTURES_DIR);
   });
 
   afterEach(() => {
@@ -124,8 +133,8 @@ describe('executeAddPrompt', () => {
     });
 
     it('should_handle_absolute_file_path', async () => {
-      // Arrange
-      const args = { path: 'C:\\WorkSpace\\estelle2\\doc\\project-overview.md' };
+      // Arrange - 플랫폼 독립적 절대 경로 사용
+      const args = { path: TEST_FILE_PATH };
       const meta = { toolUseId: TEST_TOOL_USE_ID };
 
       // Act
@@ -207,8 +216,8 @@ describe('executeAddPrompt', () => {
     });
 
     it('should_return_error_when_file_is_directory', async () => {
-      // Arrange
-      const args = { path: 'doc/' };
+      // Arrange - 플랫폼 독립적 디렉토리 경로 사용
+      const args = { path: TEST_DOC_DIR };
       const meta = { toolUseId: TEST_TOOL_USE_ID };
 
       // Act
@@ -251,8 +260,8 @@ describe('executeAddPrompt', () => {
     });
 
     it('should_handle_empty_file', async () => {
-      // Arrange - 빈 파일
-      const args = { path: 'doc/empty.md' };
+      // Arrange - 빈 파일 (플랫폼 독립적 경로)
+      const args = { path: TEST_EMPTY_FILE_PATH };
       const meta = { toolUseId: TEST_TOOL_USE_ID };
 
       // Act
