@@ -48,6 +48,10 @@ export function startAgent(options: AgentOptions): WebSocket {
     log(`[Agent] Connected to master`);
   });
 
+  ws.on('ping', () => {
+    log(`[Agent] Ping ← master (pong auto-sent)`);
+  });
+
   ws.on('message', async (data) => {
     try {
       const msg = JSON.parse(data.toString()) as MasterMessage;

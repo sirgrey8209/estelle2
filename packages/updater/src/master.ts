@@ -38,7 +38,9 @@ export function startMaster(options: MasterOptions): MasterInstance {
     for (const [ip, agent] of agents) {
       if (agent.ws.readyState === WebSocket.OPEN) {
         agent.ws.ping();
+        console.log(`[Master] Ping → ${ip}`);
       } else {
+        console.log(`[Master] Removing dead agent: ${ip}`);
         agents.delete(ip);
       }
     }
