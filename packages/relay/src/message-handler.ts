@@ -25,6 +25,7 @@ import { getDeviceList, createDeviceStatusMessage, createClientDisconnectMessage
 import { getDeviceInfo, parseDeviceId, log } from './utils.js';
 import { DEVICES } from './constants.js';
 import { ClientIndexAllocator } from './device-id-validation.js';
+import { getVersion } from './version.js';
 
 // ============================================================================
 // 핸들러 결과 타입
@@ -181,6 +182,7 @@ export function handleAuth(
       type: 'auth_result',
       payload: {
         success: true,
+        relayVersion: getVersion(),
         device: {
           deviceId: encodedDeviceId,  // 7비트 인코딩된 deviceId
           deviceIndex,  // 로컬 인덱스도 함께 전달
@@ -650,6 +652,7 @@ export async function handleAuthViewer(
       type: 'auth_result',
       payload: {
         success: true,
+        relayVersion: getVersion(),
         device: {
           deviceId: encodedDeviceId,
           deviceIndex,
@@ -772,6 +775,7 @@ function createAppAuthSuccessActions(
       type: 'auth_result',
       payload: {
         success: true,
+        relayVersion: getVersion(),
         device: devicePayload,
       } as AuthResultPayload,
     },
@@ -875,6 +879,7 @@ export function handleViewerAuth(
       type: 'auth_result',
       payload: {
         success: true,
+        relayVersion: getVersion(),
         device: {
           deviceId: encodedDeviceId,
           deviceIndex,

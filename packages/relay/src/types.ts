@@ -258,6 +258,9 @@ export interface AuthResultPayload {
   /** 실패 시 오류 메시지 */
   error?: string;
 
+  /** Relay 서버 버전 (인증 성공 시) */
+  relayVersion?: string;
+
   /** 성공 시 디바이스 정보 */
   device?: {
     /** 7비트 인코딩된 deviceId (envId + deviceType + deviceIndex) */
