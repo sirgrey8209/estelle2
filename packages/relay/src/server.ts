@@ -268,6 +268,7 @@ function onMessage(
             ip: c.ip,
             connectedAt: c.connectedAt,
             authenticated: c.authenticated,
+            pylonVersion: c.pylonVersion,
           },
         ])
       ),
@@ -339,6 +340,7 @@ function onClose(clientId: string, state: RelayServerState): void {
             ip: c.ip,
             connectedAt: c.connectedAt,
             authenticated: c.authenticated,
+            pylonVersion: c.pylonVersion,
           },
         ])
       )
@@ -363,6 +365,7 @@ function broadcastDeviceStatus(state: RelayServerState): void {
           ip: c.ip,
           connectedAt: c.connectedAt,
           authenticated: c.authenticated,
+          pylonVersion: c.pylonVersion,
         },
       ])
     ),
