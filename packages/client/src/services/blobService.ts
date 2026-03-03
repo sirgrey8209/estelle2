@@ -366,7 +366,9 @@ export class BlobTransferService {
     }
 
     const blobId = generateUUID();
-    console.log(`[BLOB] Requesting download: ${filename}`);
+    // 경로를 슬래시로 정규화 (크로스플랫폼 호환)
+    const normalizedPath = filePath?.replace(/\\/g, '/');
+    console.log(`[BLOB] Requesting download: ${filename}, path: ${normalizedPath}`);
 
     this.sender.send({
       type: 'blob_request',
@@ -375,7 +377,7 @@ export class BlobTransferService {
         blobId,
         conversationId,
         filename,
-        ...(filePath && { localPath: filePath }),
+        ...(normalizedPath && { localPath: normalizedPath }),
       },
     });
   }

@@ -31,6 +31,7 @@
  */
 
 import { createHash } from 'crypto';
+import os from 'os';
 import type {
   BlobStartPayload,
   BlobChunkPayload,
@@ -41,6 +42,21 @@ import type {
   ConversationId,
 } from '@estelle/core';
 import { BlobConfig, MessageType } from '@estelle/core';
+
+/** Windows 플랫폼 여부 */
+const IS_WINDOWS = os.platform() === 'win32';
+
+/**
+ * 경로를 현재 플랫폼에 맞게 정규화
+ * 클라이언트에서 전달받은 경로(슬래시 또는 백슬래시)를 플랫폼에 맞게 변환
+ */
+function normalizePath(path: string): string {
+  if (IS_WINDOWS) {
+    return path.replace(/\//g, '\\');
+  } else {
+    return path.replace(/\\/g, '/');
+  }
+}
 
 // ============================================================================
 // 타입 정의
@@ -312,12 +328,13 @@ export class BlobHandler {
 
     console.log(`[BLOB] Start: ${blobId} (${filename}, ${totalSize} bytes, ${totalChunks} chunks)`);
 
-    // 동일 디바이스면 로컬 경로 직접 사용
+    // 동일 디바이스면 로컬 경로 직접 사용 (플랫폼에 맞게 정규화)
     if (sameDevice && localPath) {
-      console.log(`[BLOB] Same device, using local path: ${localPath}`);
+      const normalizedLocalPath = normalizePath(localPath);
+      console.log(`[BLOB] Same device, using local path: ${localPath} -> ${normalizedLocalPath}`);
 
       // 로컬 파일 존재 확인
-      if (this.fs.exists(localPath)) {
+      if (this.fs.exists(normalizedLocalPath)) {
         this.activeTransfers.set(blobId, {
           blobId,
           filename,
@@ -328,15 +345,15 @@ export class BlobHandler {
           encoding,
           context,
           from,
-          savePath: localPath,
+          savePath: normalizedLocalPath,
           chunks: [],
           receivedCount: 0,
           completed: true,
           sameDevice: true,
-          localPath,
+          localPath: normalizedLocalPath,
         });
 
-        return { success: true, path: localPath, sameDevice: true };
+        return { success: true, path: normalizedLocalPath, sameDevice: true };
       }
 
       // 파일이 없으면 일반 전송으로 폴백
@@ -503,10 +520,10 @@ export class BlobHandler {
 
     console.log(`[BLOB] Download request: ${filename}`, { blobId, localPath });
 
-    // 파일 찾기 - localPath가 있으면 우선 사용
-    let filePath = localPath;
+    // 파일 찾기 - localPath가 있으면 플랫폼에 맞게 정규화 후 사용
+    let filePath = localPath ? normalizePath(localPath) : undefined;
     console.log(
-      `[BLOB] Trying localPath: ${localPath}, exists: ${localPath ? this.fs.exists(localPath) : 'N/A'}`
+      `[BLOB] Trying localPath: ${localPath} -> normalized: ${filePath}, exists: ${filePath ? this.fs.exists(filePath) : 'N/A'}`
     );
 
     if (!filePath || !this.fs.exists(filePath)) {

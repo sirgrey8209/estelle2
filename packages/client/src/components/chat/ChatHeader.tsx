@@ -58,7 +58,10 @@ export function ChatHeader({ showSessionMenu = true }: ChatHeaderProps) {
 
     // 절대경로 여부 확인 (Windows: C:\..., Unix: /...)
     const isAbsolute = /^[A-Za-z]:[\\/]/.test(docPath) || docPath.startsWith('/');
-    const filePath = isAbsolute ? docPath : `${selectedConversation.workingDir}\\${docPath}`;
+    // 경로 결합 시 슬래시 사용 (크로스플랫폼 호환)
+    const workingDir = selectedConversation.workingDir.replace(/\\/g, '/');
+    const normalizedDocPath = docPath.replace(/\\/g, '/');
+    const filePath = isAbsolute ? normalizedDocPath : `${workingDir}/${normalizedDocPath}`;
 
     blobService.requestFile({
       targetDeviceId: selectedConversation.pylonId,

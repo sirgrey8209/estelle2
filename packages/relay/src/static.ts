@@ -196,7 +196,7 @@ function generateHubDashboard(projects: HubProject[], host: string): string {
     const projectUrl = p.url || `http://${host.split(':')[0]}:${p.port}`;
     const portDisplay = p.url ? new URL(p.url).pathname : `:${p.port}`;
     return `
-    <a href="${projectUrl}" class="project-card" target="_blank">
+    <a href="${projectUrl}" class="project-card" target="_blank" rel="noopener noreferrer external">
       <div class="project-name">${p.name}</div>
       <div class="project-desc">${p.description || ''}</div>
       <div class="project-port">${portDisplay}</div>
@@ -293,6 +293,18 @@ function generateHubDashboard(projects: HubProject[], host: string): string {
     </div>
     <p class="refresh-note">Refresh to reload project list</p>
   </div>
+  <script>
+    // 프로젝트 링크 클릭 시 삼성 인터넷으로 열기
+    document.querySelectorAll('.project-card').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = link.href;
+        const intentUrl = 'intent://' + url.replace(/^https?:\\/\\//, '') +
+          '#Intent;scheme=https;package=com.sec.android.app.sbrowser;end';
+        window.location.href = intentUrl;
+      });
+    });
+  </script>
 </body>
 </html>`;
 }

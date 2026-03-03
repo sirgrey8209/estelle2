@@ -31,6 +31,7 @@ import {
   decodeConversationId,
 } from '@estelle/core';
 import type { ConversationId, PylonId, WorkspaceId } from '@estelle/core';
+import { toNativePath } from '../utils/path-utils.js';
 
 /** 테스트용 디바이스 인덱스 (1~15, Pylon은 0 불가) */
 const DEVICE_INDEX = 1;
@@ -135,7 +136,7 @@ describe('WorkspaceStore', () => {
         const result = store.createWorkspace('New Workspace', 'C:\\workspace');
 
         expect(result.workspace.name).toBe('New Workspace');
-        expect(result.workspace.workingDir).toBe('C:\\workspace');
+        expect(result.workspace.workingDir).toBe(toNativePath('C:\\workspace'));
         expect(result.workspace.conversations).toHaveLength(0);
         expect(result.conversation).toBeUndefined();
       });
@@ -250,7 +251,7 @@ describe('WorkspaceStore', () => {
         expect(result).toBe(true);
         const updated = store.getWorkspace(workspace.workspaceId);
         expect(updated?.name).toBe('New Name');
-        expect(updated?.workingDir).toBe('C:\\test');
+        expect(updated?.workingDir).toBe(toNativePath('C:\\test'));
       });
 
       it('should update workingDir when only workingDir provided', () => {
@@ -261,7 +262,7 @@ describe('WorkspaceStore', () => {
         expect(result).toBe(true);
         const updated = store.getWorkspace(workspace.workspaceId);
         expect(updated?.name).toBe('Test');
-        expect(updated?.workingDir).toBe('C:\\new');
+        expect(updated?.workingDir).toBe(toNativePath('C:\\new'));
       });
 
       it('should update both name and workingDir when both provided', () => {
@@ -275,7 +276,7 @@ describe('WorkspaceStore', () => {
         expect(result).toBe(true);
         const updated = store.getWorkspace(workspace.workspaceId);
         expect(updated?.name).toBe('New Name');
-        expect(updated?.workingDir).toBe('C:\\new');
+        expect(updated?.workingDir).toBe(toNativePath('C:\\new'));
       });
 
       it('should return false when workspace not found', () => {
@@ -746,7 +747,8 @@ describe('WorkspaceStore', () => {
       it('should find workspace by working directory', () => {
         store.createWorkspace('Test', 'C:\\test\\project');
 
-        const found = store.findWorkspaceByWorkingDir('C:\\test\\project');
+        // findWorkspaceByWorkingDir는 정규화된 경로로 비교함
+        const found = store.findWorkspaceByWorkingDir(toNativePath('C:\\test\\project'));
 
         expect(found).not.toBeNull();
         expect(found?.name).toBe('Test');
@@ -755,7 +757,7 @@ describe('WorkspaceStore', () => {
       it('should return null for no match', () => {
         store.createWorkspace('Test', 'C:\\test');
 
-        const found = store.findWorkspaceByWorkingDir('C:\\other');
+        const found = store.findWorkspaceByWorkingDir(toNativePath('C:\\other'));
 
         expect(found).toBeNull();
       });

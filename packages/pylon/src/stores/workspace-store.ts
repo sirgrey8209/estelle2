@@ -40,6 +40,7 @@
  * ```
  */
 
+import os from 'os';
 import {
   ConversationStatus,
   PermissionMode,
@@ -77,8 +78,14 @@ const MAX_WORKSPACE_ID = MAX_WORKSPACE_INDEX;
 /** 대화 ID 최대값 (10비트: 1~1023) - MAX_CONVERSATION_INDEX 사용 */
 const MAX_CONVERSATION_ID = MAX_CONVERSATION_INDEX;
 
-/** 기본 작업 디렉토리 (환경 변수 또는 기본값) */
-const DEFAULT_WORKING_DIR = process.env.DEFAULT_WORKING_DIR || 'C:\\workspace';
+/** Windows 플랫폼 여부 */
+const IS_WINDOWS = os.platform() === 'win32';
+
+/** 플랫폼에 맞는 경로 구분자 */
+const PATH_SEP = IS_WINDOWS ? '\\' : '/';
+
+/** 기본 작업 디렉토리 (환경 변수 또는 플랫폼별 기본값) */
+const DEFAULT_WORKING_DIR = process.env.DEFAULT_WORKING_DIR || (IS_WINDOWS ? 'C:\\workspace' : '/workspace');
 
 // ============================================================================
 // 타입 정의
@@ -373,7 +380,7 @@ export class WorkspaceStore {
     const newWorkspace: Workspace = {
       workspaceId: wsId,
       name,
-      workingDir,
+      workingDir: this.normalizePath(workingDir),
       conversations: [],
       createdAt: now,
       lastUsed: now,
@@ -424,7 +431,7 @@ export class WorkspaceStore {
     if (updates.name !== undefined && !hasName) return false;
 
     if (hasName) workspace.name = trimmedName!;
-    if (hasWorkingDir) workspace.workingDir = updates.workingDir!.replace(/\//g, '\\');
+    if (hasWorkingDir) workspace.workingDir = this.normalizePath(updates.workingDir!);
 
     workspace.lastUsed = Date.now();
     return true;
@@ -672,10 +679,16 @@ export class WorkspaceStore {
   // ============================================================================
 
   /**
-   * 경로 정규화: 슬래시를 백슬래시로 변환하고 공백 제거
+   * 경로 정규화: 플랫폼에 맞는 구분자로 변환하고 공백 제거
    */
   private normalizePath(path: string): string {
-    return path.trim().replace(/\//g, '\\');
+    const trimmed = path.trim();
+    // 플랫폼에 맞게 경로 구분자 통일
+    if (IS_WINDOWS) {
+      return trimmed.replace(/\//g, '\\');
+    } else {
+      return trimmed.replace(/\\/g, '/');
+    }
   }
 
   /**
@@ -743,9 +756,9 @@ export class WorkspaceStore {
       return false;
     }
 
-    // 경로 찾기
+    // 경로 찾기 (저장된 경로도 정규화하여 비교)
     const idx = conversation.linkedDocuments.findIndex(
-      (doc) => doc.path === normalizedPath
+      (doc) => this.normalizePath(doc.path) === normalizedPath
     );
     if (idx < 0) {
       return false;
@@ -754,6 +767,22 @@ export class WorkspaceStore {
     // 제거
     conversation.linkedDocuments.splice(idx, 1);
     return true;
+  }
+
+  /**
+   * 대화에 연결된 모든 문서 해제 (clear)
+   *
+   * @param conversationId 대화 ConversationId
+   * @returns 해제된 문서 수
+   */
+  clearLinkedDocuments(conversationId: ConversationId): number {
+    const found = this.findConversation(conversationId);
+    if (!found) return 0;
+
+    const { conversation } = found;
+    const count = conversation.linkedDocuments?.length ?? 0;
+    conversation.linkedDocuments = [];
+    return count;
   }
 
   /**
