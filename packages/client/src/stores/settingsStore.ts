@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AccountType, AccountStatusPayload } from '@estelle/core';
+import { CLIENT_VERSION } from '../version';
 
 /**
  * 설정 상태 인터페이스
@@ -14,9 +15,20 @@ export interface SettingsState {
   /** 계정 전환 중 */
   isAccountSwitching: boolean;
 
+  /** 클라이언트 버전 */
+  clientVersion: string;
+
+  /** 릴레이 버전 */
+  relayVersion: string | null;
+
+  /** Pylon 버전들 (pylonId -> version) */
+  pylonVersions: Record<number, string>;
+
   // Actions
   setAccountStatus: (status: AccountStatusPayload) => void;
   setAccountSwitching: (switching: boolean) => void;
+  setRelayVersion: (version: string) => void;
+  setPylonVersions: (versions: Record<number, string>) => void;
   reset: () => void;
 }
 
@@ -27,6 +39,9 @@ const initialState = {
   currentAccount: null as AccountType | null,
   subscriptionType: null as string | null,
   isAccountSwitching: false,
+  clientVersion: CLIENT_VERSION,
+  relayVersion: null as string | null,
+  pylonVersions: {} as Record<number, string>,
 };
 
 /**
@@ -47,6 +62,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setAccountSwitching: (switching) => {
     set({ isAccountSwitching: switching });
+  },
+
+  setRelayVersion: (version) => {
+    set({ relayVersion: version });
+  },
+
+  setPylonVersions: (versions) => {
+    set({ pylonVersions: versions });
   },
 
   reset: () => {
