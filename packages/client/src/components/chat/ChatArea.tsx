@@ -7,6 +7,8 @@ import { useWorkspaceStore, useUploadStore, useConversationStore, useCurrentConv
 import { useImageUploadStore } from '../../stores/imageUploadStore';
 import { sendClaudeMessage, sendClaudeControl, requestMoreHistory } from '../../services/relaySender';
 import { blobService } from '../../services/blobService';
+import { useFileDrop } from '../../hooks/useFileDrop';
+import { processFiles } from '../../utils/fileUtils';
 import type { AttachedImage } from '../../stores/imageUploadStore';
 import type { UserTextMessage } from '@estelle/core';
 
@@ -23,8 +25,22 @@ export function ChatArea() {
   const hasPendingRequests = (currentState?.pendingRequests?.length ?? 0) > 0;
 
   const { selectedConversation, connectedPylons } = useWorkspaceStore();
-  const { queueMessage, dequeueMessage, clearAttachedImages } = useImageUploadStore();
+  const { queueMessage, dequeueMessage, clearAttachedImages, addAttachedImage } = useImageUploadStore();
   const { startUpload, updateProgress, completeUpload, failUpload } = useUploadStore();
+
+  const isWorking = status === 'working';
+
+  // 드래그 드롭 파일 처리
+  const handleFileDrop = useCallback((files: File[]) => {
+    const attachedFiles = processFiles(files);
+    for (const attached of attachedFiles) {
+      addAttachedImage(attached);
+    }
+  }, [addAttachedImage]);
+
+  const { isDragging, handlers: dropHandlers } = useFileDrop(handleFileDrop, {
+    disabled: isWorking,
+  });
 
   // 업로드 완료 후 메시지 전송을 위한 ref
   const pendingMessageRef = useRef<{
@@ -191,7 +207,6 @@ export function ChatArea() {
     sendClaudeControl(selectedConversation.conversationId, 'stop');
   }, [selectedConversation]);
 
-  const isWorking = status === 'working';
   const showRequestBar = hasPendingRequests;
 
   // 페이징 상태 (syncStore에서 가져옴)
@@ -215,7 +230,20 @@ export function ChatArea() {
   }, [selectedConversation, isLoadingMore, hasMoreBefore]);
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
+    <div
+      className="flex-1 flex flex-col h-full overflow-hidden bg-background relative"
+      {...dropHandlers}
+    >
+      {/* 드래그 드롭 오버레이 */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+          <div className="bg-background/90 px-6 py-4 rounded-lg shadow-lg">
+            <p className="text-lg font-medium text-primary">파일을 여기에 놓으세요</p>
+            <p className="text-sm text-muted-foreground">여러 파일을 한 번에 첨부할 수 있습니다</p>
+          </div>
+        </div>
+      )}
+
       {/* 채팅 헤더 */}
       <ChatHeader />
 

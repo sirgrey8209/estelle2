@@ -12,6 +12,7 @@ import { useConversationStore, EMPTY_SLASH_COMMANDS } from '../../stores/convers
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
 import { useResponsive } from '../../hooks/useResponsive';
+import { processFiles } from '../../utils/fileUtils';
 import {
   parseSlashCommand,
   filterSlashCommandsByPrefix,
@@ -50,7 +51,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   // conversationStore에서 현재 대화의 status 가져오기
   const currentState = useCurrentConversationState();
   const status = currentState?.status ?? 'idle';
-  const { attachedImage, setAttachedImage, hasActiveUpload } = useImageUploadStore();
+  const { attachedImages, addAttachedImage, removeAttachedImage, clearAttachedImages, hasActiveUpload } = useImageUploadStore();
   const { isDesktop, isTablet } = useResponsive();
 
   const conversationId = selectedConversation?.conversationId || null;
@@ -142,7 +143,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   }, [conversationId]); // text는 의존성에서 제외 (무한 루프 방지)
 
   const isWorking = status === 'working';
-  const canSend = (text.trim() || attachedImage) && !disabled && !isWorking;
+  const canSend = (text.trim() || attachedImages.length > 0) && !disabled && !isWorking;
 
   const handleSend = useCallback(() => {
     if (!canSend || !selectedConversation) return;
@@ -151,15 +152,15 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
       return;
     }
 
-    const attachments = attachedImage ? [attachedImage] : undefined;
+    const attachments = attachedImages.length > 0 ? attachedImages : undefined;
     onSend?.(text.trim(), attachments);
     setText('');
-    setAttachedImage(null);
+    clearAttachedImages();
     // 전송 후 draft 삭제
     if (conversationId) {
       draftTexts.delete(conversationId);
     }
-  }, [canSend, selectedConversation, hasActiveUpload, attachedImage, text, onSend, setAttachedImage, conversationId]);
+  }, [canSend, selectedConversation, hasActiveUpload, attachedImages, text, onSend, clearAttachedImages, conversationId]);
 
   const handleStop = () => {
     onStop?.();
@@ -208,32 +209,39 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     }
   };
 
-  // 붙여넣기: 클립보드 이미지 또는 대용량 텍스트 → 파일 첨부
+  // 붙여넣기: 클립보드 파일, 이미지, 대용량 텍스트 → 파일 첨부
   const PASTE_TEXT_THRESHOLD = 1024; // 1KB 이상이면 파일 첨부로 전환
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
-    // 1. 클립보드 이미지 확인
+    // 1. 클립보드에서 파일 수집 (이미지 포함)
+    const files: File[] = [];
     for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
+      if (item.kind === 'file') {
         const file = item.getAsFile();
-        if (!file) return;
-
-        const ext = file.type.split('/')[1] || 'png';
-        const filename = `clipboard-${Date.now()}.${ext}`;
-        const uri = URL.createObjectURL(file);
-        setAttachedImage({
-          id: `img_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-          uri,
-          fileName: filename,
-          file,
-          mimeType: file.type,
-        });
-        return;
+        if (file) {
+          // 클립보드 이미지는 파일명이 'image.png' 등으로 고정되므로 타임스탬프 추가
+          if (item.type.startsWith('image/') && file.name === 'image.png') {
+            const ext = file.type.split('/')[1] || 'png';
+            const newFile = new File([file], `clipboard-${Date.now()}.${ext}`, { type: file.type });
+            files.push(newFile);
+          } else {
+            files.push(file);
+          }
+        }
       }
+    }
+
+    // 파일이 있으면 첨부
+    if (files.length > 0) {
+      e.preventDefault();
+      const attachedFiles = processFiles(files);
+      for (const attached of attachedFiles) {
+        addAttachedImage(attached);
+      }
+      return;
     }
 
     // 2. 대용량 텍스트 확인
@@ -242,28 +250,20 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
       e.preventDefault();
       const blob = new Blob([pastedText], { type: 'text/plain' });
       const file = new File([blob], `pasted-${Date.now()}.txt`, { type: 'text/plain' });
-      const uri = URL.createObjectURL(file);
-      setAttachedImage({
-        id: `file_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        uri,
-        fileName: file.name,
-        file,
-        mimeType: 'text/plain',
-      });
+      const attachedFiles = processFiles([file]);
+      for (const attached of attachedFiles) {
+        addAttachedImage(attached);
+      }
     }
-  }, [setAttachedImage]);
+  }, [addAttachedImage]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const uri = URL.createObjectURL(file);
-      setAttachedImage({
-        id: `img_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        uri,
-        fileName: file.name,
-        file,
-        mimeType: file.type || 'application/octet-stream',
-      });
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const attachedFiles = processFiles(files);
+      for (const attached of attachedFiles) {
+        addAttachedImage(attached);
+      }
     }
     setShowAttachMenu(false);
     // Reset input
@@ -275,40 +275,47 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     }
   };
 
-  const removeAttachment = () => {
-    if (attachedImage?.uri) {
-      URL.revokeObjectURL(attachedImage.uri);
+  const removeAttachment = (id: string) => {
+    const attachment = attachedImages.find((a) => a.id === id);
+    if (attachment?.uri) {
+      URL.revokeObjectURL(attachment.uri);
     }
-    setAttachedImage(null);
+    removeAttachedImage(id);
   };
 
   return (
     <div className="bg-secondary/30">
-      {/* 첨부 파일 미리보기 */}
-      {attachedImage && (
-        <div className="flex items-center px-2 pt-2 bg-muted/50">
-          <div className="relative">
-            {attachedImage.mimeType?.startsWith('image/') ? (
-              <img
-                src={attachedImage.uri}
-                alt={attachedImage.fileName}
-                className="w-16 h-16 rounded-lg object-cover"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border">
-                <span className="text-2xl">📄</span>
+      {/* 첨부 파일 미리보기 (멀티 파일 지원) */}
+      {attachedImages.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-2 pt-2 bg-muted/50">
+          {attachedImages.map((attachment) => (
+            <div key={attachment.id} className="relative group">
+              {attachment.mimeType?.startsWith('image/') ? (
+                <img
+                  src={attachment.uri}
+                  alt={attachment.fileName}
+                  className="w-16 h-16 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-lg bg-muted flex flex-col items-center justify-center border border-border">
+                  <span className="text-2xl">📄</span>
+                  <span className="text-[10px] text-muted-foreground truncate max-w-14 px-1">
+                    {attachment.fileName.split('.').pop()?.toUpperCase() || 'FILE'}
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={() => removeAttachment(attachment.id)}
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-80 hover:opacity-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              {/* 파일명 툴팁 */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] truncate px-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                {attachment.fileName}
               </div>
-            )}
-            <button
-              onClick={removeAttachment}
-              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-          <span className="ml-2 flex-1 text-xs text-muted-foreground truncate">
-            {attachedImage.fileName}
-          </span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -418,20 +425,22 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
         </DialogContent>
       </Dialog>
 
-      {/* 숨겨진 파일 입력 (이미지) */}
+      {/* 숨겨진 파일 입력 (이미지, 멀티 선택) */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleFileSelect}
       />
 
-      {/* 숨겨진 파일 입력 (모든 파일) */}
+      {/* 숨겨진 파일 입력 (모든 파일, 멀티 선택) */}
       <input
         ref={generalFileInputRef}
         type="file"
         accept="*/*"
+        multiple
         className="hidden"
         onChange={handleFileSelect}
       />
