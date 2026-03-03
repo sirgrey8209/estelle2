@@ -154,6 +154,9 @@ export interface Client {
 
   /** 공유 ID (viewer 전용 - 접근한 공유 링크 식별자) */
   shareId?: string;
+
+  /** Pylon 버전 (pylon 전용 - 인증 시 전달받은 버전) */
+  pylonVersion?: string;
 }
 
 /**
@@ -260,6 +263,9 @@ export interface AuthResultPayload {
 
   /** Relay 서버 버전 (인증 성공 시) */
   relayVersion?: string;
+
+  /** 연결된 Pylon들의 버전 맵 (deviceId -> version) */
+  pylonVersions?: Record<number, string>;
 
   /** 성공 시 디바이스 정보 */
   device?: {

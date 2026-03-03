@@ -50,6 +50,32 @@ export interface HandleResult {
 // ============================================================================
 
 /**
+ * 연결된 모든 Pylon의 버전 맵을 반환합니다.
+ *
+ * @description
+ * 인증된 Pylon 클라이언트들의 deviceId와 버전 정보를 맵으로 반환합니다.
+ * Viewer에게 auth_result를 보낼 때 사용됩니다.
+ *
+ * @param clients - 클라이언트 맵
+ * @returns deviceId -> version 맵
+ */
+export function getPylonVersions(clients: Map<string, Client>): Record<number, string> {
+  const versions: Record<number, string> = {};
+
+  for (const client of clients.values()) {
+    if (
+      isAuthenticatedClient(client) &&
+      client.deviceType === 'pylon' &&
+      client.pylonVersion
+    ) {
+      versions[client.deviceId] = client.pylonVersion;
+    }
+  }
+
+  return versions;
+}
+
+/**
  * 인증 실패 응답을 생성합니다.
  *
  * @param clientId - 클라이언트 ID
@@ -134,6 +160,9 @@ export function handleAuth(
   let deviceIndex: number;
   let encodedDeviceId: number;
 
+  // Pylon 버전 (인증 시 저장용)
+  let pylonVersion: string | undefined;
+
   // Pylon 인증
   if (deviceType === 'pylon') {
     // deviceId를 deviceIndex로 파싱 (Pylon은 deviceIndex를 전달함)
@@ -153,6 +182,9 @@ export function handleAuth(
     deviceIndex = parsedDeviceIndex;
     // pylonId 인코딩: envId + deviceType(0) + deviceIndex
     encodedDeviceId = encodePylonId(envId, deviceIndex);
+
+    // Pylon 버전 추출
+    pylonVersion = payload.version;
   } else {
     // App 클라이언트: deviceIndex 자동 발급 (allocator의 nextId를 전달받음)
     deviceIndex = nextClientIndex;
@@ -163,14 +195,21 @@ export function handleAuth(
 
   // 인증 성공 - 클라이언트 상태 업데이트
   // 내부적으로는 deviceIndex를 저장 (라우팅에 사용)
+  const clientUpdates: Partial<Client> = {
+    deviceId: deviceIndex,  // 내부 라우팅용 deviceIndex
+    deviceType: deviceType as RelayDeviceType,
+    authenticated: true,
+  };
+
+  // Pylon인 경우 버전 정보 저장
+  if (pylonVersion) {
+    clientUpdates.pylonVersion = pylonVersion;
+  }
+
   actions.push({
     type: 'update_client',
     clientId,
-    updates: {
-      deviceId: deviceIndex,  // 내부 라우팅용 deviceIndex
-      deviceType: deviceType as RelayDeviceType,
-      authenticated: true,
-    },
+    updates: clientUpdates,
   });
 
   // 인증 성공 응답 - 클라이언트에는 인코딩된 deviceId 전달
@@ -200,9 +239,7 @@ export function handleAuth(
   const updatedClients = new Map(clients);
   updatedClients.set(clientId, {
     ...client,
-    deviceId: deviceIndex,  // 내부 라우팅용 deviceIndex
-    deviceType: deviceType as RelayDeviceType,
-    authenticated: true,
+    ...clientUpdates,
   });
 
   const broadcastResult = broadcastAll(updatedClients);
@@ -880,6 +917,7 @@ export function handleViewerAuth(
       payload: {
         success: true,
         relayVersion: getVersion(),
+        pylonVersions: getPylonVersions(clients),
         device: {
           deviceId: encodedDeviceId,
           deviceIndex,
