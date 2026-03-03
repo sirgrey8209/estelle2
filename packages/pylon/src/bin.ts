@@ -28,6 +28,7 @@ import { FolderManager, type FolderFileSystem } from './managers/folder-manager.
 import { FileSystemPersistence, type FileSystemInterface } from './persistence/file-system-persistence.js';
 import { CredentialManager } from './auth/credential-manager.js';
 import { PylonMcpServer } from './servers/pylon-mcp-server.js';
+import { getVersion } from './version.js';
 import os from 'os';
 
 // ============================================================================
@@ -456,7 +457,9 @@ function createDependencies(): PylonDependencies & {
 // ============================================================================
 
 async function main(): Promise<void> {
-  logger.log(`[Estelle Pylon v2] Starting...`);
+  const version = getVersion();
+  logger.log(`[Estelle Pylon v2] Starting... (${version})`);
+  logger.log(`  Version: ${version}`);
   logger.log(`  Device ID: ${config.deviceId}`);
   logger.log(`  Relay URL: ${config.relayUrl}`);
   logger.log(`  Uploads Dir: ${config.uploadsDir}`);
