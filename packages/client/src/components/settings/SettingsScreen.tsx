@@ -1,4 +1,5 @@
 import { AccountSection } from './AccountSection';
+import { VersionSection } from './VersionSection';
 // import { DebugLogSection } from './DebugLogSection';
 
 /**
@@ -7,11 +8,10 @@ import { AccountSection } from './AccountSection';
 export function SettingsScreen() {
   return (
     <div className="flex-1 bg-background">
-      <div className="h-full overflow-y-auto p-4">
+      <div className="h-full overflow-y-auto p-4 space-y-4">
         <AccountSection />
-        {/* <div className="mt-4">
-          <DebugLogSection />
-        </div> */}
+        <VersionSection />
+        {/* <DebugLogSection /> */}
       </div>
     </div>
   );
@@ -24,6 +24,7 @@ export function SettingsContent() {
   return (
     <div className="space-y-4">
       <AccountSection />
+      <VersionSection />
       {/* <DebugLogSection /> */}
     </div>
   );

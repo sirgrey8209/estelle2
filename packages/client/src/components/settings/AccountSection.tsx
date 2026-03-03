@@ -38,7 +38,7 @@ export function AccountSection() {
   };
 
   return (
-    <Card>
+    <Card data-section="account">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <span>🔐</span>
