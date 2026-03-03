@@ -1,34 +1,22 @@
 /**
  * @file utils/buildInfo.ts
- * @description 빌드 정보 (런타임에 version.json에서 로드)
+ * @description 빌드 정보 (빌드 시점에 임베드된 버전 사용)
  */
 
-interface VersionInfo {
-  env: string;
-  version: string;
-  buildTime: string;
-}
-
-/** 버전 정보 (fetch 전에는 기본값) */
-let versionInfo: VersionInfo = { env: 'dev', version: '', buildTime: '' };
+import { CLIENT_VERSION } from '../version';
 
 /**
- * version.json에서 버전 정보를 로드합니다.
+ * 환경 감지: 빌드 버전이 'dev'이면 개발 환경
+ */
+const env = CLIENT_VERSION === 'dev' ? 'dev' : 'release';
+
+/**
+ * 버전 정보 초기화 및 테마 적용
  * 앱 시작 시 한 번 호출됩니다.
- * 로드 후 환경별 테마 클래스를 적용합니다.
  */
 export async function loadVersionInfo(): Promise<void> {
-  try {
-    const res = await fetch('/version.json', { cache: 'no-store' });
-    if (res.ok) {
-      versionInfo = await res.json();
-    }
-  } catch {
-    // fetch 실패 시 기본값 유지 (dev)
-  }
-
   // 환경별 테마 클래스 적용
-  applyEnvTheme(versionInfo.env);
+  applyEnvTheme(env);
 
   // 환경별 document.title 적용
   document.title = BuildInfo.appName;
@@ -49,23 +37,19 @@ function applyEnvTheme(env: string): void {
 }
 
 export const BuildInfo = {
-  /** 환경: dev, stage, release */
-  get env(): string { return versionInfo.env; },
+  /** 환경: dev, release */
+  get env(): string { return env; },
 
-  /** 빌드 버전: vMMDD_N (dev에서는 빈 문자열) */
-  get version(): string { return versionInfo.version; },
+  /** 빌드 버전: vMMDD_N (dev에서는 'dev') */
+  get version(): string { return CLIENT_VERSION; },
 
-  /** 빌드 시간 */
-  get buildTime(): string { return versionInfo.buildTime; },
-
-  /** 앱 이름 (환경별: Estelle, Estelle - stage, Estelle - dev) */
+  /** 앱 이름 - 버전 포함 */
   get appName(): string {
-    if (this.env === 'release') return 'Estelle';
-    return `Estelle - ${this.env}`;
+    return `Estelle (${CLIENT_VERSION})`;
   },
 
-  /** 표시용: "(dev)" 또는 "(stage)v0207_1" */
+  /** 표시용: 버전 문자열 */
   get display(): string {
-    return this.version ? `(${this.env})${this.version}` : `(${this.env})`;
+    return CLIENT_VERSION;
   },
 };
