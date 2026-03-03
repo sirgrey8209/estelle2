@@ -80,18 +80,58 @@ cp config/environments.example.json config/environments.json
 }
 ```
 
-### 3단계: 빌드 및 배포
+### 3단계: 빌드 및 release/ 구조 생성
 
 ```bash
 # 의존성 설치
 pnpm install
 
-# 배포 (크로스 플랫폼)
-pnpm deploy:release
+# 빌드
+pnpm build
 ```
 
+**release/ 디렉토리 초기 세팅:**
+
+PM2는 `release/` 디렉토리에서 실행됩니다. 빌드 결과물을 복사하고 node_modules 심링크를 생성합니다.
+
+```bash
+# 디렉토리 생성 및 빌드 결과물 복사
+mkdir -p release/pylon/dist release/relay/dist release/relay/public
+cp -r packages/pylon/dist/* release/pylon/dist/
+cp -r packages/relay/dist/* release/relay/dist/
+cp -r packages/relay/public/* release/relay/public/
+
+# node_modules 심링크 (pnpm 워크스페이스 내부 패키지 해석용, 최초 1회)
+ln -s ../../packages/relay/node_modules release/relay/node_modules
+ln -s ../../packages/pylon/node_modules release/pylon/node_modules
+```
+
+> Windows에서는 심링크 대신 `mklink /D` 사용:
+> ```cmd
+> mklink /D release\relay\node_modules ..\..\packages\relay\node_modules
+> mklink /D release\pylon\node_modules ..\..\packages\pylon\node_modules
+> ```
+
+**PM2 서비스 시작:**
+
+```bash
+# Relay (Master만)
+PORT=8080 STATIC_DIR=$(pwd)/release/relay/public \
+  pm2 start release/relay/dist/bin.js --name estelle-relay
+
+# Pylon
+ESTELLE_VERSION="v0000_0" \
+ESTELLE_ENV_CONFIG='{ ... }' \
+  pm2 start release/pylon/dist/bin.js --name estelle-pylon
+
+# 저장
+pm2 save
+```
+
+> `ESTELLE_ENV_CONFIG`는 `config/environments.json`의 release 섹션을 참고하여 작성합니다.
+
 **성공 시:**
-- PM2로 Relay + Pylon 시작됨
+- PM2로 Relay + Pylon이 `release/` 경로에서 실행됨
 - `pm2 status`로 확인 가능
 
 ### 4단계: MCP 서버 연결
@@ -238,9 +278,10 @@ npx estelle-updater trigger 89.167.4.124 hotfix
 
 1. 명령 수신
 2. `git fetch && git checkout {branch} && git pull`
-3. `pnpm deploy:release` 자동 실행
-4. 실시간 로그 스트리밍
-5. 완료/실패 알림
+3. `pnpm build`
+4. 빌드 결과물을 `release/`로 복사 (pylon/dist, relay/dist, relay/public)
+5. `pm2 restart` (Master: relay + pylon, Agent: pylon만)
+6. 실시간 로그 스트리밍 및 완료/실패 알림
 
 ### 상태 확인
 
@@ -264,14 +305,11 @@ pm2 restart all               # 전체 재시작
 
 ### 업데이트 배포
 
-```bash
-# 크로스 플랫폼 (Linux/Windows 모두)
-pnpm deploy:release
-```
+estelle-updater를 통해 원격으로 배포합니다.
 
 **MCP를 통한 배포:**
-Claude Code에서 `deploy` MCP 도구를 사용하면 자동 배포됩니다.
-배포는 detached 프로세스로 실행되어 Pylon 재시작 후에도 계속됩니다.
+Claude Code에서 `update` MCP 도구를 사용하면 자동 배포됩니다.
+updater가 git pull → build → release/ 복사 → pm2 restart를 자동 수행합니다.
 
 ---
 

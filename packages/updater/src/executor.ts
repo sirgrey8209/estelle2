@@ -5,7 +5,8 @@
  * Simple update flow:
  * 1. git fetch + checkout + pull
  * 2. pnpm build
- * 3. pm2 restart (Relay + Pylon for Master, Pylon only for Agent)
+ * 3. Copy dist to release/
+ * 4. pm2 restart (Relay + Pylon for Master, Pylon only for Agent)
  *
  * Cross-platform support for logging:
  * - Linux/Mac: spawn with detached + stdio file descriptors (native support)
@@ -98,7 +99,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     log(`=== Update started (${role}) ===`);
 
     // Step 1: git fetch
-    log(`[1/5] git fetch origin...`);
+    log(`[1/6] git fetch origin...`);
     const fetchResult = await runCommand('git', ['fetch', 'origin'], repoRoot, log);
     if (!fetchResult.success) {
       log(`✗ git fetch failed: ${fetchResult.error}`);
@@ -106,7 +107,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 2: git checkout
-    log(`[2/5] git checkout ${branch}...`);
+    log(`[2/6] git checkout ${branch}...`);
     const checkoutResult = await runCommand('git', ['checkout', branch], repoRoot, log);
     if (!checkoutResult.success) {
       log(`✗ git checkout failed: ${checkoutResult.error}`);
@@ -114,7 +115,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 3: git pull
-    log(`[3/5] git pull origin ${branch}...`);
+    log(`[3/6] git pull origin ${branch}...`);
     const pullResult = await runCommand('git', ['pull', 'origin', branch], repoRoot, log);
     if (!pullResult.success) {
       log(`✗ git pull failed: ${pullResult.error}`);
@@ -122,15 +123,43 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 4: pnpm build
-    log(`[4/5] pnpm build...`);
+    log(`[4/6] pnpm build...`);
     const buildResult = await runCommand('pnpm', ['build'], repoRoot, log);
     if (!buildResult.success) {
       log(`✗ pnpm build failed: ${buildResult.error}`);
       return { success: false, error: `pnpm build failed: ${buildResult.error}` };
     }
 
-    // Step 5: pm2 restart
-    log(`[5/5] pm2 restart...`);
+    // Step 5: Copy build artifacts to release/
+    log(`[5/6] Copying build artifacts to release/...`);
+    const releaseDir = path.join(repoRoot, 'release');
+    const pkgDir = path.join(repoRoot, 'packages');
+
+    // Always copy pylon/dist
+    const pylonDistSrc = path.join(pkgDir, 'pylon', 'dist');
+    const pylonDistDest = path.join(releaseDir, 'pylon', 'dist');
+    fs.mkdirSync(pylonDistDest, { recursive: true });
+    fs.cpSync(pylonDistSrc, pylonDistDest, { recursive: true });
+    log(`  pylon/dist → release/pylon/dist`);
+
+    if (isMaster) {
+      // Copy relay/dist
+      const relayDistSrc = path.join(pkgDir, 'relay', 'dist');
+      const relayDistDest = path.join(releaseDir, 'relay', 'dist');
+      fs.mkdirSync(relayDistDest, { recursive: true });
+      fs.cpSync(relayDistSrc, relayDistDest, { recursive: true });
+      log(`  relay/dist → release/relay/dist`);
+
+      // Copy relay/public
+      const relayPublicSrc = path.join(pkgDir, 'relay', 'public');
+      const relayPublicDest = path.join(releaseDir, 'relay', 'public');
+      fs.mkdirSync(relayPublicDest, { recursive: true });
+      fs.cpSync(relayPublicSrc, relayPublicDest, { recursive: true });
+      log(`  relay/public → release/relay/public`);
+    }
+
+    // Step 6: pm2 restart
+    log(`[6/6] pm2 restart...`);
 
     if (isMaster) {
       // Master: restart both Relay and Pylon

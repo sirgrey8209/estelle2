@@ -94,6 +94,34 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
   }
   logDetail('TypeScript build completed');
 
+  // Copy build artifacts to release/
+  log('Phase 1.5', 'Copying build artifacts to release/...');
+  const releaseDir = path.join(repoRoot, 'release');
+  const pkgDir = path.join(repoRoot, 'packages');
+
+  // Always copy pylon/dist
+  const pylonDistSrc = path.join(pkgDir, 'pylon', 'dist');
+  const pylonDistDest = path.join(releaseDir, 'pylon', 'dist');
+  fs.mkdirSync(pylonDistDest, { recursive: true });
+  fs.cpSync(pylonDistSrc, pylonDistDest, { recursive: true });
+  logDetail('pylon/dist → release/pylon/dist');
+
+  if (!pylonOnly) {
+    // Copy relay/dist
+    const relayDistSrc = path.join(pkgDir, 'relay', 'dist');
+    const relayDistDest = path.join(releaseDir, 'relay', 'dist');
+    fs.mkdirSync(relayDistDest, { recursive: true });
+    fs.cpSync(relayDistSrc, relayDistDest, { recursive: true });
+    logDetail('relay/dist → release/relay/dist');
+
+    // Copy relay/public
+    const relayPublicSrc = path.join(pkgDir, 'relay', 'public');
+    const relayPublicDest = path.join(releaseDir, 'relay', 'public');
+    fs.mkdirSync(relayPublicDest, { recursive: true });
+    fs.cpSync(relayPublicSrc, relayPublicDest, { recursive: true });
+    logDetail('relay/public → release/relay/public');
+  }
+
   // Stop services
   log('Phase 2', 'Stopping PM2 services...');
   if (!pylonOnly && config.relay.pm2Name) {
@@ -143,10 +171,10 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
     const relayResult = startService({
       name: config.relay.pm2Name,
       script: 'dist/bin.js',
-      cwd: path.join(repoRoot, 'packages', 'relay'),
+      cwd: path.join(repoRoot, 'release', 'relay'),
       env: {
         PORT: String(config.relay.port),
-        STATIC_DIR: relayPublic,
+        STATIC_DIR: path.join(repoRoot, 'release', 'relay', 'public'),
       },
     });
     if (!relayResult.success) {
@@ -161,7 +189,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
   const pylonResult = startService({
     name: config.pylon.pm2Name,
     script: 'dist/bin.js',
-    cwd: path.join(repoRoot, 'packages', 'pylon'),
+    cwd: path.join(repoRoot, 'release', 'pylon'),
     env: {
       ESTELLE_VERSION: version,
       ESTELLE_ENV_CONFIG: envConfig,
