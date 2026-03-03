@@ -44,30 +44,9 @@ export function startAgent(options: AgentOptions): WebSocket {
   log(`[Agent] Connecting to master: ${masterUrl}`);
   const ws = new WebSocket(masterUrl);
 
-  let alive = true;
-
   ws.on('open', () => {
     log(`[Agent] Connected to master`);
-    alive = true;
   });
-
-  // Master sends ping every 30s, we respond with pong (automatic in ws library)
-  // But we also track liveness to detect zombie connections
-  ws.on('ping', () => {
-    alive = true;
-  });
-
-  // Check liveness every 90s — if no ping received in 2+ cycles, connection is dead
-  // Master pings every 30s, so 90s gives plenty of margin
-  const livenessCheck = setInterval(() => {
-    if (!alive) {
-      log(`[Agent] No ping from master for 90s, terminating connection`);
-      clearInterval(livenessCheck);
-      ws.terminate();
-      return;
-    }
-    alive = false;
-  }, 90_000);
 
   ws.on('message', async (data) => {
     try {
@@ -119,7 +98,6 @@ export function startAgent(options: AgentOptions): WebSocket {
   });
 
   ws.on('close', () => {
-    clearInterval(livenessCheck);
     log(`[Agent] Disconnected from master, reconnecting in 5s...`);
     setTimeout(() => startAgent(options), 5000);
   });
