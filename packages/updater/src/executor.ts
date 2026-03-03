@@ -1,10 +1,16 @@
 // packages/updater/src/executor.ts
 /**
  * Git pull + deploy executor
+ *
+ * Cross-platform support:
+ * - Linux/Mac: spawn with detached + stdio file descriptors (native support)
+ * - Windows: spawn wrapper script that handles redirection (Node.js limitation)
  */
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+
+const isWindows = process.platform === 'win32';
 
 export interface ExecuteOptions {
   branch: string;
@@ -50,6 +56,16 @@ function runCommand(
   });
 }
 
+/**
+ * Run a command in detached mode (survives parent process exit)
+ *
+ * Windows limitation: Node.js spawn with detached + stdio file descriptors
+ * doesn't work properly on Windows. The child process starts but output
+ * is not captured to the file.
+ *
+ * Solution: On Windows, create a wrapper batch script that handles the
+ * output redirection natively.
+ */
 function runDetached(
   cmd: string,
   args: string[],
@@ -62,30 +78,67 @@ function runDetached(
       fs.mkdirSync(logDir, { recursive: true });
     }
     const logFile = path.join(logDir, `deploy-${Date.now()}.log`);
-    const out = fs.openSync(logFile, 'a');
-    const err = fs.openSync(logFile, 'a');
 
     onLog(`Deploy log: ${logFile}`);
 
-    // shell: true enables cross-platform command resolution (Windows .cmd/.bat)
-    const child = spawn(cmd, args, {
-      cwd,
-      detached: true,
-      shell: true,
-      stdio: ['ignore', out, err],
-    });
+    if (isWindows) {
+      // Windows: Create a wrapper batch script
+      const batchFile = path.join(logDir, `deploy-${Date.now()}.cmd`);
+      const fullCmd = `${cmd} ${args.join(' ')}`;
 
-    child.unref();
+      // Batch script: run command, redirect output, then delete itself
+      const batchContent = [
+        '@echo off',
+        `cd /d "${cwd}"`,
+        `echo [%date% %time%] Starting: ${fullCmd} >> "${logFile}"`,
+        `${fullCmd} >> "${logFile}" 2>&1`,
+        `echo [%date% %time%] Exit code: %errorlevel% >> "${logFile}"`,
+        `del "%~f0"`, // Self-delete the batch file
+      ].join('\r\n');
 
-    // Give it a moment to start, then report success
-    setTimeout(() => {
-      onLog(`Deploy started (pid: ${child.pid}, detached)`);
-      resolve({ success: true });
-    }, 1000);
+      fs.writeFileSync(batchFile, batchContent);
 
-    child.on('error', (e) => {
-      resolve({ success: false, error: e.message });
-    });
+      // Run the batch file detached
+      const child = spawn('cmd', ['/c', 'start', '/b', '', batchFile], {
+        cwd,
+        detached: true,
+        shell: false,
+        stdio: 'ignore',
+      });
+
+      child.unref();
+
+      setTimeout(() => {
+        onLog(`Deploy started via wrapper (Windows, pid: ${child.pid})`);
+        resolve({ success: true });
+      }, 1000);
+
+      child.on('error', (e) => {
+        resolve({ success: false, error: e.message });
+      });
+    } else {
+      // Linux/Mac: Native detached with file descriptors works fine
+      const out = fs.openSync(logFile, 'a');
+      const err = fs.openSync(logFile, 'a');
+
+      const child = spawn(cmd, args, {
+        cwd,
+        detached: true,
+        shell: true,
+        stdio: ['ignore', out, err],
+      });
+
+      child.unref();
+
+      setTimeout(() => {
+        onLog(`Deploy started (pid: ${child.pid}, detached)`);
+        resolve({ success: true });
+      }, 1000);
+
+      child.on('error', (e) => {
+        resolve({ success: false, error: e.message });
+      });
+    }
   });
 }
 
