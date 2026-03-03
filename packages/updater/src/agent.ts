@@ -57,16 +57,17 @@ export function startAgent(options: AgentOptions): WebSocket {
     alive = true;
   });
 
-  // Check liveness every 35s — if no ping received, connection is dead
+  // Check liveness every 90s — if no ping received in 2+ cycles, connection is dead
+  // Master pings every 30s, so 90s gives plenty of margin
   const livenessCheck = setInterval(() => {
     if (!alive) {
-      log(`[Agent] No ping from master, terminating connection`);
+      log(`[Agent] No ping from master for 90s, terminating connection`);
       clearInterval(livenessCheck);
       ws.terminate();
       return;
     }
     alive = false;
-  }, 35_000);
+  }, 90_000);
 
   ws.on('message', async (data) => {
     try {
