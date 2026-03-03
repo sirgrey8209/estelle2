@@ -4,6 +4,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import fs from 'fs';
 
+/** 빌드 시점에 버전 읽기 */
+function getVersion(): string {
+  try {
+    const versionPath = path.resolve(__dirname, '../../config/version.json');
+    const data = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
+    return data.version;
+  } catch {
+    return 'dev';
+  }
+}
+
 /** 빌드 후 version.json 생성 플러그인 */
 function versionJsonPlugin() {
   return {
@@ -83,5 +94,8 @@ export default defineConfig({
   },
   preview: {
     port: 4173,
+  },
+  define: {
+    __ESTELLE_VERSION__: JSON.stringify(getVersion()),
   },
 });
