@@ -26,7 +26,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        id: '/',
+        id: '/relay/',
         name: 'Estelle',
         short_name: 'Estelle',
         description: 'Claude Code Remote Controller',
@@ -35,20 +35,21 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        scope: '/relay/',
+        start_url: '/relay/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/relay/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/relay/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/relay/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
@@ -59,8 +60,6 @@ export default defineConfig({
       workbox: {
         // 앱 쉘만 최소 캐싱 (WebSocket 앱이라 오프라인 의미 없음)
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // /hub는 서버에서 별도 서빙하는 Dev Hub 대시보드이므로 SPA fallback 제외
-        navigateFallbackDenylist: [/^\/hub/],
       },
     }),
     versionJsonPlugin(),

@@ -28,7 +28,7 @@ function deriveRelayUrl(): string {
 
   // Relay에서 서빙되므로 현재 호스트 사용, protocol에 따라 ws/wss 결정
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}`;
+  return `${protocol}//${window.location.host}/relay`;
 }
 
 /**
