@@ -1605,6 +1605,10 @@ export class Pylon {
         this.deps.workspaceStore.clearActiveConversation();
         this.scheduleSaveWorkspaceStore();
       }
+      // 클라이언트를 세션 시청자에서도 제거 (이벤트 스트림 구독 해제)
+      if (from?.deviceId) {
+        this.unregisterSessionViewer(from.deviceId);
+      }
       return;
     }
 

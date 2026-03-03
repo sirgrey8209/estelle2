@@ -222,6 +222,7 @@ export function handleAuth(
       payload: {
         success: true,
         relayVersion: getVersion(),
+        pylonVersions: getPylonVersions(clients),
         device: {
           deviceId: encodedDeviceId,  // 7비트 인코딩된 deviceId
           deviceIndex,  // 로컬 인덱스도 함께 전달
@@ -690,6 +691,7 @@ export async function handleAuthViewer(
       payload: {
         success: true,
         relayVersion: getVersion(),
+        pylonVersions: getPylonVersions(clients),
         device: {
           deviceId: encodedDeviceId,
           deviceIndex,

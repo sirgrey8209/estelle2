@@ -3,6 +3,8 @@
  * @description 앱 설정
  */
 
+import { CLIENT_VERSION } from '../version';
+
 /**
  * 개발 모드 감지 (Vite 환경)
  */
@@ -69,8 +71,8 @@ export const AppConfig = {
   /** 디버그 모드 */
   debug: isDev,
 
-  /** 앱 타이틀 (웹) */
-  title: isDev ? 'Estelle (dev)' : 'Estelle',
+  /** 앱 타이틀 (웹) - 버전 포함 */
+  title: `Estelle (${CLIENT_VERSION})`,
 
   /** 최대 메시지 수 (per desk) */
   maxMessages: 1000,
