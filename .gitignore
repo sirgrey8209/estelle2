@@ -64,8 +64,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# Claude Code local settings
-.claude/
+# Claude Code local settings (skills만 추적)
+.claude/*
+!.claude/skills/
 CLAUDE.md
 Persona.md
 
