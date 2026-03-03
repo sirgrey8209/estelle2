@@ -180,6 +180,7 @@ describe('RelayClient', () => {
         payload: {
           deviceId: 1,
           deviceType: 'pylon',
+          version: expect.any(String),
         },
         timestamp: expect.any(Number),
       });
@@ -200,6 +201,7 @@ describe('RelayClient', () => {
           deviceId: 1,
           deviceType: 'pylon',
           name: 'pylonOffice',
+          version: expect.any(String),
         },
         timestamp: expect.any(Number),
       });
