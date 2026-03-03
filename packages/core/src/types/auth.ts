@@ -89,6 +89,9 @@ export interface AuthPayload {
 
   /** (선택) Google OAuth ID 토큰 - App 클라이언트 인증용 */
   idToken?: string;
+
+  /** (선택) Pylon 버전 - Pylon 인증 시 전송 */
+  version?: string;
 }
 
 /**

@@ -14,6 +14,7 @@
 import type { Message, AuthPayload, WebSocketAdapter, WebSocketAdapterFactory } from '@estelle/core';
 import type { Logger } from '../utils/logger.js';
 import { createWsAdapterFactory } from './ws-websocket-adapter.js';
+import { getVersion } from '../version.js';
 
 /**
  * 기본 재연결 간격 (ms)
@@ -268,6 +269,7 @@ export class RelayClient {
     const payload: AuthPayload = {
       deviceId: this.deviceId,
       deviceType: 'pylon',
+      version: getVersion(),
     };
 
     // deviceName이 있으면 name 필드 추가
