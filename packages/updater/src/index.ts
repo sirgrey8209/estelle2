@@ -74,15 +74,4 @@ export async function start(): Promise<void> {
   }
 }
 
-// Auto-start if run directly (works with both direct execution and PM2)
-// Exclude cli.ts to prevent double-start when CLI imports this module
-const isMainModule = !process.argv[1]?.includes('cli.') &&
-                     (process.argv[1]?.includes('index.js') ||
-                      process.argv[1]?.includes('start.cjs'));
-
-if (isMainModule) {
-  start().catch((err) => {
-    console.error('[Updater] Fatal error:', err);
-    process.exit(1);
-  });
-}
+// start.cjs calls start() explicitly — no auto-start needed here
