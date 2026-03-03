@@ -107,21 +107,16 @@ export function AccountSection() {
               { name: 'EB Navigation', path: '/eb-navigation/' },
               { name: 'Voxel Engine', path: '/voxel-engine/' },
             ].map((project) => (
-              <button
+              <a
                 key={project.path}
+                href={`https://estelle-hub.mooo.com${project.path}`}
+                target="_blank"
+                rel="noreferrer noopener"
                 className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-accent text-left"
-                onClick={() => {
-                  const url = `https://estelle-hub.mooo.com${project.path}`;
-                  if (/android/i.test(navigator.userAgent)) {
-                    window.location.href = `intent://${url.replace('https://', '')}#Intent;scheme=https;package=com.sec.android.app.sbrowser;end`;
-                  } else {
-                    window.open(url, '_blank');
-                  }
-                }}
               >
                 <span>{project.name}</span>
                 <span className="text-muted-foreground">›</span>
-              </button>
+              </a>
             ))}
           </div>
         </div>
