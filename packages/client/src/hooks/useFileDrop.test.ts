@@ -25,7 +25,7 @@ function createMockDragEvent(
       getAsFile: () => f,
     })) as unknown as DataTransferItemList,
     types: ['Files'],
-  } as DataTransfer;
+  } as unknown as DataTransfer;
 
   return {
     preventDefault: vi.fn(),
