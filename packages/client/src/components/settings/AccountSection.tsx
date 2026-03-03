@@ -112,8 +112,11 @@ export function AccountSection() {
                 className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-accent text-left"
                 onClick={() => {
                   const url = `https://estelle-hub.mooo.com${project.path}`;
-                  const intentUrl = `intent://${url.replace('https://', '')}#Intent;scheme=https;package=com.sec.android.app.sbrowser;end`;
-                  window.location.href = intentUrl;
+                  if (/android/i.test(navigator.userAgent)) {
+                    window.location.href = `intent://${url.replace('https://', '')}#Intent;scheme=https;package=com.sec.android.app.sbrowser;end`;
+                  } else {
+                    window.open(url, '_blank');
+                  }
                 }}
               >
                 <span>{project.name}</span>

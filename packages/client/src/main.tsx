@@ -17,7 +17,7 @@ document.addEventListener('keydown', (e) => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/relay">
       <App />
     </BrowserRouter>
   </React.StrictMode>
