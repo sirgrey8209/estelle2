@@ -115,7 +115,8 @@ describe('master', () => {
     expect(mockSocket1.send).toHaveBeenCalled();
     expect(mockSocket2.send).toHaveBeenCalled();
 
-    const sentMsg = JSON.parse(mockSocket1.send.mock.calls[0][0]);
+    // calls[0] = welcome message, calls[1] = update message
+    const sentMsg = JSON.parse(mockSocket1.send.mock.calls[1][0]);
     expect(sentMsg.type).toBe('update');
     expect(sentMsg.branch).toBe('master');
   });

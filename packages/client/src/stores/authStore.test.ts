@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAuthStore } from './authStore';
+import { useAuthStore, isGoogleAuthEnabled } from './authStore';
 
 describe('authStore', () => {
   beforeEach(() => {
@@ -11,9 +11,16 @@ describe('authStore', () => {
     it('should_have_unauthenticated_initial_state', () => {
       const state = useAuthStore.getState();
 
-      expect(state.isAuthenticated).toBe(false);
+      // Google OAuth가 비활성화되면 자동으로 인증된 상태
+      const expectedAuth = !isGoogleAuthEnabled;
+      expect(state.isAuthenticated).toBe(expectedAuth);
       expect(state.idToken).toBeNull();
-      expect(state.user).toBeNull();
+      // Google OAuth 비활성화 시 기본 로컬 사용자 설정
+      if (isGoogleAuthEnabled) {
+        expect(state.user).toBeNull();
+      } else {
+        expect(state.user).toEqual({ email: 'local@localhost', name: 'Local User', picture: null });
+      }
     });
   });
 
@@ -136,9 +143,15 @@ describe('authStore', () => {
 
       // Assert
       const state = useAuthStore.getState();
-      expect(state.isAuthenticated).toBe(false);
+      // Google OAuth가 비활성화되면 reset 후에도 자동 인증 상태
+      const expectedAuth = !isGoogleAuthEnabled;
+      expect(state.isAuthenticated).toBe(expectedAuth);
       expect(state.idToken).toBeNull();
-      expect(state.user).toBeNull();
+      if (isGoogleAuthEnabled) {
+        expect(state.user).toBeNull();
+      } else {
+        expect(state.user).toEqual({ email: 'local@localhost', name: 'Local User', picture: null });
+      }
     });
   });
 

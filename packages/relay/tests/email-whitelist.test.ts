@@ -164,7 +164,7 @@ describe('loadAllowedEmails', () => {
   describe('정상 케이스', () => {
     it('should_load_emails_from_json_file', async () => {
       // Arrange
-      const filePath = 'data/allowed-emails.json';
+      const filePath = 'tests/fixtures/allowed-emails.json';
 
       // Act
       const result = await loadAllowedEmails(filePath);
@@ -175,7 +175,7 @@ describe('loadAllowedEmails', () => {
 
     it('should_return_array_of_strings', async () => {
       // Arrange
-      const filePath = 'data/allowed-emails.json';
+      const filePath = 'tests/fixtures/allowed-emails.json';
 
       // Act
       const result = await loadAllowedEmails(filePath);
@@ -190,7 +190,7 @@ describe('loadAllowedEmails', () => {
   describe('에러 케이스', () => {
     it('should_throw_when_file_not_found', async () => {
       // Arrange
-      const nonExistentPath = 'data/non-existent-file.json';
+      const nonExistentPath = 'tests/fixtures/non-existent-file.json';
 
       // Act & Assert
       await expect(loadAllowedEmails(nonExistentPath)).rejects.toThrow();
@@ -198,7 +198,7 @@ describe('loadAllowedEmails', () => {
 
     it('should_throw_when_file_is_invalid_json', async () => {
       // Arrange
-      const invalidJsonPath = 'data/invalid.json';
+      const invalidJsonPath = 'tests/fixtures/invalid.json';
 
       // Act & Assert
       await expect(loadAllowedEmails(invalidJsonPath)).rejects.toThrow();
@@ -206,7 +206,7 @@ describe('loadAllowedEmails', () => {
 
     it('should_throw_when_json_is_not_array', async () => {
       // Arrange - JSON이 배열이 아닌 경우 (예: {"emails": [...]})
-      const objectJsonPath = 'data/object-format.json';
+      const objectJsonPath = 'tests/fixtures/object-format.json';
 
       // Act & Assert
       await expect(loadAllowedEmails(objectJsonPath)).rejects.toThrow();
@@ -216,7 +216,7 @@ describe('loadAllowedEmails', () => {
   describe('엣지 케이스', () => {
     it('should_return_empty_array_when_file_contains_empty_array', async () => {
       // Arrange
-      const emptyArrayPath = 'data/empty-allowed-emails.json';
+      const emptyArrayPath = 'tests/fixtures/empty-allowed-emails.json';
 
       // Act
       const result = await loadAllowedEmails(emptyArrayPath);

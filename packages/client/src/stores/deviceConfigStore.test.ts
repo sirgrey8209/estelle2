@@ -145,18 +145,20 @@ describe('deviceConfigStore', () => {
     it('설정을 초기 상태로 복원해야 한다', () => {
       act(() => {
         getStore().setConfig(1, 'Changed Name', '🏠');
-        getStore().setConfig(3, 'New Device', '🖥️');
+        // deviceId 4는 초기 상태에 없으므로 새로 추가된 설정
+        getStore().setConfig(4, 'New Device', '🖥️');
       });
 
       act(() => {
         getStore().reset();
       });
 
-      // 초기 상태로 복원 (Office, Home)
+      // 초기 상태로 복원 (Office, Home, Cloud)
       expect(getStore().getName(1)).toBe('Office');
       expect(getStore().getName(2)).toBe('Home');
+      expect(getStore().getName(3)).toBe('Cloud');
       // 추가된 설정은 제거됨
-      expect(getStore().getConfig(3)).toBeUndefined();
+      expect(getStore().getConfig(4)).toBeUndefined();
     });
   });
 });
