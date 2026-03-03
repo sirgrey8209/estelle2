@@ -29,7 +29,6 @@ import { getDeviceList, createDeviceStatusMessage } from './device-status.js';
 import { log, getClientIp, generateClientId, getDeviceInfo } from './utils.js';
 import { DEVICES, DEFAULT_PORT } from './constants.js';
 import { ClientIndexAllocator } from './device-id-validation.js';
-import { getVersion } from './version.js';
 
 // ============================================================================
 // main() 함수 반환 타입
@@ -63,9 +62,6 @@ export interface MainResult {
 export interface RelayServerState {
   /** 환경 ID (0=release, 1=stage, 2=dev) */
   envId: 0 | 1 | 2;
-
-  /** Relay 서버 버전 */
-  version: string;
 
   /** 연결된 클라이언트 맵 (clientId -> Client + WebSocket) */
   clients: Map<string, Client & { ws: WebSocket }>;
@@ -460,7 +456,6 @@ export function createRelayServer(
 
   const state: RelayServerState = {
     envId,
-    version: getVersion(),
     clients: new Map(),
     clientAllocator: new ClientIndexAllocator(),
     devices: options.devices ?? DEVICES,
