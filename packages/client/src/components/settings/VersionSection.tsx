@@ -3,14 +3,19 @@
  * @description 버전 정보 섹션
  *
  * Client, Relay, Pylon 버전 정보를 표시합니다.
- * Pylon 1에서만 계정 전환 버튼을 제공합니다.
  */
 
 import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
 import { useSettingsStore } from '../../stores';
 import { requestVersions } from '../../services/relaySender';
+
+/** Pylon deviceId별 메타 정보 (Relay의 DEVICES 상수와 동기화) */
+const PYLON_META: Record<number, { icon: string; role: string }> = {
+  1: { icon: '🏢', role: 'office' },
+  2: { icon: '🏠', role: 'home' },
+  3: { icon: '☁️', role: 'cloud' },
+};
 
 export function VersionSection() {
   const clientVersion = useSettingsStore((s) => s.clientVersion);
@@ -26,15 +31,6 @@ export function VersionSection() {
   const sortedPylons = Object.entries(pylonVersions)
     .map(([id, version]) => ({ id: Number(id), version }))
     .sort((a, b) => a.id - b.id);
-
-  const handleAccountSwitch = () => {
-    // 설정 다이얼로그 내 AccountSection으로 스크롤/포커스
-    // 현재는 같은 설정 화면에 있으므로 스크롤만 해주면 됨
-    const accountSection = document.querySelector('[data-section="account"]');
-    if (accountSection) {
-      accountSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
 
   return (
     <Card>
@@ -67,24 +63,17 @@ export function VersionSection() {
               <span className="text-muted-foreground">연결된 Pylon 없음</span>
             </div>
           ) : (
-            sortedPylons.map(({ id, version }) => (
-              <div key={id} className="flex items-center justify-between">
-                <span className="text-muted-foreground">Pylon {id}</span>
-                <div className="flex items-center gap-2">
+            sortedPylons.map(({ id, version }) => {
+              const meta = PYLON_META[id] ?? { icon: '🔌', role: 'unknown' };
+              return (
+                <div key={id} className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {meta.icon} {meta.role}
+                  </span>
                   <span className="font-mono">{version}</span>
-                  {id === 1 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={handleAccountSwitch}
-                    >
-                      계정 전환
-                    </Button>
-                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </CardContent>
