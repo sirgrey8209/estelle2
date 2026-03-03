@@ -99,14 +99,29 @@ export function AccountSection() {
           ⚠️ 계정 변경 시 모든 세션이 재시작됩니다
         </p>
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-3"
-          onClick={() => window.open('http://89.167.4.124:8080/hub', '_blank')}
-        >
-          🌐 Hub 열기
-        </Button>
+        <div className="mt-3 border-t pt-3">
+          <p className="text-xs text-muted-foreground mb-2">프로젝트</p>
+          <div className="space-y-1">
+            {[
+              { name: 'Neon Grid Defense', path: '/neon-grid-defense/' },
+              { name: 'EB Navigation', path: '/eb-navigation/' },
+              { name: 'Voxel Engine', path: '/voxel-engine/' },
+            ].map((project) => (
+              <button
+                key={project.path}
+                className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-accent text-left"
+                onClick={() => {
+                  const url = `https://estelle-hub.mooo.com${project.path}`;
+                  const intentUrl = `intent://${url.replace('https://', '')}#Intent;scheme=https;package=com.sec.android.app.sbrowser;end`;
+                  window.location.href = intentUrl;
+                }}
+              >
+                <span>{project.name}</span>
+                <span className="text-muted-foreground">›</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
