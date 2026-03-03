@@ -485,6 +485,25 @@ export function handleMessage(
     return handlePing(clientId);
   }
 
+  // get_versions: 현재 Relay 및 Pylon 버전 정보 조회
+  if (type === 'get_versions') {
+    return {
+      actions: [
+        {
+          type: 'send',
+          clientId,
+          message: {
+            type: 'versions',
+            payload: {
+              relayVersion: getVersion(),
+              pylonVersions: getPylonVersions(clients),
+            },
+          },
+        },
+      ],
+    };
+  }
+
   // ===== Viewer 라우팅 (별도 처리) =====
   if (client.deviceType === 'viewer') {
     return handleViewerRouting(clientId, client, data, envId, clients, devices);

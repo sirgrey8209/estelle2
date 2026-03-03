@@ -6,14 +6,21 @@
  * Pylon 1에서만 계정 전환 버튼을 제공합니다.
  */
 
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { useSettingsStore } from '../../stores';
+import { requestVersions } from '../../services/relaySender';
 
 export function VersionSection() {
   const clientVersion = useSettingsStore((s) => s.clientVersion);
   const relayVersion = useSettingsStore((s) => s.relayVersion);
   const pylonVersions = useSettingsStore((s) => s.pylonVersions);
+
+  // 컴포넌트 마운트 시 버전 정보 요청
+  useEffect(() => {
+    requestVersions();
+  }, []);
 
   // Pylon 엔트리를 deviceId 기준으로 정렬
   const sortedPylons = Object.entries(pylonVersions)

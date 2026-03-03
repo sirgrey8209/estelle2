@@ -482,3 +482,22 @@ export function requestSlashCommands(conversationId: number): boolean {
     to: [pylonId],
   });
 }
+
+// ============================================================================
+// 버전 정보 관련
+// ============================================================================
+
+/**
+ * 버전 정보 요청
+ * - Relay에 현재 버전 정보 요청
+ *
+ * @description
+ * 설정창에서 버전 정보를 표시하기 위해 사용합니다.
+ * Relay는 relayVersion과 pylonVersions를 반환합니다.
+ */
+export function requestVersions(): boolean {
+  return sendMessage({
+    type: 'get_versions',
+    payload: {},
+  });
+}

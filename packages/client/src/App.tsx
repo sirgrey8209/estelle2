@@ -78,6 +78,21 @@ function useRelayConnection() {
         return;
       }
 
+      // 버전 정보 응답
+      if (message.type === 'versions') {
+        const payload = message.payload as {
+          relayVersion?: string;
+          pylonVersions?: Record<number, string>;
+        };
+        if (payload.relayVersion) {
+          useSettingsStore.getState().setRelayVersion(payload.relayVersion);
+        }
+        if (payload.pylonVersions) {
+          useSettingsStore.getState().setPylonVersions(payload.pylonVersions);
+        }
+        return;
+      }
+
       // blob 메시지는 blobService로 전달
       if (message.type.startsWith('blob_')) {
         blobService.handleMessage(message as unknown as Record<string, unknown>);
