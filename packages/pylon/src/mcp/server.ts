@@ -8,7 +8,6 @@
  * 등록 도구:
  * - send_file: 사용자에게 파일 전송
  * - link_doc / unlink_doc / list_docs: 문서 연결 관리
- * - deploy: stage/release 배포
  * - get_status: 현재 대화/Pylon 상태 조회
  */
 
@@ -29,7 +28,6 @@ import {
   getUnlinkDocToolDefinition,
   getListDocsToolDefinition,
 } from './tools/link-document.js';
-import { executeDeploy, deployToolDefinition } from './tools/deploy.js';
 import { executeGetStatus, getStatusToolDefinition } from './tools/get-status.js';
 import {
   executeCreateConversation,
@@ -103,7 +101,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getLinkDocToolDefinition(),
     getUnlinkDocToolDefinition(),
     getListDocsToolDefinition(),
-    deployToolDefinition,
     getStatusToolDefinition,
     getCreateConversationToolDefinition(),
     getDeleteConversationToolDefinition(),
@@ -137,10 +134,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     case 'list_docs': {
       const result = await executeListDocs(args as Record<string, unknown>, { toolUseId });
-      return result as unknown as Record<string, unknown>;
-    }
-    case 'deploy': {
-      const result = await executeDeploy(args as { target?: string }, { toolUseId });
       return result as unknown as Record<string, unknown>;
     }
     case 'get_status': {

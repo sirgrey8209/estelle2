@@ -41,7 +41,7 @@ Pylon은 PC에서 실행되며:
 |----------|------|
 | **ClaudeSDKAdapter** | Claude SDK 직접 호출, 이벤트 스트리밍 |
 | **ClaudeManager** | 세션 관리, toolUseId 역매핑 |
-| **PylonMcpServer** | MCP TCP 서버 (send_file, deploy 등) |
+| **PylonMcpServer** | MCP TCP 서버 (send_file, link_doc 등) |
 | **PylonState** | 순수 데이터 클래스, 모든 상태 관리 |
 
 ## MCP 포트 할당

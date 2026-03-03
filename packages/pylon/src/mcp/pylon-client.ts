@@ -73,14 +73,6 @@ export interface SendFileResult {
   error?: string;
 }
 
-/** Deploy 결과 타입 */
-export interface DeployResult {
-  success: boolean;
-  target?: string;
-  output?: string;
-  error?: string;
-}
-
 /** 워크스페이스 정보 타입 */
 interface WorkspaceInfo {
   id: number;
@@ -137,7 +129,7 @@ export interface ContinueTaskResult {
 
 /** 요청 타입 */
 interface PylonRequest {
-  action: 'link' | 'unlink' | 'list' | 'send_file' | 'deploy' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_deploy' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task';
+  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task';
   conversationId?: number;
   toolUseId?: string;
   path?: string;
@@ -247,20 +239,6 @@ export class PylonClient {
       toolUseId,
       path,
       description,
-    });
-  }
-
-  /**
-   * toolUseId 기반 배포
-   */
-  async deployByToolUseId(
-    toolUseId: string,
-    target: string,
-  ): Promise<DeployResult> {
-    return this._sendRequest<DeployResult>({
-      action: 'lookup_and_deploy',
-      toolUseId,
-      target,
     });
   }
 
@@ -465,20 +443,6 @@ export class PylonClient {
       conversationId,
       path,
       description,
-    });
-  }
-
-  /**
-   * 배포 (레거시 conversationId 기반)
-   */
-  async deploy(
-    conversationId: number,
-    target?: string,
-  ): Promise<DeployResult> {
-    return this._sendRequest<DeployResult>({
-      action: 'deploy',
-      conversationId,
-      target,
     });
   }
 

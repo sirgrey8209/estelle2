@@ -79,10 +79,9 @@ ConversationId = envId(2) + deviceType(1) + deviceIndex(4) + workspaceIndex(7) +
 
 ### [MCP 도구](reference/mcp-tools.md)
 
-- 11개 MCP 도구 상세 스펙
+- 10개 MCP 도구 상세 스펙
 - 파라미터, 반환값, 처리 흐름
 - PylonClient 통신 방식
-- 환경별 배포 제약
 
 ### [테스트 패턴](reference/test-patterns.md)
 
@@ -142,10 +141,9 @@ pnpm test                              # 전체
 pnpm --filter @estelle/pylon test      # 특정 패키지
 pnpm --filter @estelle/pylon test:watch
 
-# 배포 (MCP 도구 사용)
-deploy(stage)     # → stage 배포
-deploy(release)   # → release 배포
-deploy(promote)   # stage → release 승격
+# 배포 (/patch 스킬 사용)
+# estelle-patch 스킬로 estelle-updater를 통해 배포
+# 버전 bump → git push → 모든 머신에 자동 배포
 
 # 타입 체크
 pnpm typecheck
@@ -168,4 +166,4 @@ pnpm typecheck
     └── test-patterns.md  ← 테스트 패턴
 ```
 
-**최종 업데이트**: 2026-03-02
+**최종 업데이트**: 2026-03-03

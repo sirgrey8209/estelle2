@@ -1,6 +1,6 @@
 # Estelle MCP 도구 레퍼런스
 
-> 코드 기반 분석 (2026-03-02)
+> 코드 기반 분석 (2026-03-03)
 
 ## MCP 서버 구조
 
@@ -8,7 +8,7 @@
 Pylon
   └── PylonMcpServer (stdio)
        ├── TCP 서버 (ESTELLE_MCP_PORT)
-       └── Tools (11개)
+       └── Tools (10개)
 ```
 
 ### 환경변수
@@ -256,41 +256,7 @@ Pylon
 
 ---
 
-## 10. deploy
-
-stage/release 배포 실행
-
-### 파라미터
-
-| 이름 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `target` | enum | O | "stage" / "release" / "promote" |
-
-### 반환값
-
-```json
-{
-  "success": true,
-  "message": "Deployed to stage",
-  "target": "stage",
-  "output": "Build output..."
-}
-```
-
-### 제약
-
-| 현재 환경 | stage | release | promote |
-|----------|-------|---------|---------|
-| release | O | X | X |
-| stage | X | O | O |
-| dev | O | O | X |
-
-- 자기 환경 배포 차단 (PM2 재시작 시 세션 끊김)
-- promote는 stage에서만 가능 (stage 빌드 → release 복사)
-
----
-
-## 11. continue_task
+## 10. continue_task
 
 세션 재시작 (히스토리 유지)
 
