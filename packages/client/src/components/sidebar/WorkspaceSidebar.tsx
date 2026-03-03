@@ -32,6 +32,7 @@ import { getDeviceIcon } from '../../utils/device-icons';
 import { MobileLayoutContext } from '../../layouts/MobileLayout';
 import { PylonTabs, type PylonTabValue } from './PylonTabs';
 import { useFavoriteWorkspaces } from '../../hooks/useFavoriteWorkspaces';
+import { useResponsive } from '../../hooks/useResponsive';
 import type { Workspace, Conversation } from '@estelle/core';
 
 interface EditWorkspaceTarget {
@@ -428,6 +429,9 @@ export function WorkspaceSidebar() {
   // 즐겨찾기 상태
   const { isFavorite, toggleFavorite } = useFavoriteWorkspaces();
 
+  // 반응형 상태
+  const { isDesktop } = useResponsive();
+
   const {
     getAllWorkspaces,
     selectedConversation,
@@ -477,6 +481,9 @@ export function WorkspaceSidebar() {
       // 무시
     }
 
+    // 모바일에서는 탭 전환 시 대화 자동 선택 비활성화
+    if (!isDesktop) return;
+
     // 새 탭의 워크스페이스 목록 계산
     const newTabWorkspaces = tab === 'favorites'
       ? flatWorkspaces.filter((ws) => isFavorite(ws.workspaceId))
@@ -515,7 +522,7 @@ export function WorkspaceSidebar() {
       useConversationStore.getState().setCurrentConversation(targetConversation.conversationId);
       selectConversation(targetConversation.conversationId);
     }
-  }, [flatWorkspaces, isFavorite, selectInStore]);
+  }, [flatWorkspaces, isFavorite, selectInStore, isDesktop]);
 
   // 즐겨찾기된 워크스페이스 목록
   const favoriteWorkspaces = useMemo(
