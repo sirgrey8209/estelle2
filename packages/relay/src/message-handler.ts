@@ -212,6 +212,14 @@ export function handleAuth(
     updates: clientUpdates,
   });
 
+  // 새로 인증된 클라이언트를 포함한 업데이트된 clients 맵 생성
+  // (auth_result 전송 시 pylonVersions에 현재 Pylon도 포함하기 위해)
+  const updatedClients = new Map(clients);
+  updatedClients.set(clientId, {
+    ...client,
+    ...clientUpdates,
+  });
+
   // 인증 성공 응답 - 클라이언트에는 인코딩된 deviceId 전달
   const info = getDeviceInfo(deviceIndex, devices);
   actions.push({
@@ -222,7 +230,7 @@ export function handleAuth(
       payload: {
         success: true,
         relayVersion: getVersion(),
-        pylonVersions: getPylonVersions(clients),
+        pylonVersions: getPylonVersions(updatedClients),
         device: {
           deviceId: encodedDeviceId,  // 7비트 인코딩된 deviceId
           deviceIndex,  // 로컬 인덱스도 함께 전달
@@ -236,12 +244,6 @@ export function handleAuth(
   });
 
   // 디바이스 상태 브로드캐스트 (인증 완료 후 상태로)
-  // 새로 인증된 클라이언트를 포함한 업데이트된 clients 맵 생성
-  const updatedClients = new Map(clients);
-  updatedClients.set(clientId, {
-    ...client,
-    ...clientUpdates,
-  });
 
   const broadcastResult = broadcastAll(updatedClients);
   if (broadcastResult.success) {
