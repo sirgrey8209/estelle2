@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { useRelayStore } from './stores';
 import { useAuthStore } from './stores/authStore';
+import { useSettingsStore } from './stores/settingsStore';
 import { RelayConfig, AppConfig } from './utils/config';
 import { loadVersionInfo } from './utils/buildInfo';
 import { routeMessage } from './hooks/useMessageRouter';
@@ -55,11 +56,21 @@ function useRelayConnection() {
         const payload = message.payload as {
           success: boolean;
           device?: { deviceId: number };
+          relayVersion?: string;
+          pylonVersions?: Record<number, string>;
         };
         // deviceId가 0일 수 있으므로 !== undefined로 체크
         if (payload.success && payload.device?.deviceId !== undefined) {
           setAuthenticated(true);
           setDeviceId(String(payload.device.deviceId));
+
+          // 버전 정보 저장
+          if (payload.relayVersion) {
+            useSettingsStore.getState().setRelayVersion(payload.relayVersion);
+          }
+          if (payload.pylonVersions) {
+            useSettingsStore.getState().setPylonVersions(payload.pylonVersions);
+          }
 
           // 워크스페이스 목록 요청 (syncOrchestrator 경유)
           syncOrchestrator.startInitialSync();
