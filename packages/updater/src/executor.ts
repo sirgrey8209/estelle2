@@ -16,6 +16,8 @@ export interface ExecuteOptions {
   branch: string;
   repoRoot: string;
   onLog: (message: string) => void;
+  /** Master deploys Relay + Pylon, Agent deploys Pylon only */
+  isMaster?: boolean;
 }
 
 export interface ExecuteResult {
@@ -143,7 +145,7 @@ function runDetached(
 }
 
 export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteResult> {
-  const { branch, repoRoot, onLog } = options;
+  const { branch, repoRoot, onLog, isMaster = false } = options;
 
   // Step 1: git fetch
   onLog(`[1/4] git fetch origin...`);
@@ -166,9 +168,11 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     return { success: false, error: `git pull failed: ${pullResult.error}` };
   }
 
-  // Step 4: pnpm deploy:release (detached - survives parent restart)
-  onLog(`[4/4] pnpm deploy:release (detached)...`);
-  const deployResult = await runDetached('pnpm', ['deploy:release'], repoRoot, onLog);
+  // Step 4: deploy (detached - survives parent restart)
+  // Master: Relay + Pylon, Agent: Pylon only
+  const deployCmd = isMaster ? 'deploy:release' : 'deploy:release-pylon';
+  onLog(`[4/4] pnpm ${deployCmd} (detached)...`);
+  const deployResult = await runDetached('pnpm', [deployCmd], repoRoot, onLog);
   if (!deployResult.success) {
     return { success: false, error: `deploy failed: ${deployResult.error}` };
   }

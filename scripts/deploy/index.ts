@@ -19,6 +19,8 @@ export type DeployTarget = 'stage' | 'release';
 export interface DeployOptions {
   target: DeployTarget;
   repoRoot?: string;
+  /** Agent mode: deploy Pylon only (Relay is elsewhere) */
+  pylonOnly?: boolean;
 }
 
 export interface DeployResult {
@@ -72,6 +74,7 @@ function expandPath(p: string): string {
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..');
   const target = options.target;
+  const pylonOnly = options.pylonOnly ?? false;
 
   log('Phase 0', 'Loading configuration...');
   const config = loadConfig(repoRoot, target);
@@ -93,7 +96,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
   // Stop services
   log('Phase 2', 'Stopping PM2 services...');
-  stopService(config.relay.pm2Name);
+  if (!pylonOnly && config.relay.pm2Name) {
+    stopService(config.relay.pm2Name);
+  }
   stopService(config.pylon.pm2Name);
   logDetail('Services stopped');
 
@@ -132,21 +137,25 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
     },
   });
 
-  // Start Relay
+  // Start Relay (only if not pylonOnly and pm2Name is configured)
   log('Phase 4', 'Starting PM2 services...');
-  const relayResult = startService({
-    name: config.relay.pm2Name,
-    script: 'dist/bin.js',
-    cwd: path.join(repoRoot, 'packages', 'relay'),
-    env: {
-      PORT: String(config.relay.port),
-      STATIC_DIR: relayPublic,
-    },
-  });
-  if (!relayResult.success) {
-    return { success: false, error: `Relay start failed: ${relayResult.error}` };
+  if (!pylonOnly && config.relay.pm2Name) {
+    const relayResult = startService({
+      name: config.relay.pm2Name,
+      script: 'dist/bin.js',
+      cwd: path.join(repoRoot, 'packages', 'relay'),
+      env: {
+        PORT: String(config.relay.port),
+        STATIC_DIR: relayPublic,
+      },
+    });
+    if (!relayResult.success) {
+      return { success: false, error: `Relay start failed: ${relayResult.error}` };
+    }
+    logDetail(`Relay started: ${config.relay.pm2Name}`);
+  } else {
+    logDetail(`Relay skipped (pylonOnly=${pylonOnly}, pm2Name=${config.relay.pm2Name || 'none'})`);
   }
-  logDetail(`Relay started: ${config.relay.pm2Name}`);
 
   // Start Pylon
   const pylonResult = startService({

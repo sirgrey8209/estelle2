@@ -30,7 +30,8 @@
     "dev:pylon": "pnpm --filter @estelle/pylon dev",
     "dev:client": "pnpm --filter @estelle/client dev",
     "deploy:stage": "npx tsx scripts/deploy.ts stage",
-    "deploy:release": "npx tsx scripts/deploy.ts release"
+    "deploy:release": "npx tsx scripts/deploy.ts release",
+    "deploy:release-pylon": "npx tsx scripts/deploy.ts release --pylon-only"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

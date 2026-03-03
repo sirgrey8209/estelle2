@@ -135,6 +135,7 @@ export function startMaster(options: MasterOptions): MasterInstance {
       await executeUpdate({
         branch,
         repoRoot,
+        isMaster: true,
         onLog: (message) => {
           const logLine = `[${myIp}] ${message}`;
           console.log(logLine);
