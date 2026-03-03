@@ -33,6 +33,21 @@ export function startMaster(options: MasterOptions): MasterInstance {
   console.log(`[Master] Starting WebSocket server on port ${port}`);
   const wss = new WebSocketServer({ port });
 
+  // Ping all agents every 30s to detect dead connections
+  const pingInterval = setInterval(() => {
+    for (const [ip, agent] of agents) {
+      if (agent.ws.readyState === WebSocket.OPEN) {
+        agent.ws.ping();
+      } else {
+        agents.delete(ip);
+      }
+    }
+  }, 30_000);
+
+  wss.on('close', () => {
+    clearInterval(pingInterval);
+  });
+
   wss.on('error', (err) => {
     console.error(`[Master] WebSocket server error:`, err);
   });
