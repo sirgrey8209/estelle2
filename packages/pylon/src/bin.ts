@@ -28,6 +28,7 @@ import { FolderManager, type FolderFileSystem } from './managers/folder-manager.
 import { FileSystemPersistence, type FileSystemInterface } from './persistence/file-system-persistence.js';
 import { CredentialManager } from './auth/credential-manager.js';
 import { PylonMcpServer } from './servers/pylon-mcp-server.js';
+import { WidgetManager } from './managers/widget-manager.js';
 import { getVersion } from './version.js';
 import os from 'os';
 
@@ -482,6 +483,9 @@ async function main(): Promise<void> {
   // 지연 바인딩: BlobHandler.sendFn이 relayClient.send를 사용하도록 설정
   deps._bindPylonSend((msg) => deps.relayClient.send(msg));
 
+  // WidgetManager 생성
+  const widgetManager = new WidgetManager();
+
   // PylonMcpServer 생성 (MCP 도구가 WorkspaceStore에 접근 가능하도록)
   const pylonMcpPort = envConfig?.pylon?.mcpPort || parseInt(process.env['ESTELLE_MCP_PORT'] || '9880', 10);
   const pylonMcpServer = new PylonMcpServer(deps.workspaceStore, {
@@ -495,6 +499,21 @@ async function main(): Promise<void> {
     },
     onConversationCreate: (conversationId: number) => {
       pylon.triggerInitialContext(conversationId);
+    },
+    widgetManager,
+    onWidgetRender: (conversationId, sessionId, view, inputs) => {
+      deps.relayClient.send({
+        type: 'widget_render',
+        payload: { conversationId, sessionId, view, inputs },
+        broadcast: 'clients',
+      });
+    },
+    onWidgetClose: (conversationId, sessionId) => {
+      deps.relayClient.send({
+        type: 'widget_close',
+        payload: { conversationId, sessionId },
+        broadcast: 'clients',
+      });
     },
   });
 
