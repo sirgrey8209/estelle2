@@ -25,8 +25,9 @@ const __dirname = path.dirname(__filename);
 import type { WorkspaceStore } from '../stores/workspace-store.js';
 import type { ShareStore } from '../stores/share-store.js';
 import type { MessageStore } from '../stores/message-store.js';
+import type { WidgetManager, WidgetRenderEvent, WidgetCompleteEvent, WidgetErrorEvent } from '../managers/widget-manager.js';
 import { decodeConversationId } from '@estelle/core';
-import type { LinkedDocument, ConversationId, StoreMessage } from '@estelle/core';
+import type { LinkedDocument, ConversationId, StoreMessage, ViewNode, InputNode } from '@estelle/core';
 
 // ============================================================================
 // 상수
@@ -105,6 +106,12 @@ export interface PylonMcpServerOptions {
   onConversationCreate?: (conversationId: number) => void;
   /** 작업 계속 시 호출되는 콜백 (continue_task 성공 시) */
   onContinueTask?: (conversationId: number, reason?: string) => void;
+  /** Widget 세션 관리자 (run_widget 액션에 필요) */
+  widgetManager?: WidgetManager;
+  /** Widget 렌더 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
+  onWidgetRender?: (conversationId: number, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
+  onWidgetClose?: (conversationId: number, sessionId: string) => void;
 }
 
 /** 요청 타입 */
@@ -125,6 +132,12 @@ interface McpRequest {
   reason?: string;
   /** Git 브랜치 (update 액션에서 사용) */
   branch?: string;
+  /** Widget 실행 명령 (run_widget 액션에서 사용) */
+  command?: string;
+  /** Widget 실행 작업 디렉토리 (run_widget 액션에서 사용) */
+  cwd?: string;
+  /** Widget 실행 인자 (run_widget 액션에서 사용) */
+  args?: string[];
 }
 
 /** 파일 정보 타입 */
@@ -254,6 +267,12 @@ interface McpClearDocsSuccessResponse {
   cleared: number;
 }
 
+/** 성공 응답 타입 (run_widget) */
+interface McpRunWidgetSuccessResponse {
+  success: true;
+  result: unknown;
+}
+
 type McpResponse =
   | McpDocsSuccessResponse
   | McpFileSuccessResponse
@@ -268,6 +287,7 @@ type McpResponse =
   | McpSetSystemPromptSuccessResponse
   | McpContinueTaskSuccessResponse
   | McpClearDocsSuccessResponse
+  | McpRunWidgetSuccessResponse
   | McpErrorResponse;
 
 // ============================================================================
@@ -297,6 +317,9 @@ export class PylonMcpServer {
   private _onNewSession?: (conversationId: number) => void;
   private _onConversationCreate?: (conversationId: number) => void;
   private _onContinueTask?: (conversationId: number, reason?: string) => void;
+  private _widgetManager?: WidgetManager;
+  private _onWidgetRender?: (conversationId: number, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  private _onWidgetClose?: (conversationId: number, sessionId: string) => void;
 
   // ============================================================================
   // 생성자
@@ -315,6 +338,9 @@ export class PylonMcpServer {
     this._onNewSession = options?.onNewSession;
     this._onConversationCreate = options?.onConversationCreate;
     this._onContinueTask = options?.onContinueTask;
+    this._widgetManager = options?.widgetManager;
+    this._onWidgetRender = options?.onWidgetRender;
+    this._onWidgetClose = options?.onWidgetClose;
   }
 
   // ============================================================================
@@ -630,6 +656,14 @@ export class PylonMcpServer {
 
       case 'continue_task':
         return this._handleContinueTask(conversationId as ConversationId, request.reason);
+
+      case 'run_widget':
+        return this._handleRunWidget(
+          conversationId as ConversationId,
+          request.command,
+          request.cwd,
+          request.args,
+        );
 
       default:
         return {
@@ -1647,6 +1681,115 @@ export class PylonMcpServer {
       systemMessageAdded: true,
       historyPreserved: true,
     };
+  }
+
+  // ============================================================================
+  // Widget 관련 핸들러
+  // ============================================================================
+
+  /**
+   * run_widget 액션 처리 (비동기)
+   *
+   * Widget 세션을 시작하고 완료될 때까지 대기합니다.
+   * render/complete 이벤트를 콜백을 통해 Client에 전달합니다.
+   */
+  private async _handleRunWidget(
+    conversationId: ConversationId,
+    command?: string,
+    cwd?: string,
+    args?: string[],
+  ): Promise<McpResponse> {
+    // widgetManager 필수
+    if (!this._widgetManager) {
+      return {
+        success: false,
+        error: 'WidgetManager not configured',
+      };
+    }
+
+    // command 검사
+    if (!command || command === '') {
+      return {
+        success: false,
+        error: 'Missing command field for run_widget action',
+      };
+    }
+
+    // cwd 검사
+    if (!cwd || cwd === '') {
+      return {
+        success: false,
+        error: 'Missing cwd field for run_widget action',
+      };
+    }
+
+    // 대화 존재 확인
+    const conversation = this._workspaceStore.getConversation(conversationId);
+    if (!conversation) {
+      return {
+        success: false,
+        error: 'Conversation not found',
+      };
+    }
+
+    try {
+      // Widget 세션 시작
+      const sessionId = await this._widgetManager.startSession({
+        command,
+        cwd,
+        args,
+      });
+
+      // render 이벤트 리스너 등록
+      const onRender = (event: WidgetRenderEvent) => {
+        if (event.sessionId === sessionId) {
+          this._onWidgetRender?.(conversationId, sessionId, event.view, event.inputs);
+        }
+      };
+
+      // complete 이벤트 리스너 등록
+      const onComplete = (event: WidgetCompleteEvent) => {
+        if (event.sessionId === sessionId) {
+          this._onWidgetClose?.(conversationId, sessionId);
+        }
+      };
+
+      // error 이벤트 리스너 등록
+      const onError = (event: WidgetErrorEvent) => {
+        if (event.sessionId === sessionId) {
+          this._onWidgetClose?.(conversationId, sessionId);
+        }
+      };
+
+      // 이벤트 리스너 등록
+      this._widgetManager.on('render', onRender);
+      this._widgetManager.on('complete', onComplete);
+      this._widgetManager.on('error', onError);
+
+      // 완료 대기
+      try {
+        const result = await this._widgetManager.waitForCompletion(sessionId);
+        return {
+          success: true,
+          result,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      } finally {
+        // 리스너 정리
+        this._widgetManager.off('render', onRender);
+        this._widgetManager.off('complete', onComplete);
+        this._widgetManager.off('error', onError);
+      }
+    } catch (err) {
+      return {
+        success: false,
+        error: `Failed to start widget session: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
 
   // ============================================================================
