@@ -7,6 +7,7 @@
  */
 
 import type { StoreMessage } from './store-message.js';
+import type { ViewNode, InputNode } from './widget.js';
 
 // ============================================================================
 // Status Types
@@ -132,7 +133,26 @@ export interface ConversationClaudeState {
   /** 실시간 토큰 사용량 */
   realtimeUsage: RealtimeUsage | null;
 
+  /** Widget 세션 상태 */
+  widgetSession: WidgetSession | null;
+
   // 히스토리 페이징 상태는 syncStore에서 관리
+}
+
+/**
+ * Widget 세션 상태
+ *
+ * @description
+ * 현재 활성화된 Widget 세션 정보입니다.
+ * Widget Protocol을 통해 렌더링되는 UI를 표시합니다.
+ */
+export interface WidgetSession {
+  /** Widget 세션 ID */
+  sessionId: string;
+  /** 렌더링할 View 노드 */
+  view: ViewNode;
+  /** 입력 노드 배열 */
+  inputs: InputNode[];
 }
 
 // ============================================================================
@@ -155,6 +175,7 @@ export function createInitialClaudeState(): ConversationClaudeState {
     pendingRequests: [],
     workStartTime: null,
     realtimeUsage: null,
+    widgetSession: null,
   };
 }
 

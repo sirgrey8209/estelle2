@@ -10,7 +10,9 @@ import { ClaudeAbortedDivider } from './SystemDivider';
 import { FileAttachmentCard } from './FileAttachmentCard';
 import { WorkingIndicator } from './WorkingIndicator';
 import { FileViewer } from '../viewers';
+import { WidgetRenderer } from '../widget';
 import { blobService } from '../../services/blobService';
+import { sendWidgetInput } from '../../services/relaySender';
 import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
 import type { ChildToolInfo, McpFileInfo } from './ToolCard';
 
@@ -34,6 +36,7 @@ export function MessageList({
   const textBuffer = currentState?.textBuffer ?? '';
   const workStartTime = currentState?.workStartTime ?? null;
   const status = currentState?.status ?? 'idle';
+  const widgetSession = currentState?.widgetSession ?? null;
 
   const { uploads } = useUploadStore();
   const { selectedConversation } = useWorkspaceStore();
@@ -206,10 +209,27 @@ export function MessageList({
     });
   }, [selectedConversation, openFileViewer]);
 
+  // Widget 인풋 핸들러
+  const handleWidgetInput = useCallback((data: Record<string, unknown>) => {
+    const conversationId = selectedConversation?.conversationId;
+    if (!conversationId || !widgetSession) return;
+
+    sendWidgetInput(conversationId, widgetSession.sessionId, data);
+  }, [selectedConversation?.conversationId, widgetSession]);
+
   const buildDisplayItems = useCallback(() => {
     const items: Array<{ type: string; data: unknown; key: string }> = [];
 
     // 가장 위 (최신)
+    // Widget 세션이 있으면 최상단에 표시
+    if (widgetSession) {
+      items.push({
+        type: 'widget',
+        data: widgetSession,
+        key: `widget-${widgetSession.sessionId}`,
+      });
+    }
+
     if (workStartTime) {
       items.push({
         type: 'working',
@@ -259,7 +279,7 @@ export function MessageList({
     }
 
     return items;
-  }, [messages, textBuffer, workStartTime, uploadingItems, isLoadingHistory, hasMoreHistory, parentToolIds]);
+  }, [messages, textBuffer, workStartTime, uploadingItems, isLoadingHistory, hasMoreHistory, parentToolIds, widgetSession]);
 
   const displayItems = buildDisplayItems();
 
@@ -294,6 +314,19 @@ export function MessageList({
 
   const renderItem = (item: { type: string; data: unknown; key: string }) => {
     switch (item.type) {
+      case 'widget': {
+        const session = item.data as { sessionId: string; view: import('@estelle/core').ViewNode; inputs: import('@estelle/core').InputNode[] };
+        return (
+          <div key={item.key} className="mb-2">
+            <WidgetRenderer
+              view={session.view}
+              inputs={session.inputs}
+              onInput={handleWidgetInput}
+            />
+          </div>
+        );
+      }
+
       case 'working':
         return (
           <div key={item.key} className="mb-1">

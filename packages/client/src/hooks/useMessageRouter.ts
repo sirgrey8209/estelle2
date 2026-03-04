@@ -7,7 +7,7 @@
  */
 
 import { MessageType } from '@estelle/core';
-import type { WorkspaceWithActive, StoreMessage } from '@estelle/core';
+import type { WorkspaceWithActive, StoreMessage, ViewNode, InputNode } from '@estelle/core';
 import type { RelayMessage } from '../services/relayService';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useConversationStore } from '../stores/conversationStore';
@@ -341,6 +341,45 @@ export function routeMessage(message: RelayMessage): void {
         current,
         subscriptionType,
       });
+      break;
+    }
+
+    // === Widget 메시지 ===
+    case 'widget_render': {
+      // RelayMessage 형식: { type, payload: { sessionId, view, inputs, conversationId? } }
+      const widgetPayload = payload as {
+        sessionId?: string;
+        view?: ViewNode;
+        inputs?: InputNode[];
+        conversationId?: number;
+      };
+      const { sessionId, view, inputs } = widgetPayload;
+      const conversationId = widgetPayload.conversationId
+        ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
+
+      if (conversationId && sessionId && view && inputs) {
+        useConversationStore.getState().setWidgetSession(
+          conversationId,
+          sessionId,
+          view,
+          inputs
+        );
+      }
+      break;
+    }
+
+    case 'widget_close': {
+      // RelayMessage 형식: { type, payload: { sessionId, conversationId? } }
+      const closePayload = payload as {
+        sessionId?: string;
+        conversationId?: number;
+      };
+      const conversationId = closePayload.conversationId
+        ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
+
+      if (conversationId) {
+        useConversationStore.getState().clearWidgetSession(conversationId);
+      }
       break;
     }
 

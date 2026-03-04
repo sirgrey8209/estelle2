@@ -16,6 +16,8 @@ import type {
   PendingRequest,
   RealtimeUsage,
   AssistantTextMessage,
+  ViewNode,
+  InputNode,
 } from '@estelle/core';
 import { createInitialClaudeState } from '@estelle/core';
 
@@ -116,6 +118,19 @@ export interface ConversationStoreState {
 
   /** 대화의 슬래시 명령어 목록 설정 */
   setSlashCommands: (conversationId: number, slashCommands: string[]) => void;
+
+  // === Actions: widgetSession ===
+
+  /** Widget 세션 설정 */
+  setWidgetSession: (
+    conversationId: number,
+    sessionId: string,
+    view: ViewNode,
+    inputs: InputNode[]
+  ) => void;
+
+  /** Widget 세션 초기화 */
+  clearWidgetSession: (conversationId: number) => void;
 
   // === Actions: 대화 관리 ===
 
@@ -405,6 +420,30 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const slashCommandsMap = new Map(get().slashCommandsMap);
     slashCommandsMap.set(conversationId, slashCommands);
     set({ slashCommandsMap });
+  },
+
+  // === Actions: widgetSession ===
+
+  setWidgetSession: (conversationId, sessionId, view, inputs) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    states.set(conversationId, {
+      ...state,
+      widgetSession: { sessionId, view, inputs },
+    });
+    set({ states });
+  },
+
+  clearWidgetSession: (conversationId) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    states.set(conversationId, {
+      ...state,
+      widgetSession: null,
+    });
+    set({ states });
   },
 
   // === Actions: 대화 관리 ===

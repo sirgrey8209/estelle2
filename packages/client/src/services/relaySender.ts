@@ -501,3 +501,31 @@ export function requestVersions(): boolean {
     payload: {},
   });
 }
+
+// ============================================================================
+// Widget 관련
+// ============================================================================
+
+/**
+ * Widget 인풋 전송
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ *
+ * @description
+ * Widget Protocol에서 사용자 입력을 Pylon으로 전송합니다.
+ */
+export function sendWidgetInput(
+  conversationId: number,
+  sessionId: string,
+  data: Record<string, unknown>
+): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: 'widget_input',
+    payload: {
+      conversationId,
+      sessionId,
+      data,
+    },
+    to: [pylonId],
+  });
+}
