@@ -431,6 +431,9 @@ function createDependencies(): PylonDependencies & {
   logger.log(`[Credential] Config dir: ${claudeConfigDir}`);
   logger.log(`[Credential] Backup dir: ${credentialsBackupDir}`);
 
+  // WidgetManager
+  const widgetManager = new WidgetManager();
+
   return {
     workspaceStore,
     messageStore,
@@ -450,6 +453,7 @@ function createDependencies(): PylonDependencies & {
     bugReportWriter,
     credentialManager,
     shareStore,
+    widgetManager,
   };
 }
 
@@ -483,9 +487,6 @@ async function main(): Promise<void> {
   // 지연 바인딩: BlobHandler.sendFn이 relayClient.send를 사용하도록 설정
   deps._bindPylonSend((msg) => deps.relayClient.send(msg));
 
-  // WidgetManager 생성
-  const widgetManager = new WidgetManager();
-
   // PylonMcpServer 생성 (MCP 도구가 WorkspaceStore에 접근 가능하도록)
   const pylonMcpPort = envConfig?.pylon?.mcpPort || parseInt(process.env['ESTELLE_MCP_PORT'] || '9880', 10);
   const pylonMcpServer = new PylonMcpServer(deps.workspaceStore, {
@@ -500,18 +501,18 @@ async function main(): Promise<void> {
     onConversationCreate: (conversationId: number) => {
       pylon.triggerInitialContext(conversationId);
     },
-    widgetManager,
-    onWidgetRender: (conversationId, sessionId, view, inputs) => {
+    widgetManager: deps.widgetManager as WidgetManager | undefined,
+    onWidgetRender: (conversationId, toolUseId, sessionId, view, inputs) => {
       deps.relayClient.send({
         type: 'widget_render',
-        payload: { conversationId, sessionId, view, inputs },
+        payload: { conversationId, toolUseId, sessionId, view, inputs },
         broadcast: 'clients',
       });
     },
-    onWidgetClose: (conversationId, sessionId) => {
+    onWidgetClose: (conversationId, toolUseId, sessionId) => {
       deps.relayClient.send({
         type: 'widget_close',
-        payload: { conversationId, sessionId },
+        payload: { conversationId, toolUseId, sessionId },
         broadcast: 'clients',
       });
     },

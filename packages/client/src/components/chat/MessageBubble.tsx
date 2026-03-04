@@ -17,12 +17,21 @@ interface MessageBubbleProps {
   childTools?: ChildToolInfo[];
   /** MCP 파일 클릭 핸들러 */
   onMcpFileClick?: (fileInfo: McpFileInfo) => void;
+  /** Widget 세션 (run_widget 도구용) */
+  widgetSession?: {
+    toolUseId: string;
+    sessionId: string;
+    view: import('@estelle/core').ViewNode;
+    inputs: import('@estelle/core').InputNode[];
+  } | null;
+  /** Widget 입력 핸들러 */
+  onWidgetInput?: (data: Record<string, unknown>) => void;
 }
 
 /**
  * 메시지 버블 (컴팩트)
  */
-export function MessageBubble({ message, onImagePress, childTools, onMcpFileClick }: MessageBubbleProps) {
+export function MessageBubble({ message, onImagePress, childTools, onMcpFileClick, widgetSession, onWidgetInput }: MessageBubbleProps) {
   const isUser = message.role === 'user' && message.type === 'text';
   const isToolStart = message.type === 'tool_start';
   const isToolComplete = message.type === 'tool_complete';
@@ -53,6 +62,9 @@ export function MessageBubble({ message, onImagePress, childTools, onMcpFileClic
           elapsedSeconds={elapsedSeconds}
           childTools={toolMsg.toolName === 'Task' ? childTools : undefined}
           onMcpFileClick={onMcpFileClick}
+          toolUseId={toolMsg.id}
+          widgetSession={widgetSession}
+          onWidgetInput={onWidgetInput}
         />
       </div>
     );

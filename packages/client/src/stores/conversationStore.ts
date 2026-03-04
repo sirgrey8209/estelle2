@@ -124,6 +124,7 @@ export interface ConversationStoreState {
   /** Widget 세션 설정 */
   setWidgetSession: (
     conversationId: number,
+    toolUseId: string,
     sessionId: string,
     view: ViewNode,
     inputs: InputNode[]
@@ -424,13 +425,13 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: widgetSession ===
 
-  setWidgetSession: (conversationId, sessionId, view, inputs) => {
+  setWidgetSession: (conversationId, toolUseId, sessionId, view, inputs) => {
     const states = new Map(get().states);
     const state = getOrCreateState(states, conversationId);
 
     states.set(conversationId, {
       ...state,
-      widgetSession: { sessionId, view, inputs },
+      widgetSession: { toolUseId, sessionId, view, inputs },
     });
     set({ states });
   },

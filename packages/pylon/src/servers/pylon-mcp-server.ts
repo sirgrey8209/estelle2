@@ -109,9 +109,9 @@ export interface PylonMcpServerOptions {
   /** Widget 세션 관리자 (run_widget 액션에 필요) */
   widgetManager?: WidgetManager;
   /** Widget 렌더 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
-  onWidgetRender?: (conversationId: number, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
   /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
-  onWidgetClose?: (conversationId: number, sessionId: string) => void;
+  onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
 }
 
 /** 요청 타입 */
@@ -318,8 +318,8 @@ export class PylonMcpServer {
   private _onConversationCreate?: (conversationId: number) => void;
   private _onContinueTask?: (conversationId: number, reason?: string) => void;
   private _widgetManager?: WidgetManager;
-  private _onWidgetRender?: (conversationId: number, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
-  private _onWidgetClose?: (conversationId: number, sessionId: string) => void;
+  private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
 
   // ============================================================================
   // 생성자
@@ -660,6 +660,7 @@ export class PylonMcpServer {
       case 'run_widget':
         return this._handleRunWidget(
           conversationId as ConversationId,
+          request.toolUseId ?? '',
           request.command,
           request.cwd,
           request.args,
@@ -1695,11 +1696,12 @@ export class PylonMcpServer {
    */
   private async _handleRunWidget(
     conversationId: ConversationId,
+    toolUseId: string,
     command?: string,
     cwd?: string,
     args?: string[],
   ): Promise<McpResponse> {
-    console.log(`[Widget] _handleRunWidget called: conversationId=${conversationId}, command=${command}, cwd=${cwd}`);
+    console.log(`[Widget] _handleRunWidget called: conversationId=${conversationId}, toolUseId=${toolUseId}, command=${command}, cwd=${cwd}`);
 
     // widgetManager 필수
     if (!this._widgetManager) {
@@ -1754,7 +1756,7 @@ export class PylonMcpServer {
       const onRender = (event: WidgetRenderEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Render event received for session ${sessionId}`);
-          this._onWidgetRender?.(conversationId, sessionId, event.view, event.inputs);
+          this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view, event.inputs);
         }
       };
 
@@ -1762,7 +1764,7 @@ export class PylonMcpServer {
       const onComplete = (event: WidgetCompleteEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Complete event received for session ${sessionId}, result:`, event.result);
-          this._onWidgetClose?.(conversationId, sessionId);
+          this._onWidgetClose?.(conversationId, toolUseId, sessionId);
         }
       };
 
@@ -1770,7 +1772,7 @@ export class PylonMcpServer {
       const onError = (event: WidgetErrorEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Error event received for session ${sessionId}:`, event.error);
-          this._onWidgetClose?.(conversationId, sessionId);
+          this._onWidgetClose?.(conversationId, toolUseId, sessionId);
         }
       };
 

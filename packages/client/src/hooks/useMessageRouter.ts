@@ -346,20 +346,22 @@ export function routeMessage(message: RelayMessage): void {
 
     // === Widget 메시지 ===
     case 'widget_render': {
-      // RelayMessage 형식: { type, payload: { sessionId, view, inputs, conversationId? } }
+      // RelayMessage 형식: { type, payload: { toolUseId, sessionId, view, inputs, conversationId? } }
       const widgetPayload = payload as {
+        toolUseId?: string;
         sessionId?: string;
         view?: ViewNode;
         inputs?: InputNode[];
         conversationId?: number;
       };
-      const { sessionId, view, inputs } = widgetPayload;
+      const { toolUseId, sessionId, view, inputs } = widgetPayload;
       const conversationId = widgetPayload.conversationId
         ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
 
-      if (conversationId && sessionId && view && inputs) {
+      if (conversationId && toolUseId && sessionId && view && inputs) {
         useConversationStore.getState().setWidgetSession(
           conversationId,
+          toolUseId,
           sessionId,
           view,
           inputs
@@ -369,8 +371,9 @@ export function routeMessage(message: RelayMessage): void {
     }
 
     case 'widget_close': {
-      // RelayMessage 형식: { type, payload: { sessionId, conversationId? } }
+      // RelayMessage 형식: { type, payload: { toolUseId, sessionId, conversationId? } }
       const closePayload = payload as {
+        toolUseId?: string;
         sessionId?: string;
         conversationId?: number;
       };

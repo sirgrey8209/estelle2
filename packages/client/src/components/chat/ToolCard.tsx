@@ -3,7 +3,9 @@ import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Squar
 import { parseToolInput, parseMcpToolName } from '../../utils/toolInputParser';
 import { removeSystemReminder, diffLines } from '../../utils/textUtils';
 import { Collapsible } from '../common/Collapsible';
+import { WidgetRenderer } from '../widget';
 import { cn } from '../../lib/utils';
+import type { ViewNode, InputNode } from '@estelle/core';
 
 /**
  * 파일 경로에서 파일명만 추출
@@ -38,6 +40,17 @@ interface ToolCardProps {
   childTools?: ChildToolInfo[];
   /** MCP 파일 클릭 핸들러 */
   onMcpFileClick?: (fileInfo: McpFileInfo) => void;
+  /** MCP 도구 호출 ID (Widget 렌더링에 사용) */
+  toolUseId?: string;
+  /** Widget 세션 (run_widget일 때 사용) */
+  widgetSession?: {
+    toolUseId: string;
+    sessionId: string;
+    view: ViewNode;
+    inputs: InputNode[];
+  } | null;
+  /** Widget 입력 핸들러 */
+  onWidgetInput?: (data: Record<string, unknown>) => void;
 }
 
 // McpFileInfo를 export
@@ -195,6 +208,9 @@ export function ToolCard({
   elapsedSeconds,
   childTools,
   onMcpFileClick,
+  toolUseId,
+  widgetSession,
+  onWidgetInput,
 }: ToolCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null);
@@ -420,6 +436,58 @@ export function ToolCard({
 
   // MCP 도구 전용 렌더링
   const mcpInfo = parseMcpToolName(toolName);
+
+  // run_widget MCP 도구: Widget 렌더링
+  if (mcpInfo.isMcp && mcpInfo.toolName === 'run_widget') {
+    // widgetSession이 있고 toolUseId가 매칭되는 경우에만 Widget 렌더링
+    const matchedWidget = widgetSession && toolUseId && widgetSession.toolUseId === toolUseId
+      ? widgetSession
+      : null;
+
+    // 결과 텍스트 변환
+    const outputText = cleanedOutput
+      ? (typeof cleanedOutput === 'string' ? cleanedOutput : JSON.stringify(cleanedOutput, null, 2))
+      : null;
+
+    return (
+      <div
+        className={cn(
+          'my-0.5 ml-2 rounded border border-l-2 bg-card overflow-hidden',
+          borderColor
+        )}
+        style={{ borderLeftColor: isComplete ? (success ? '#22c55e' : '#ef4444') : '#eab308' }}
+      >
+        {/* 헤더 */}
+        <div className="flex items-center px-2 py-1">
+          <Plug className="h-3 w-3 text-muted-foreground/60" />
+          <span className="ml-1 text-[10px] text-muted-foreground/60">
+            {mcpInfo.serverName}
+          </span>
+          <span className="ml-1.5 text-xs text-muted-foreground">Widget</span>
+          <span className={cn('ml-auto', statusColor)}>{statusIcon}</span>
+        </div>
+
+        {/* Widget 렌더링 */}
+        {matchedWidget && (
+          <div className="border-t border-border">
+            <WidgetRenderer
+              view={matchedWidget.view}
+              inputs={matchedWidget.inputs}
+              onInput={onWidgetInput || (() => {})}
+            />
+          </div>
+        )}
+
+        {/* 결과 표시 (완료 후) */}
+        {isComplete && outputText && (
+          <div className="border-t border-border px-2 py-1">
+            <p className="text-xs text-muted-foreground">{outputText}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (mcpInfo.isMcp) {
     return renderMcpTool(mcpInfo.serverName, mcpInfo.toolName, toolInput, cleanedOutput, {
       isComplete,

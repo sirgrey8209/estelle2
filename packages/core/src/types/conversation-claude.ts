@@ -147,6 +147,8 @@ export interface ConversationClaudeState {
  * Widget Protocol을 통해 렌더링되는 UI를 표시합니다.
  */
 export interface WidgetSession {
+  /** MCP 도구 호출 ID (ToolCard와 연결) */
+  toolUseId: string;
   /** Widget 세션 ID */
   sessionId: string;
   /** 렌더링할 View 노드 */

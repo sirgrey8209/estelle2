@@ -249,6 +249,10 @@ function onMessage(
     // 디버그 로그
     if (data.type !== 'ping') {
       log(`[MSG] ${clientId} (${client.deviceType ?? 'unauth'}): ${data.type}`);
+      // 위젯 디버깅: broadcast 필드 확인
+      if (data.type === 'widget_render' || data.type === 'widget_close') {
+        log(`[DEBUG] ${data.type} broadcast=${JSON.stringify(data.broadcast)} to=${JSON.stringify(data.to)}`);
+      }
     }
 
     // 순수 함수로 처리하고 액션 받기

@@ -214,6 +214,14 @@ export interface BugReportWriter {
 }
 
 /**
+ * WidgetManager 인터페이스 (의존성 주입용)
+ */
+export interface WidgetManagerAdapter {
+  /** 사용자 입력을 위젯 세션에 전달 */
+  sendInput(sessionId: string, data: Record<string, unknown>): void;
+}
+
+/**
  * Pylon 의존성 (의존성 주입)
  */
 export interface PylonDependencies {
@@ -239,6 +247,9 @@ export interface PylonDependencies {
 
   /** 공유 저장소 (선택, 공유 기능에 필요) */
   shareStore?: ShareStore;
+
+  /** Widget 매니저 (선택, Widget Protocol 기능에 필요) */
+  widgetManager?: WidgetManagerAdapter;
 }
 
 /**
@@ -806,7 +817,38 @@ export class Pylon {
       return;
     }
 
+    // ===== Widget 입력 =====
+    if (type === 'widget_input') {
+      this.handleWidgetInput(payload);
+      return;
+    }
+
     // 알 수 없는 메시지는 무시
+  }
+
+  /**
+   * Widget 입력 처리
+   *
+   * @description
+   * 클라이언트에서 Widget 버튼 클릭 등의 입력을 받아서
+   * WidgetManager에 전달합니다.
+   */
+  private handleWidgetInput(payload?: Record<string, unknown>): void {
+    if (!this.deps.widgetManager) {
+      this.log('[Widget] WidgetManager not configured');
+      return;
+    }
+
+    const sessionId = payload?.sessionId as string | undefined;
+    const data = payload?.data as Record<string, unknown> | undefined;
+
+    if (!sessionId || !data) {
+      this.log('[Widget] Missing sessionId or data in widget_input');
+      return;
+    }
+
+    this.log(`[Widget] Received input for session ${sessionId}`);
+    this.deps.widgetManager.sendInput(sessionId, data);
   }
 
   /**

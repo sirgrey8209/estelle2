@@ -221,14 +221,7 @@ export function MessageList({
     const items: Array<{ type: string; data: unknown; key: string }> = [];
 
     // 가장 위 (최신)
-    // Widget 세션이 있으면 최상단에 표시
-    if (widgetSession) {
-      items.push({
-        type: 'widget',
-        data: widgetSession,
-        key: `widget-${widgetSession.sessionId}`,
-      });
-    }
+    // Widget은 이제 ToolCard 내부에서 렌더링되므로 별도 항목 없음
 
     if (workStartTime) {
       items.push({
@@ -279,7 +272,7 @@ export function MessageList({
     }
 
     return items;
-  }, [messages, textBuffer, workStartTime, uploadingItems, isLoadingHistory, hasMoreHistory, parentToolIds, widgetSession]);
+  }, [messages, textBuffer, workStartTime, uploadingItems, isLoadingHistory, hasMoreHistory, parentToolIds]);
 
   const displayItems = buildDisplayItems();
 
@@ -314,18 +307,7 @@ export function MessageList({
 
   const renderItem = (item: { type: string; data: unknown; key: string }) => {
     switch (item.type) {
-      case 'widget': {
-        const session = item.data as { sessionId: string; view: import('@estelle/core').ViewNode; inputs: import('@estelle/core').InputNode[] };
-        return (
-          <div key={item.key} className="mb-2">
-            <WidgetRenderer
-              view={session.view}
-              inputs={session.inputs}
-              onInput={handleWidgetInput}
-            />
-          </div>
-        );
-      }
+      // Widget은 이제 ToolCard 내부에서 렌더링됨
 
       case 'working':
         return (
@@ -428,6 +410,8 @@ export function MessageList({
               if (att) handleAttachmentPress(att);
             }}
             onMcpFileClick={handleMcpFileClick}
+            widgetSession={widgetSession}
+            onWidgetInput={handleWidgetInput}
           />
         );
       }
