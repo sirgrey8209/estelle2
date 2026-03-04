@@ -45,6 +45,10 @@ import {
   executeContinueTask,
   getContinueTaskToolDefinition,
 } from './tools/continue-task.js';
+import {
+  executeRunWidget,
+  getRunWidgetToolDefinition,
+} from './tools/run-widget.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
 
@@ -109,6 +113,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getRenameConversationToolDefinition(),
     getAddPromptToolDefinition(),
     getContinueTaskToolDefinition(),
+    getRunWidgetToolDefinition(),
   ],
 }));
 
@@ -160,6 +165,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     case 'continue_task': {
       const result = await executeContinueTask(args as { reason?: string }, { toolUseId });
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'run_widget': {
+      const result = await executeRunWidget(
+        args as { command?: string; cwd?: string; args?: string[] },
+        { toolUseId }
+      );
       return result as unknown as Record<string, unknown>;
     }
     default:

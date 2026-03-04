@@ -127,9 +127,24 @@ export interface ContinueTaskResult {
   error?: string;
 }
 
+/** RunWidget 옵션 타입 */
+export interface RunWidgetOptions {
+  command: string;
+  cwd: string;
+  args?: string[];
+  toolUseId: string;
+}
+
+/** RunWidget 결과 타입 */
+export interface RunWidgetResult {
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
 /** 요청 타입 */
 interface PylonRequest {
-  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task';
+  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task' | 'lookup_and_run_widget';
   conversationId?: number;
   toolUseId?: string;
   path?: string;
@@ -140,6 +155,9 @@ interface PylonRequest {
   newName?: string;
   content?: string;
   reason?: string;
+  command?: string;
+  cwd?: string;
+  args?: string[];
 }
 
 // ============================================================================
@@ -391,6 +409,44 @@ export class PylonClient {
       action: 'lookup_and_continue_task',
       toolUseId,
       reason,
+    });
+  }
+
+  /**
+   * Widget 세션 실행
+   * 인터랙티브 위젯 세션을 시작하고 완료될 때까지 대기합니다.
+   *
+   * @param options - Widget 실행 옵션
+   * @returns Widget 실행 결과
+   */
+  async runWidget(options: RunWidgetOptions): Promise<RunWidgetResult> {
+    if (!options.toolUseId || options.toolUseId === '') {
+      return {
+        success: false,
+        error: 'toolUseId is required',
+      };
+    }
+
+    if (!options.command || options.command === '') {
+      return {
+        success: false,
+        error: 'command is required',
+      };
+    }
+
+    if (!options.cwd || options.cwd === '') {
+      return {
+        success: false,
+        error: 'cwd is required',
+      };
+    }
+
+    return this._sendRequest<RunWidgetResult>({
+      action: 'lookup_and_run_widget',
+      toolUseId: options.toolUseId,
+      command: options.command,
+      cwd: options.cwd,
+      args: options.args,
     });
   }
 
