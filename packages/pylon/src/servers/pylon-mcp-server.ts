@@ -1699,8 +1699,11 @@ export class PylonMcpServer {
     cwd?: string,
     args?: string[],
   ): Promise<McpResponse> {
+    console.log(`[Widget] _handleRunWidget called: conversationId=${conversationId}, command=${command}, cwd=${cwd}`);
+
     // widgetManager 필수
     if (!this._widgetManager) {
+      console.log('[Widget] ERROR: WidgetManager not configured');
       return {
         success: false,
         error: 'WidgetManager not configured',
@@ -1709,6 +1712,7 @@ export class PylonMcpServer {
 
     // command 검사
     if (!command || command === '') {
+      console.log('[Widget] ERROR: Missing command');
       return {
         success: false,
         error: 'Missing command field for run_widget action',
@@ -1717,6 +1721,7 @@ export class PylonMcpServer {
 
     // cwd 검사
     if (!cwd || cwd === '') {
+      console.log('[Widget] ERROR: Missing cwd');
       return {
         success: false,
         error: 'Missing cwd field for run_widget action',
@@ -1726,11 +1731,14 @@ export class PylonMcpServer {
     // 대화 존재 확인
     const conversation = this._workspaceStore.getConversation(conversationId);
     if (!conversation) {
+      console.log(`[Widget] ERROR: Conversation not found: ${conversationId}`);
       return {
         success: false,
         error: 'Conversation not found',
       };
     }
+
+    console.log('[Widget] Starting widget session...');
 
     try {
       // Widget 세션 시작
@@ -1740,9 +1748,12 @@ export class PylonMcpServer {
         args,
       });
 
+      console.log(`[Widget] Session started: ${sessionId}`);
+
       // render 이벤트 리스너 등록
       const onRender = (event: WidgetRenderEvent) => {
         if (event.sessionId === sessionId) {
+          console.log(`[Widget] Render event received for session ${sessionId}`);
           this._onWidgetRender?.(conversationId, sessionId, event.view, event.inputs);
         }
       };
@@ -1750,6 +1761,7 @@ export class PylonMcpServer {
       // complete 이벤트 리스너 등록
       const onComplete = (event: WidgetCompleteEvent) => {
         if (event.sessionId === sessionId) {
+          console.log(`[Widget] Complete event received for session ${sessionId}, result:`, event.result);
           this._onWidgetClose?.(conversationId, sessionId);
         }
       };
@@ -1757,6 +1769,7 @@ export class PylonMcpServer {
       // error 이벤트 리스너 등록
       const onError = (event: WidgetErrorEvent) => {
         if (event.sessionId === sessionId) {
+          console.log(`[Widget] Error event received for session ${sessionId}:`, event.error);
           this._onWidgetClose?.(conversationId, sessionId);
         }
       };
@@ -1766,14 +1779,18 @@ export class PylonMcpServer {
       this._widgetManager.on('complete', onComplete);
       this._widgetManager.on('error', onError);
 
+      console.log('[Widget] Waiting for completion...');
+
       // 완료 대기
       try {
         const result = await this._widgetManager.waitForCompletion(sessionId);
+        console.log(`[Widget] Completion result:`, result);
         return {
           success: true,
           result,
         };
       } catch (err) {
+        console.log(`[Widget] waitForCompletion error:`, err);
         return {
           success: false,
           error: err instanceof Error ? err.message : String(err),
@@ -1785,6 +1802,7 @@ export class PylonMcpServer {
         this._widgetManager.off('error', onError);
       }
     } catch (err) {
+      console.log(`[Widget] startSession error:`, err);
       return {
         success: false,
         error: `Failed to start widget session: ${err instanceof Error ? err.message : String(err)}`,
