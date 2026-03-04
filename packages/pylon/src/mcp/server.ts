@@ -49,7 +49,9 @@ import {
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
 
 // DEBUG: 파일 로그 (DATA_DIR/logs/ 에 저장)
-const DATA_DIR = process.env.DATA_DIR || './data';
+// DATA_DIR이 상대경로일 경우 ESTELLE_WORKING_DIR 기준으로 절대경로 변환
+const rawDataDir = process.env.DATA_DIR || './data';
+const DATA_DIR = path.isAbsolute(rawDataDir) ? rawDataDir : path.join(WORKING_DIR, rawDataDir);
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'mcp-server.log');
 

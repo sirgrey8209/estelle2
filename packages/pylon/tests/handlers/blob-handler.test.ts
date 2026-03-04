@@ -33,24 +33,41 @@ import { BlobConfig, encodeConversationId } from '@estelle/core';
 /**
  * 테스트용 Mock FileSystemAdapter 생성
  */
-function createMockFs(): FileSystemAdapter {
+function createMockFs(): FileSystemAdapter & {
+  _setFile: (path: string, data: Buffer) => void;
+  _getFile: (path: string) => Buffer | undefined;
+  _clear: () => void;
+} {
   const files = new Map<string, Buffer>();
 
+  // vi.fn으로 감싸되, 실제 구현은 files Map을 사용
+  const existsFn = vi.fn().mockImplementation((path: string) => files.has(path));
+  const readFileFn = vi.fn().mockImplementation((path: string) => {
+    const data = files.get(path);
+    if (!data) throw new Error(`File not found: ${path}`);
+    return data;
+  });
+  const writeFileFn = vi.fn().mockImplementation((path: string, data: Buffer) => {
+    files.set(path, data);
+  });
+  const mkdirFn = vi.fn();
+  const findFileFn = vi.fn().mockImplementation((_dir: string, _filename: string) => undefined);
+
   return {
-    exists: vi.fn((path: string) => files.has(path)),
-    readFile: vi.fn((path: string) => {
-      const data = files.get(path);
-      if (!data) throw new Error(`File not found: ${path}`);
-      return data;
-    }),
-    writeFile: vi.fn((path: string, data: Buffer) => {
-      files.set(path, data);
-    }),
-    mkdir: vi.fn(),
-    findFile: vi.fn((_dir: string, _filename: string) => undefined),
+    exists: existsFn,
+    readFile: readFileFn,
+    writeFile: writeFileFn,
+    mkdir: mkdirFn,
+    findFile: findFileFn,
 
     // 테스트용: 파일 추가/제거 메서드
-    _setFile: (path: string, data: Buffer) => files.set(path, data),
+    // 슬래시/백슬래시 양쪽 경로 모두 저장 (Windows 호환)
+    _setFile: (path: string, data: Buffer) => {
+      files.set(path, data);
+      // 양쪽 형식의 경로 모두 저장
+      const altPath = path.includes('\\') ? path.replace(/\\/g, '/') : path.replace(/\//g, '\\');
+      files.set(altPath, data);
+    },
     _getFile: (path: string) => files.get(path),
     _clear: () => files.clear(),
   };
@@ -61,6 +78,15 @@ function createMockFs(): FileSystemAdapter {
  */
 function createChunkData(content: string): string {
   return Buffer.from(content).toString('base64');
+}
+
+/**
+ * 플랫폼에 맞는 경로 반환
+ * Windows에서는 백슬래시, 그 외에는 슬래시
+ */
+const IS_WINDOWS = process.platform === 'win32';
+function normalizePath(path: string): string {
+  return IS_WINDOWS ? path.replace(/\//g, '\\') : path.replace(/\\/g, '/');
 }
 
 /**
@@ -82,16 +108,12 @@ function createTestContext(overrides?: Partial<BlobContext>): BlobContext {
 
 describe('BlobHandler', () => {
   let handler: BlobHandler;
-  let mockFs: FileSystemAdapter & {
-    _setFile: (path: string, data: Buffer) => void;
-    _getFile: (path: string) => Buffer | undefined;
-    _clear: () => void;
-  };
+  let mockFs: ReturnType<typeof createMockFs>;
   let sentMessages: Message<unknown>[];
   let sendFn: SendFileFn;
 
   beforeEach(() => {
-    mockFs = createMockFs() as typeof mockFs;
+    mockFs = createMockFs();
     sentMessages = [];
     sendFn = vi.fn((msg: Message<unknown>) => {
       sentMessages.push(msg);
@@ -198,7 +220,7 @@ describe('BlobHandler', () => {
       const result = handler.handleBlobStart(payload, 'device-001');
 
       expect(result.success).toBe(true);
-      expect(result.path).toBe('C:/local/image.png');
+      expect(result.path).toBe(normalizePath('C:/local/image.png'));
       expect(result.sameDevice).toBe(true);
 
       const transfer = handler.getTransfer('blob-001');
@@ -486,7 +508,7 @@ describe('BlobHandler', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.path).toBe('C:/local/image.png');
+      expect(result.path).toBe(normalizePath('C:/local/image.png'));
       // writeFile이 호출되지 않음 (로컬 파일 사용)
       expect(mockFs.writeFile).not.toHaveBeenCalled();
     });

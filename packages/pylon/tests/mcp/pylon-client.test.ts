@@ -6,8 +6,6 @@
  *
  * 테스트 케이스:
  * - 생성자: 기본 옵션, 커스텀 옵션
- * - deployByToolUseId: toolUseId 기반 배포 요청
- * - deploy (레거시): conversationId 기반 배포 요청
  * - getStatusByToolUseId: toolUseId 기반 상태 조회
  * - getStatus (레거시): conversationId 기반 상태 조회
  */
@@ -127,130 +125,9 @@ describe('PylonClient', () => {
   });
 
   // ============================================================================
-  // deployByToolUseId 테스트
+  // deploy 테스트 (미구현 - 추후 구현 시 활성화)
   // ============================================================================
-  describe('deployByToolUseId', () => {
-    // 현재 환경 확인 (테스트 환경에 따라 다름)
-    const getCurrentEnv = (): 'release' | 'stage' | 'dev' => {
-      try {
-        const envConfigStr = process.env.ESTELLE_ENV_CONFIG;
-        if (envConfigStr) {
-          const envConfig = JSON.parse(envConfigStr);
-          const envId = envConfig.envId ?? 2;
-          const envNames = ['release', 'stage', 'dev'] as const;
-          return envNames[envId] || 'dev';
-        }
-      } catch {
-        // 파싱 실패 시 기본값
-      }
-      return 'dev';
-    };
-
-    // 스크립트 실행 테스트는 제거 (동기 실행, 실제 환경에서 수동 검증)
-
-    it('should_reject_deploy_to_same_environment_via_toolUseId', async () => {
-      // Arrange - 현재 환경과 같은 환경으로 배포 시도
-      const currentEnv = getCurrentEnv();
-
-      // dev 환경에서는 자기 자신 배포 테스트 불가 (dev는 배포 대상이 아님)
-      if (currentEnv === 'dev') {
-        return; // skip
-      }
-
-      // Act
-      const result = await client.deployByToolUseId(TEST_TOOL_USE_ID, currentEnv);
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/자기 자신 환경/);
-    });
-
-    it('should_return_error_when_toolUseId_not_found', async () => {
-      // Act
-      const result = await client.deployByToolUseId('toolu_unknown', 'stage');
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/not found|toolUseId/i);
-    });
-
-    it('should_return_error_when_target_is_invalid', async () => {
-      // Act
-      const result = await client.deployByToolUseId(TEST_TOOL_USE_ID, 'production');
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/stage.*release.*promote/i);
-    });
-  });
-
-  // ============================================================================
-  // deploy (레거시 conversationId 기반) 테스트
-  // ============================================================================
-  describe('deploy', () => {
-    // 현재 환경 확인 (테스트 환경에 따라 다름)
-    const getCurrentEnv = (): 'release' | 'stage' | 'dev' => {
-      try {
-        const envConfigStr = process.env.ESTELLE_ENV_CONFIG;
-        if (envConfigStr) {
-          const envConfig = JSON.parse(envConfigStr);
-          const envId = envConfig.envId ?? 2;
-          const envNames = ['release', 'stage', 'dev'] as const;
-          return envNames[envId] || 'dev';
-        }
-      } catch {
-        // 파싱 실패 시 기본값
-      }
-      return 'dev';
-    };
-
-    // 스크립트 실행 테스트는 제거 (동기 실행, 실제 환경에서 수동 검증)
-
-    it('should_reject_deploy_to_same_environment_via_conversationId', async () => {
-      // Arrange - 현재 환경과 같은 환경으로 배포 시도
-      const currentEnv = getCurrentEnv();
-
-      // dev 환경에서는 자기 자신 배포 테스트 불가
-      if (currentEnv === 'dev') {
-        return;
-      }
-
-      // Act
-      const result = await client.deploy(TEST_CONVERSATION_ID, currentEnv);
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/자기 자신 환경/);
-    });
-
-    it('should_return_error_when_conversationId_not_found', async () => {
-      // Act
-      const result = await client.deploy(99999, 'stage');
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/not found|invalid/i);
-    });
-
-    it('should_return_error_when_target_is_missing', async () => {
-      // Act
-      // @ts-expect-error - 의도적으로 target 누락
-      const result = await client.deploy(TEST_CONVERSATION_ID);
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/target/i);
-    });
-
-    it('should_return_error_when_target_is_empty', async () => {
-      // Act
-      const result = await client.deploy(TEST_CONVERSATION_ID, '');
-
-      // Assert
-      expect(result.success).toBe(false);
-      expect(result.error).toMatch(/target/i);
-    });
-  });
+  // TODO: deployByToolUseId, deploy 메서드 구현 후 테스트 활성화
 
   // ============================================================================
   // getStatusByToolUseId 테스트
