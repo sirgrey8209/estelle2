@@ -99,7 +99,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     log(`=== Update started (${role}) ===`);
 
     // Step 1: git fetch
-    log(`[1/6] git fetch origin...`);
+    log(`[1/7] git fetch origin...`);
     const fetchResult = await runCommand('git', ['fetch', 'origin'], repoRoot, log);
     if (!fetchResult.success) {
       log(`✗ git fetch failed: ${fetchResult.error}`);
@@ -107,7 +107,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 2: git checkout
-    log(`[2/6] git checkout ${branch}...`);
+    log(`[2/7] git checkout ${branch}...`);
     const checkoutResult = await runCommand('git', ['checkout', branch], repoRoot, log);
     if (!checkoutResult.success) {
       log(`✗ git checkout failed: ${checkoutResult.error}`);
@@ -115,23 +115,31 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 3: git pull
-    log(`[3/6] git pull origin ${branch}...`);
+    log(`[3/7] git pull origin ${branch}...`);
     const pullResult = await runCommand('git', ['pull', 'origin', branch], repoRoot, log);
     if (!pullResult.success) {
       log(`✗ git pull failed: ${pullResult.error}`);
       return { success: false, error: `git pull failed: ${pullResult.error}` };
     }
 
-    // Step 4: pnpm build
-    log(`[4/6] pnpm build...`);
+    // Step 4: pnpm install (for new dependencies)
+    log(`[4/7] pnpm install...`);
+    const installResult = await runCommand('pnpm', ['install'], repoRoot, log);
+    if (!installResult.success) {
+      log(`✗ pnpm install failed: ${installResult.error}`);
+      return { success: false, error: `pnpm install failed: ${installResult.error}` };
+    }
+
+    // Step 5: pnpm build
+    log(`[5/7] pnpm build...`);
     const buildResult = await runCommand('pnpm', ['build'], repoRoot, log);
     if (!buildResult.success) {
       log(`✗ pnpm build failed: ${buildResult.error}`);
       return { success: false, error: `pnpm build failed: ${buildResult.error}` };
     }
 
-    // Step 5: Copy build artifacts to release/
-    log(`[5/6] Copying build artifacts to release/...`);
+    // Step 6: Copy build artifacts to release/
+    log(`[6/7] Copying build artifacts to release/...`);
     const releaseDir = path.join(repoRoot, 'release');
     const pkgDir = path.join(repoRoot, 'packages');
 
@@ -158,8 +166,8 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
       log(`  relay/public → release/relay/public`);
     }
 
-    // Step 6: pm2 restart
-    log(`[6/6] pm2 restart...`);
+    // Step 7: pm2 restart
+    log(`[7/7] pm2 restart...`);
 
     if (isMaster) {
       // Master: restart both Relay and Pylon
