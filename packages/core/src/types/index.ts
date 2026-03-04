@@ -49,3 +49,6 @@ export * from './account.js';
 
 // share.js - 대화 공유 관련 타입
 export * from './share.js';
+
+// widget.js - Widget Protocol 타입
+export * from './widget.js';
