@@ -63,3 +63,16 @@ export {
   type PlatformType,
   type PlatformOptions,
 } from './folder-manager.js';
+
+// ============================================================================
+// WidgetManager
+// ============================================================================
+
+export {
+  WidgetManager,
+  type WidgetSession,
+  type WidgetStartOptions,
+  type WidgetRenderEvent,
+  type WidgetCompleteEvent,
+  type WidgetErrorEvent,
+} from './widget-manager.js';
