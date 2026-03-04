@@ -62,7 +62,7 @@ describe('PylonClient', () => {
   const PYLON_ID = 1;
   // encodeConversationId(1, 1, 1) = (1 << 17) | (1 << 10) | 1 = 132097
   const TEST_CONVERSATION_ID = 132097;
-  const TEST_TOOL_USE_ID = 'toolu_test_deploy_456';
+  const TEST_TOOL_USE_ID = 'toolu_test_status_456';
 
   beforeEach(async () => {
     TEST_PORT = getRandomPort();
@@ -123,11 +123,6 @@ describe('PylonClient', () => {
       expect(customClient.timeout).toBe(10000);
     });
   });
-
-  // ============================================================================
-  // deploy 테스트 (미구현 - 추후 구현 시 활성화)
-  // ============================================================================
-  // TODO: deployByToolUseId, deploy 메서드 구현 후 테스트 활성화
 
   // ============================================================================
   // getStatusByToolUseId 테스트
