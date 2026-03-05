@@ -1,0 +1,69 @@
+{
+  "dev": {
+    "name": "Development",
+    "envId": 2,
+    "relay": {
+      "port": 3000,
+      "url": "ws://localhost:3000",
+      "pm2Name": "estelle-relay-dev"
+    },
+    "pylon": {
+      "pylonIndex": "1",
+      "relayUrl": "ws://localhost:3000",
+      "pm2Name": "estelle-pylon-dev",
+      "configDir": "~/.claude-release",
+      "credentialsBackupDir": "~/.claude-credentials/release",
+      "mcpPort": 9878,
+      "dataDir": "./dev-data",
+      "defaultWorkingDir": "C:\\WorkSpace"
+    },
+    "client": {
+      "port": 5173,
+      "pm2Name": "estelle-client-dev",
+      "title": "Estelle (dev)"
+    }
+  },
+  "stage": {
+    "name": "Staging",
+    "envId": 1,
+    "relay": {
+      "port": 8080,
+      "url": "wss://estelle-relay-v2-stage.fly.dev",
+      "flyApp": "estelle-relay-v2-stage"
+    },
+    "pylon": {
+      "pylonIndex": "1",
+      "relayUrl": "wss://estelle-relay-v2-stage.fly.dev",
+      "pm2Name": "estelle-pylon-stage",
+      "configDir": "~/.claude-release",
+      "credentialsBackupDir": "~/.claude-credentials/release",
+      "mcpPort": 9877,
+      "dataDir": "./stage-data/data",
+      "defaultWorkingDir": "C:\\WorkSpace"
+    },
+    "client": {
+      "title": "Estelle"
+    }
+  },
+  "release": {
+    "name": "Production",
+    "envId": 0,
+    "relay": {
+      "port": 8080,
+      "url": "ws://89.167.4.124:8080"
+    },
+    "pylon": {
+      "pylonIndex": "1",
+      "relayUrl": "ws://89.167.4.124:8080",
+      "pm2Name": "estelle-pylon",
+      "configDir": "~/.claude-release",
+      "credentialsBackupDir": "~/.claude-credentials/release",
+      "mcpPort": 9876,
+      "dataDir": "./release-data/data",
+      "defaultWorkingDir": "C:\\WorkSpace"
+    },
+    "client": {
+      "title": "Estelle"
+    }
+  }
+}
