@@ -442,8 +442,8 @@ export function ToolCard({
   // MCP 도구 전용 렌더링
   const mcpInfo = parseMcpToolName(toolName);
 
-  // run_widget MCP 도구: Widget 렌더링
-  if (mcpInfo.isMcp && mcpInfo.toolName === 'run_widget') {
+  // run_widget / run_widget_inline MCP 도구: Widget 렌더링
+  if (mcpInfo.isMcp && (mcpInfo.toolName === 'run_widget' || mcpInfo.toolName === 'run_widget_inline')) {
     // widgetSession이 있고 toolUseId가 매칭되는 경우에만 Widget 렌더링
     const matchedWidget = widgetSession && toolUseId && widgetSession.toolUseId === toolUseId
       ? widgetSession
