@@ -1637,13 +1637,10 @@ export class PylonMcpServer {
   ): Promise<McpResponse> {
     console.log(`[Widget] _handleRunWidget called: conversationId=${conversationId}, toolUseId=${toolUseId}, command=${command}, cwd=${cwd}`);
 
-    // 중복 위젯 체크
+    // 이전 위젯이 있으면 자동 종료
     if (this._pendingWidgets.has(conversationId)) {
-      console.log(`[Widget] ERROR: Widget already running in conversation ${conversationId}`);
-      return {
-        success: false,
-        error: 'Widget already running in this conversation. Complete or cancel the existing widget first.',
-      };
+      console.log(`[Widget] Closing previous widget in conversation ${conversationId}`);
+      this.cancelWidgetForConversation(conversationId);
     }
 
     // widgetManager 필수
