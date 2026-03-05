@@ -1556,7 +1556,8 @@ describe('PylonMcpServer', () => {
 
     it('should_reject_duplicate_widget_in_same_conversation', async () => {
       // Arrange - widgetManager가 필요하므로 mock 설정
-      const TEST_TOOL_USE_ID_WIDGET = 'toolu_test_widget_dup_123';
+      const TEST_TOOL_USE_ID_WIDGET_1 = 'toolu_test_widget_dup_123';
+      const TEST_TOOL_USE_ID_WIDGET_2 = 'toolu_test_widget_dup_456';
 
       await server.close();
       TEST_PORT = getRandomPort();
@@ -1572,7 +1573,8 @@ describe('PylonMcpServer', () => {
       const serverWithWidget = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
         getConversationIdByToolUseId: (toolUseId: string) => {
-          if (toolUseId === TEST_TOOL_USE_ID_WIDGET) {
+          // 두 toolUseId 모두 같은 conversationId로 매핑
+          if (toolUseId === TEST_TOOL_USE_ID_WIDGET_1 || toolUseId === TEST_TOOL_USE_ID_WIDGET_2) {
             return TEST_CONVERSATION_ID;
           }
           return null;
@@ -1587,39 +1589,25 @@ describe('PylonMcpServer', () => {
       // Act - 첫 번째 위젯 시작 (응답 대기하지 않음)
       const firstRequest = sendRequest(TEST_PORT, {
         action: 'lookup_and_run_widget',
-        toolUseId: TEST_TOOL_USE_ID_WIDGET,
+        toolUseId: TEST_TOOL_USE_ID_WIDGET_1,
         command: 'test',
         cwd: '/tmp',
       });
 
-      // 약간 대기 후 두 번째 위젯 시도
+      // 약간 대기 후 두 번째 위젯 시도 (같은 서버에서!)
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // 두 번째 위젯 요청은 다른 toolUseId 사용 (같은 conversationId)
-      const TEST_TOOL_USE_ID_WIDGET_2 = 'toolu_test_widget_dup_456';
-      await server.close();
-      TEST_PORT = getRandomPort();
+      // 두 번째 위젯 요청 - 같은 conversationId로 매핑되는 다른 toolUseId
+      const secondResponse = (await sendRequest(TEST_PORT, {
+        action: 'lookup_and_run_widget',
+        toolUseId: TEST_TOOL_USE_ID_WIDGET_2,
+        command: 'test2',
+        cwd: '/tmp',
+      })) as { success: boolean; error?: string };
 
-      const serverWithWidget2 = new PylonMcpServer(workspaceStore, {
-        port: TEST_PORT,
-        getConversationIdByToolUseId: (toolUseId: string) => {
-          if (toolUseId === TEST_TOOL_USE_ID_WIDGET || toolUseId === TEST_TOOL_USE_ID_WIDGET_2) {
-            return TEST_CONVERSATION_ID;
-          }
-          return null;
-        },
-        widgetManager: mockWidgetManager as any,
-      });
-
-      server = serverWithWidget2;
-      await server.listen();
-      await waitForPort(TEST_PORT);
-
-      // 위젯이 pending 상태에 있는지 직접 추가해서 테스트
-      // (실제로는 위젯 시작 시 자동으로 추가됨)
-      // 이 테스트는 handleRunWidget 메서드의 중복 체크 로직을 테스트함
-      // 일단 pendingWidgets Map에 직접 값을 추가할 수 없으므로
-      // 통합 테스트로 진행
+      // Assert - 두 번째 요청은 중복으로 거부되어야 함
+      expect(secondResponse.success).toBe(false);
+      expect(secondResponse.error).toContain('Widget already running');
 
       // 정리
       firstRequest.catch(() => {}); // 응답 대기 취소
