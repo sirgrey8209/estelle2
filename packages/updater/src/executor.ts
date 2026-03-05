@@ -143,6 +143,20 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     const releaseDir = path.join(repoRoot, 'release');
     const pkgDir = path.join(repoRoot, 'packages');
 
+    // Copy core/dist (required by relay and pylon via workspace symlinks)
+    const coreDistSrc = path.join(pkgDir, 'core', 'dist');
+    const coreDistDest = path.join(releaseDir, 'core', 'dist');
+    fs.mkdirSync(coreDistDest, { recursive: true });
+    fs.cpSync(coreDistSrc, coreDistDest, { recursive: true });
+    log(`  core/dist → release/core/dist`);
+
+    // Copy updater/dist (required by pylon via workspace symlinks)
+    const updaterDistSrc = path.join(pkgDir, 'updater', 'dist');
+    const updaterDistDest = path.join(releaseDir, 'updater', 'dist');
+    fs.mkdirSync(updaterDistDest, { recursive: true });
+    fs.cpSync(updaterDistSrc, updaterDistDest, { recursive: true });
+    log(`  updater/dist → release/updater/dist`);
+
     // Always copy pylon/dist
     const pylonDistSrc = path.join(pkgDir, 'pylon', 'dist');
     const pylonDistDest = path.join(releaseDir, 'pylon', 'dist');
