@@ -89,6 +89,15 @@ const MIME_TYPES: Record<string, string> = {
 // 타입 정의
 // ============================================================================
 
+/** 대기 중인 위젯 정보 */
+export interface PendingWidget {
+  conversationId: number;
+  toolUseId: string;
+  widgetSessionId: string;
+  resolve: (result: unknown) => void;
+  reject: (error: Error) => void;
+}
+
 /** PylonMcpServer 옵션 */
 export interface PylonMcpServerOptions {
   port?: number;
@@ -324,6 +333,9 @@ export class PylonMcpServer {
   private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
   private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
 
+  /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
+  private readonly _pendingWidgets: Map<number, PendingWidget> = new Map();
+
   // ============================================================================
   // 생성자
   // ============================================================================
@@ -364,6 +376,32 @@ export class PylonMcpServer {
   // ============================================================================
   // 공개 메서드
   // ============================================================================
+
+  /**
+   * 해당 대화에 대기 중인 위젯이 있는지 확인
+   */
+  hasPendingWidget(conversationId: number): boolean {
+    return this._pendingWidgets.has(conversationId);
+  }
+
+  /**
+   * 해당 대화의 대기 중인 위젯 정보 반환
+   */
+  getPendingWidget(conversationId: number): PendingWidget | undefined {
+    return this._pendingWidgets.get(conversationId);
+  }
+
+  /**
+   * widgetSessionId로 대기 중인 위젯 찾기
+   */
+  findPendingWidgetBySessionId(widgetSessionId: string): PendingWidget | undefined {
+    for (const pending of this._pendingWidgets.values()) {
+      if (pending.widgetSessionId === widgetSessionId) {
+        return pending;
+      }
+    }
+    return undefined;
+  }
 
   /**
    * TCP 서버 시작
@@ -1707,6 +1745,15 @@ export class PylonMcpServer {
   ): Promise<McpResponse> {
     console.log(`[Widget] _handleRunWidget called: conversationId=${conversationId}, toolUseId=${toolUseId}, command=${command}, cwd=${cwd}`);
 
+    // 중복 위젯 체크
+    if (this._pendingWidgets.has(conversationId)) {
+      console.log(`[Widget] ERROR: Widget already running in conversation ${conversationId}`);
+      return {
+        success: false,
+        error: 'Widget already running in this conversation. Complete or cancel the existing widget first.',
+      };
+    }
+
     // widgetManager 필수
     if (!this._widgetManager) {
       console.log('[Widget] ERROR: WidgetManager not configured');
@@ -1755,6 +1802,16 @@ export class PylonMcpServer {
       });
 
       console.log(`[Widget] Session started: ${sessionId}`);
+
+      // pendingWidgets에 등록 (Promise의 resolve/reject는 나중에 설정)
+      const pendingWidget: PendingWidget = {
+        conversationId,
+        toolUseId,
+        widgetSessionId: sessionId,
+        resolve: () => {},
+        reject: () => {},
+      };
+      this._pendingWidgets.set(conversationId, pendingWidget);
 
       // render 이벤트 리스너 등록
       const onRender = (event: WidgetRenderEvent) => {
@@ -1811,6 +1868,9 @@ export class PylonMcpServer {
           error: err instanceof Error ? err.message : String(err),
         };
       } finally {
+        // pendingWidgets에서 제거
+        this._pendingWidgets.delete(conversationId);
+
         // 리스너 정리
         this._widgetManager.off('render', onRender);
         this._widgetManager.off('complete', onComplete);
@@ -1819,6 +1879,8 @@ export class PylonMcpServer {
       }
     } catch (err) {
       console.log(`[Widget] startSession error:`, err);
+      // 세션 시작 실패 시에도 pendingWidgets에서 제거 (방어적)
+      this._pendingWidgets.delete(conversationId);
       return {
         success: false,
         error: `Failed to start widget session: ${err instanceof Error ? err.message : String(err)}`,
