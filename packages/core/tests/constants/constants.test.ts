@@ -22,9 +22,9 @@ import {
 } from '../../src/constants/index.js';
 
 describe('MessageType', () => {
-  it('should have all message types (77 total)', () => {
+  it('should have all message types (84 total)', () => {
     const messageTypes = Object.keys(MessageType);
-    expect(messageTypes).toHaveLength(77);
+    expect(messageTypes).toHaveLength(84);
   });
 
   it('should have correct auth message types', () => {
@@ -120,6 +120,16 @@ describe('MessageType', () => {
   it('should have correct account message types', () => {
     expect(MessageType.ACCOUNT_SWITCH).toBe('account_switch');
     expect(MessageType.ACCOUNT_STATUS).toBe('account_status');
+  });
+
+  it('should have correct widget message types', () => {
+    expect(MessageType.WIDGET_CHECK).toBe('widget_check');
+    expect(MessageType.WIDGET_CHECK_RESULT).toBe('widget_check_result');
+    expect(MessageType.WIDGET_RENDER).toBe('widget_render');
+    expect(MessageType.WIDGET_CLOSE).toBe('widget_close');
+    expect(MessageType.WIDGET_INPUT).toBe('widget_input');
+    expect(MessageType.WIDGET_CANCEL).toBe('widget_cancel');
+    expect(MessageType.WIDGET_EVENT).toBe('widget_event');
   });
 
   it('should have legacy desk types for backward compatibility', () => {

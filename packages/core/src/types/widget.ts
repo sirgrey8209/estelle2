@@ -303,3 +303,41 @@ export function isWidgetCliEventMessage(value: unknown): value is WidgetCliEvent
 export function isWidgetEventWsMessage(value: unknown): value is WidgetEventWsMessage {
   return isObject(value) && value.type === 'widget_event' && typeof value.sessionId === 'string';
 }
+
+// ============================================================================
+// Widget Check Messages (세션 유효성 확인)
+// ============================================================================
+
+/**
+ * 위젯 세션 유효성 확인 요청 페이로드
+ */
+export interface WidgetCheckPayload {
+  conversationId: number;
+  sessionId: string;
+}
+
+/**
+ * 위젯 세션 유효성 확인 응답 페이로드
+ */
+export interface WidgetCheckResultPayload {
+  conversationId: number;
+  sessionId: string;
+  valid: boolean;
+}
+
+export function isWidgetCheckPayload(value: unknown): value is WidgetCheckPayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string'
+  );
+}
+
+export function isWidgetCheckResultPayload(value: unknown): value is WidgetCheckResultPayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.valid === 'boolean'
+  );
+}

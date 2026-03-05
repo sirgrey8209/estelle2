@@ -191,6 +191,22 @@ export const MessageType = {
   /** 계정 상태 알림 */
   ACCOUNT_STATUS: 'account_status',
 
+  // === Widget ===
+  /** 위젯 세션 유효성 확인 요청 */
+  WIDGET_CHECK: 'widget_check',
+  /** 위젯 세션 유효성 확인 응답 */
+  WIDGET_CHECK_RESULT: 'widget_check_result',
+  /** 위젯 렌더 */
+  WIDGET_RENDER: 'widget_render',
+  /** 위젯 닫기 */
+  WIDGET_CLOSE: 'widget_close',
+  /** 위젯 입력 */
+  WIDGET_INPUT: 'widget_input',
+  /** 위젯 취소 */
+  WIDGET_CANCEL: 'widget_cancel',
+  /** 위젯 이벤트 */
+  WIDGET_EVENT: 'widget_event',
+
   // === Utility ===
   /** 연결 유지 확인 요청 */
   PING: 'ping',
