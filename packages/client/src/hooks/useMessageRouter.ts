@@ -358,13 +358,13 @@ export function routeMessage(message: RelayMessage): void {
       const conversationId = widgetPayload.conversationId
         ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
 
-      if (conversationId && toolUseId && sessionId && view && inputs) {
+      if (conversationId && toolUseId && sessionId && view) {
         useConversationStore.getState().setWidgetSession(
           conversationId,
           toolUseId,
           sessionId,
           view,
-          inputs
+          inputs ?? []  // v2: inputs is optional for ScriptViewNode
         );
       }
       break;
