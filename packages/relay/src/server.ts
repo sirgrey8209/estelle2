@@ -250,8 +250,8 @@ function onMessage(
     if (data.type !== 'ping') {
       log(`[MSG] ${clientId} (${client.deviceType ?? 'unauth'}): ${data.type}`);
       // 위젯 디버깅: broadcast 필드 확인
-      if (data.type === 'widget_render' || data.type === 'widget_close') {
-        log(`[DEBUG] ${data.type} broadcast=${JSON.stringify(data.broadcast)} to=${JSON.stringify(data.to)}`);
+      if (data.type === 'widget_render' || data.type === 'widget_close' || data.type === 'widget_event') {
+        log(`[DEBUG] ${data.type} to=${JSON.stringify(data.to)} broadcast=${JSON.stringify(data.broadcast)}`);
       }
     }
 
