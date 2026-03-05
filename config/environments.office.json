@@ -1,0 +1,17 @@
+{
+  "envId": 0,
+  "relay": {
+    "port": 8080,
+    "url": "ws://89.167.4.124:8080"
+  },
+  "pylon": {
+    "pylonIndex": "1",
+    "relayUrl": "ws://89.167.4.124:8080",
+    "pm2Name": "estelle-pylon",
+    "configDir": "~/.claude-release",
+    "credentialsBackupDir": "~/.claude-credentials/release",
+    "mcpPort": 9876,
+    "dataDir": "./release-data",
+    "defaultWorkingDir": "C:\\WorkSpace"
+  }
+}
