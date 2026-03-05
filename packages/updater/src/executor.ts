@@ -189,6 +189,18 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
       log(`  relay/public → release/relay/public`);
     }
 
+    // Ensure @estelle workspace deps in release/node_modules/ as fallback
+    // (pnpm workspace symlinks through release/*/node_modules can be unreliable)
+    const releaseEstelleDir = path.join(releaseDir, 'node_modules', '@estelle');
+    for (const dep of ['core', 'updater']) {
+      const depDest = path.join(releaseEstelleDir, dep);
+      fs.rmSync(depDest, { recursive: true, force: true });
+      fs.mkdirSync(depDest, { recursive: true });
+      fs.cpSync(path.join(pkgDir, dep, 'package.json'), path.join(depDest, 'package.json'));
+      fs.cpSync(path.join(pkgDir, dep, 'dist'), path.join(depDest, 'dist'), { recursive: true });
+    }
+    log(`  @estelle/{core,updater} → release/node_modules/`);
+
     // Read version from config/version.json
     const versionPath = path.join(repoRoot, 'config', 'version.json');
     let version = 'dev';

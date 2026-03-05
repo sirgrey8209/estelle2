@@ -81,6 +81,7 @@ describe('executor', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
     vi.mocked(fs.cpSync).mockReturnValue(undefined);
+    vi.mocked(fs.rmSync).mockReturnValue(undefined);
     vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
     vi.mocked(fs.createWriteStream).mockReturnValue({
       write: vi.fn(),
@@ -105,8 +106,8 @@ describe('executor', () => {
     expect(result.success).toBe(true);
     expect(result.version).toBe('v0305_1');
 
-    // Agent copies: core, updater, pylon (3 total, no relay)
-    expect(fs.cpSync).toHaveBeenCalledTimes(3);
+    // Agent copies: core, updater, pylon dist (3) + @estelle/{core,updater} package.json+dist (4)
+    expect(fs.cpSync).toHaveBeenCalledTimes(7);
     expect(fs.cpSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('core', 'dist')),
       expect.stringContaining(path.join('release', 'core', 'dist')),
@@ -149,8 +150,8 @@ describe('executor', () => {
     expect(result.success).toBe(true);
     expect(result.version).toBe('v0305_1');
 
-    // Master copies: core, updater, pylon, relay/dist, relay/public (5 total)
-    expect(fs.cpSync).toHaveBeenCalledTimes(5);
+    // Master copies: core, updater, pylon, relay/dist, relay/public (5) + @estelle/{core,updater} package.json+dist (4)
+    expect(fs.cpSync).toHaveBeenCalledTimes(9);
     expect(fs.cpSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('pylon', 'dist')),
       expect.stringContaining(path.join('release', 'pylon', 'dist')),
