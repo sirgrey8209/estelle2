@@ -9,6 +9,7 @@ import type {
 } from '@estelle/core';
 import { ToolCard, type ChildToolInfo, type McpFileInfo } from './ToolCard';
 import { cn } from '../../lib/utils';
+import { MarkdownContent } from '../../lib/markdown';
 
 interface MessageBubbleProps {
   message: StoreMessage;
@@ -144,9 +145,7 @@ export function MessageBubble({
       <div
         className="my-0.5 ml-2 pl-1.5 pr-2 border-l-2 border-transparent max-w-[90%]"
       >
-        <p className="text-sm opacity-85 leading-relaxed select-text whitespace-pre-wrap break-words">
-          {assistantMsg.content}
-        </p>
+        <MarkdownContent content={assistantMsg.content} />
       </div>
     );
   }
