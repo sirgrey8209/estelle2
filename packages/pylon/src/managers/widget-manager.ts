@@ -17,6 +17,7 @@ import {
   isWidgetCliErrorMessage,
   isWidgetCliEventMessage,
 } from '@estelle/core';
+import { WidgetLogger } from '../utils/widget-logger.js';
 
 // ============================================================================
 // Types
@@ -28,6 +29,7 @@ export interface WidgetSession {
   status: 'running' | 'completed' | 'error' | 'cancelled';
   result?: unknown;
   error?: string;
+  logger?: WidgetLogger;
 }
 
 export interface WidgetStartOptions {
@@ -71,6 +73,10 @@ export class WidgetManager extends EventEmitter {
   async startSession(options: WidgetStartOptions): Promise<string> {
     const sessionId = `widget-${++this.sessionCounter}-${Date.now()}`;
 
+    // 로거 생성 및 세션 시작 로깅
+    const logger = new WidgetLogger(options.cwd, sessionId);
+    logger.sessionStart();
+
     const proc = spawn(options.command, options.args ?? [], {
       cwd: options.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -81,6 +87,7 @@ export class WidgetManager extends EventEmitter {
       sessionId,
       process: proc,
       status: 'running',
+      logger,
     };
 
     this.sessions.set(sessionId, session);
@@ -106,9 +113,12 @@ export class WidgetManager extends EventEmitter {
       if (sess && sess.status === 'running') {
         if (code === 0) {
           sess.status = 'completed';
+          sess.logger?.sessionEnd();
         } else {
           sess.status = 'error';
           sess.error = `Process exited with code ${code}`;
+          sess.logger?.error(`Process exited with code ${code}`);
+          sess.logger?.sessionEnd();
           this.emit('error', { sessionId, error: sess.error });
         }
       }
@@ -119,6 +129,8 @@ export class WidgetManager extends EventEmitter {
       if (sess) {
         sess.status = 'error';
         sess.error = err.message;
+        sess.logger?.error('Process error', err.message);
+        sess.logger?.sessionEnd();
         this.emit('error', { sessionId, error: err.message });
       }
     });
@@ -136,6 +148,9 @@ export class WidgetManager extends EventEmitter {
     try {
       const message: WidgetCliMessage = JSON.parse(line);
 
+      // CLI → Pylon 메시지 로깅
+      session.logger?.cliToPylon(message.type, message);
+
       if (isWidgetCliRenderMessage(message)) {
         this.emit('render', {
           sessionId,
@@ -145,6 +160,7 @@ export class WidgetManager extends EventEmitter {
       } else if (isWidgetCliCompleteMessage(message)) {
         session.status = 'completed';
         session.result = message.result;
+        session.logger?.sessionEnd();
         this.emit('complete', {
           sessionId,
           result: message.result,
@@ -152,6 +168,8 @@ export class WidgetManager extends EventEmitter {
       } else if (isWidgetCliErrorMessage(message)) {
         session.status = 'error';
         session.error = message.message;
+        session.logger?.error(message.message);
+        session.logger?.sessionEnd();
         this.emit('error', {
           sessionId,
           error: message.message,
@@ -178,6 +196,7 @@ export class WidgetManager extends EventEmitter {
     }
 
     const message = JSON.stringify({ type: 'input', data }) + '\n';
+    session.logger?.pylonToCli('input', data);
     session.process.stdin?.write(message);
     return true;
   }
@@ -192,6 +211,7 @@ export class WidgetManager extends EventEmitter {
     }
 
     const message = JSON.stringify({ type: 'event', data }) + '\n';
+    session.logger?.pylonToCli('event', data);
     session.process.stdin?.write(message);
     return true;
   }
@@ -207,11 +227,13 @@ export class WidgetManager extends EventEmitter {
 
     // 취소 메시지 전송
     const message = JSON.stringify({ type: 'cancel' }) + '\n';
+    session.logger?.pylonToCli('cancel');
     session.process.stdin?.write(message);
 
     // 프로세스 종료
     session.process.kill('SIGTERM');
     session.status = 'cancelled';
+    session.logger?.sessionEnd();
 
     return true;
   }

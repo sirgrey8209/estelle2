@@ -39,3 +39,6 @@ export { parseFrontmatter, hasAutorun } from './frontmatter.js';
 
 // AutorunDetector - autorun 문서 감지
 export { findAutorunDoc } from './autorun-detector.js';
+
+// WidgetLogger - 위젯 세션 로깅
+export { WidgetLogger } from './widget-logger.js';
