@@ -1859,4 +1859,229 @@ describe('Pylon', () => {
       });
     });
   });
+
+  // ==========================================================================
+  // widget_check 핸들러 테스트
+  // ==========================================================================
+
+  describe('widget_check handler', () => {
+    it('should return valid=true when widget is running', () => {
+      // Arrange: mcpServer와 widgetManager 설정
+      const mockMcpServer = {
+        getPendingWidget: vi.fn().mockReturnValue({
+          conversationId: 123,
+          toolUseId: 'tool-1',
+          widgetSessionId: 'widget-1',
+        }),
+        cancelWidgetForConversation: vi.fn(),
+      };
+
+      const mockWidgetManager = {
+        sendInput: vi.fn(),
+        sendEvent: vi.fn(),
+        getSession: vi.fn().mockReturnValue({
+          sessionId: 'widget-1',
+          status: 'running',
+        }),
+      };
+
+      deps.mcpServer = mockMcpServer;
+      deps.widgetManager = mockWidgetManager;
+      pylon = new Pylon(config, deps);
+
+      // Act
+      pylon.handleMessage({
+        type: 'widget_check',
+        from: { deviceId: 100 },
+        payload: { conversationId: 123, sessionId: 'widget-1' },
+      });
+
+      // Assert
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'widget_check_result',
+          to: [100],
+          payload: { conversationId: 123, sessionId: 'widget-1', valid: true },
+        })
+      );
+    });
+
+    it('should return valid=false when no pending widget', () => {
+      // Arrange: mcpServer에 pending widget 없음
+      const mockMcpServer = {
+        getPendingWidget: vi.fn().mockReturnValue(undefined),
+        cancelWidgetForConversation: vi.fn(),
+      };
+
+      deps.mcpServer = mockMcpServer;
+      pylon = new Pylon(config, deps);
+
+      // Act
+      pylon.handleMessage({
+        type: 'widget_check',
+        from: { deviceId: 100 },
+        payload: { conversationId: 123, sessionId: 'widget-1' },
+      });
+
+      // Assert
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'widget_check_result',
+          to: [100],
+          payload: { conversationId: 123, sessionId: 'widget-1', valid: false },
+        })
+      );
+    });
+
+    it('should return valid=false and cleanup when process is dead', () => {
+      // Arrange: pending widget은 있지만 프로세스가 죽음
+      const mockMcpServer = {
+        getPendingWidget: vi.fn().mockReturnValue({
+          conversationId: 123,
+          toolUseId: 'tool-1',
+          widgetSessionId: 'widget-1',
+        }),
+        cancelWidgetForConversation: vi.fn(),
+      };
+
+      const mockWidgetManager = {
+        sendInput: vi.fn(),
+        sendEvent: vi.fn(),
+        getSession: vi.fn().mockReturnValue({
+          sessionId: 'widget-1',
+          status: 'error',  // 프로세스 죽음
+        }),
+      };
+
+      deps.mcpServer = mockMcpServer;
+      deps.widgetManager = mockWidgetManager;
+      pylon = new Pylon(config, deps);
+
+      // Act
+      pylon.handleMessage({
+        type: 'widget_check',
+        from: { deviceId: 100 },
+        payload: { conversationId: 123, sessionId: 'widget-1' },
+      });
+
+      // Assert: valid=false 응답
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'widget_check_result',
+          to: [100],
+          payload: { conversationId: 123, sessionId: 'widget-1', valid: false },
+        })
+      );
+
+      // Assert: cancelWidgetForConversation 호출됨
+      expect(mockMcpServer.cancelWidgetForConversation).toHaveBeenCalledWith(123);
+    });
+
+    it('should return valid=false when sessionId mismatch', () => {
+      // Arrange: pending widget의 sessionId가 다름
+      const mockMcpServer = {
+        getPendingWidget: vi.fn().mockReturnValue({
+          conversationId: 123,
+          toolUseId: 'tool-1',
+          widgetSessionId: 'widget-different',  // 다른 sessionId
+        }),
+        cancelWidgetForConversation: vi.fn(),
+      };
+
+      deps.mcpServer = mockMcpServer;
+      pylon = new Pylon(config, deps);
+
+      // Act
+      pylon.handleMessage({
+        type: 'widget_check',
+        from: { deviceId: 100 },
+        payload: { conversationId: 123, sessionId: 'widget-1' },
+      });
+
+      // Assert
+      expect(deps.relayClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'widget_check_result',
+          to: [100],
+          payload: { conversationId: 123, sessionId: 'widget-1', valid: false },
+        })
+      );
+    });
+
+    it('should ignore invalid payload', () => {
+      // Arrange
+      deps.mcpServer = {
+        getPendingWidget: vi.fn(),
+        cancelWidgetForConversation: vi.fn(),
+      };
+      pylon = new Pylon(config, deps);
+
+      // Act: invalid payload
+      pylon.handleMessage({
+        type: 'widget_check',
+        from: { deviceId: 100 },
+        payload: { conversationId: 'invalid' },  // sessionId 없음
+      });
+
+      // Assert: 응답 없음
+      expect(deps.relayClient.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'widget_check_result' })
+      );
+    });
+  });
+
+  // ============================================================================
+  // conversation_delete 시 위젯 정리 테스트
+  // ============================================================================
+  describe('conversation_delete with widget cleanup', () => {
+    it('should cancel widget when conversation is deleted', () => {
+      // Arrange: 대화와 위젯이 있는 상태
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', '/test');
+      const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+      const conversationId = conversation.conversationId;
+
+      const mockMcpServer = {
+        getPendingWidget: vi.fn(),
+        cancelWidgetForConversation: vi.fn().mockReturnValue(true),
+      };
+
+      deps.mcpServer = mockMcpServer;
+      pylon = new Pylon(config, deps);
+
+      // Act: 대화 삭제
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        payload: { conversationId },
+      });
+
+      // Assert: cancelWidgetForConversation 호출됨
+      expect(mockMcpServer.cancelWidgetForConversation).toHaveBeenCalledWith(conversationId);
+    });
+
+    it('should not fail when no widget exists for conversation', () => {
+      // Arrange: 대화는 있지만 위젯은 없는 상태
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', '/test');
+      const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
+      const conversationId = conversation.conversationId;
+
+      const mockMcpServer = {
+        getPendingWidget: vi.fn(),
+        cancelWidgetForConversation: vi.fn().mockReturnValue(false), // 위젯 없음
+      };
+
+      deps.mcpServer = mockMcpServer;
+      pylon = new Pylon(config, deps);
+
+      // Act: 대화 삭제 (에러 없이 완료되어야 함)
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        payload: { conversationId },
+      });
+
+      // Assert: cancelWidgetForConversation 호출되고, 대화도 삭제됨
+      expect(mockMcpServer.cancelWidgetForConversation).toHaveBeenCalledWith(conversationId);
+      const updated = deps.workspaceStore.getWorkspace(workspace.workspaceId);
+      expect(updated?.conversations.length).toBe(0);
+    });
+  });
 });

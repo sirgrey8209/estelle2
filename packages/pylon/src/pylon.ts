@@ -40,7 +40,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
-import { decodeConversationIdFull } from '@estelle/core';
+import { decodeConversationIdFull, isWidgetCheckPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
@@ -219,6 +219,14 @@ export interface BugReportWriter {
 }
 
 /**
+ * WidgetSession 상태 (WidgetManager에서 사용)
+ */
+export interface WidgetSessionInfo {
+  sessionId: string;
+  status: 'running' | 'completed' | 'error' | 'cancelled';
+}
+
+/**
  * WidgetManager 인터페이스 (의존성 주입용)
  */
 export interface WidgetManagerAdapter {
@@ -226,6 +234,27 @@ export interface WidgetManagerAdapter {
   sendInput(sessionId: string, data: Record<string, unknown>): void;
   /** CLI로 이벤트 전송 */
   sendEvent(sessionId: string, data: unknown): void;
+  /** 세션 상태 조회 */
+  getSession(sessionId: string): WidgetSessionInfo | undefined;
+}
+
+/**
+ * PendingWidget 정보 (MCP 서버에서 관리)
+ */
+export interface PendingWidgetInfo {
+  conversationId: number;
+  toolUseId: string;
+  widgetSessionId: string;
+}
+
+/**
+ * PylonMcpServer 인터페이스 (의존성 주입용)
+ */
+export interface PylonMcpServerAdapter {
+  /** 대기 중인 위젯 조회 */
+  getPendingWidget(conversationId: number): PendingWidgetInfo | undefined;
+  /** 대화의 위젯 세션 취소 */
+  cancelWidgetForConversation(conversationId: number): boolean;
 }
 
 /**
@@ -257,6 +286,9 @@ export interface PylonDependencies {
 
   /** Widget 매니저 (선택, Widget Protocol 기능에 필요) */
   widgetManager?: WidgetManagerAdapter;
+
+  /** MCP 서버 (선택, widget_check 핸들러에 필요) */
+  mcpServer?: PylonMcpServerAdapter;
 }
 
 /**
@@ -904,6 +936,12 @@ export class Pylon {
       return;
     }
 
+    // ===== Widget 세션 유효성 확인 =====
+    if (type === 'widget_check') {
+      this.handleWidgetCheck(payload, from);
+      return;
+    }
+
     // 알 수 없는 메시지는 무시
   }
 
@@ -955,6 +993,68 @@ export class Pylon {
 
     this.log(`[Widget] Received event for session ${sessionId}`);
     this.deps.widgetManager.sendEvent(sessionId, data);
+  }
+
+  /**
+   * Widget 세션 유효성 확인 처리
+   *
+   * @description
+   * 클라이언트가 대화로 복귀했을 때 위젯 세션이 아직 유효한지 확인합니다.
+   * - pending widget이 없으면 invalid
+   * - sessionId가 다르면 invalid
+   * - 프로세스가 죽었으면 invalid + 정리
+   * - 그 외에는 valid
+   */
+  private handleWidgetCheck(payload: Record<string, unknown> | undefined, from?: MessageFrom): void {
+    if (!isWidgetCheckPayload(payload)) {
+      this.log('[Widget] Invalid widget_check payload');
+      return;
+    }
+
+    const { conversationId, sessionId } = payload;
+
+    // MCP 서버에서 pending widget 조회
+    const pending = this.deps.mcpServer?.getPendingWidget(conversationId);
+
+    // pending이 없거나 sessionId가 다르면 invalid
+    if (!pending || pending.widgetSessionId !== sessionId) {
+      this.sendWidgetCheckResult(conversationId, sessionId, false, from?.deviceId);
+      return;
+    }
+
+    // WidgetManager에서 프로세스 상태 확인
+    const session = this.deps.widgetManager?.getSession(pending.widgetSessionId);
+
+    if (!session || session.status !== 'running') {
+      // 죽은 프로세스 - 정리
+      this.deps.mcpServer?.cancelWidgetForConversation(conversationId);
+      this.sendWidgetCheckResult(conversationId, sessionId, false, from?.deviceId);
+      return;
+    }
+
+    // 정상
+    this.sendWidgetCheckResult(conversationId, sessionId, true, from?.deviceId);
+  }
+
+  /**
+   * Widget 세션 유효성 확인 결과 전송
+   */
+  private sendWidgetCheckResult(
+    conversationId: number,
+    sessionId: string,
+    valid: boolean,
+    targetDeviceId?: number,
+  ): void {
+    const message: Record<string, unknown> = {
+      type: 'widget_check_result',
+      payload: { conversationId, sessionId, valid },
+    };
+
+    if (targetDeviceId !== undefined) {
+      message.to = [targetDeviceId];
+    }
+
+    this.send(message);
   }
 
   /**
@@ -1613,6 +1713,9 @@ export class Pylon {
     if (!conversationId) return;
 
     const eid = conversationId as ConversationId;
+
+    // 위젯 정리 (있으면)
+    this.deps.mcpServer?.cancelWidgetForConversation(conversationId as number);
 
     // 삭제 전에 메시지 정리
     this.clearMessagesForConversation(eid);
