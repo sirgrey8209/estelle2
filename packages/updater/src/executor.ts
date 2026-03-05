@@ -150,6 +150,13 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     fs.cpSync(coreDistSrc, coreDistDest, { recursive: true });
     log(`  core/dist → release/core/dist`);
 
+    // Also update pylon's node_modules copy of @estelle/core
+    const pylonCoreDest = path.join(releaseDir, 'pylon', 'node_modules', '@estelle', 'core', 'dist');
+    if (fs.existsSync(path.dirname(pylonCoreDest))) {
+      fs.cpSync(coreDistSrc, pylonCoreDest, { recursive: true });
+      log(`  core/dist → release/pylon/node_modules/@estelle/core/dist`);
+    }
+
     // Copy updater/dist (required by pylon via workspace symlinks)
     const updaterDistSrc = path.join(pkgDir, 'updater', 'dist');
     const updaterDistDest = path.join(releaseDir, 'updater', 'dist');
