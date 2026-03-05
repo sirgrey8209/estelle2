@@ -13,3 +13,10 @@ export {
   type FileSystemAdapter,
   type SendFileFn,
 } from './blob-handler.js';
+
+export {
+  registerAssets,
+  cleanupAssets,
+  getAssetUrls,
+  handleAssetRequest,
+} from './widget-asset-handler.js';

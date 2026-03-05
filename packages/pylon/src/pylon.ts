@@ -36,6 +36,7 @@
  */
 
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
@@ -54,6 +55,7 @@ import {
   buildConversationRenamedReminder,
 } from './utils/session-context.js';
 import { findAutorunDoc } from './utils/autorun-detector.js';
+import { handleAssetRequest } from './handlers/widget-asset-handler.js';
 
 // ============================================================================
 // 타입 정의
@@ -77,6 +79,9 @@ export interface PylonConfig {
 
   /** 빌드 환경 (dev, stage, release) */
   buildEnv?: string;
+
+  /** 에셋 서버 포트 (선택, 기본값: 0 = 랜덤 포트) */
+  assetServerPort?: number;
 }
 
 /**
@@ -338,6 +343,12 @@ export class Pylon {
   /** 워크스페이스 저장 debounce 시간 (ms) */
   private readonly WORKSPACE_SAVE_DEBOUNCE_MS = 3000;
 
+  /** 에셋 서버 (HTTP) */
+  private assetServer: http.Server | null = null;
+
+  /** 에셋 서버 포트 */
+  private assetServerPort: number = 0;
+
   // ==========================================================================
   // 생성자
   // ==========================================================================
@@ -393,8 +404,59 @@ export class Pylon {
       await this.saveWorkspaceStore();
     }
 
+    // 에셋 서버 시작
+    await this.startAssetServer();
+
     // Relay 연결
     this.deps.relayClient.connect();
+  }
+
+  /**
+   * 에셋 서버 시작
+   */
+  private async startAssetServer(): Promise<void> {
+    const port = this.config.assetServerPort ?? 0;
+
+    this.assetServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '/', `http://${req.headers.host}`);
+      const match = url.pathname.match(/^\/widget-assets\/([^/]+)\/(.+)$/);
+
+      if (match) {
+        const [, sessionId, assetKey] = match;
+        await handleAssetRequest(req, res, sessionId, assetKey);
+        return;
+      }
+
+      // 알 수 없는 경로
+      res.writeHead(404);
+      res.end('Not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      this.assetServer!.listen(port, () => {
+        const address = this.assetServer!.address();
+        if (address && typeof address === 'object') {
+          this.assetServerPort = address.port;
+          this.log(`[AssetServer] Started on port ${this.assetServerPort}`);
+        }
+        resolve();
+      });
+      this.assetServer!.on('error', reject);
+    });
+  }
+
+  /**
+   * 에셋 서버 포트 반환
+   */
+  getAssetServerPort(): number {
+    return this.assetServerPort;
+  }
+
+  /**
+   * 에셋 서버 베이스 URL 반환
+   */
+  getAssetServerBaseUrl(): string {
+    return `http://localhost:${this.assetServerPort}`;
   }
 
   /**
@@ -461,6 +523,17 @@ export class Pylon {
 
     // Claude 세션 정리
     this.deps.claudeManager.cleanup();
+
+    // 에셋 서버 종료
+    if (this.assetServer) {
+      await new Promise<void>((resolve) => {
+        this.assetServer!.close(() => {
+          this.log('[AssetServer] Stopped');
+          resolve();
+        });
+      });
+      this.assetServer = null;
+    }
 
     // Relay 연결 종료
     this.deps.relayClient.disconnect();
