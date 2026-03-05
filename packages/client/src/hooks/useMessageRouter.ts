@@ -10,7 +10,7 @@ import { MessageType } from '@estelle/core';
 import type { WorkspaceWithActive, StoreMessage, ViewNode, InputNode } from '@estelle/core';
 import type { RelayMessage } from '../services/relayService';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import { useConversationStore } from '../stores/conversationStore';
+import { useConversationStore, emitWidgetEvent } from '../stores/conversationStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
@@ -382,6 +382,23 @@ export function routeMessage(message: RelayMessage): void {
 
       if (conversationId) {
         useConversationStore.getState().clearWidgetSession(conversationId);
+      }
+      break;
+    }
+
+    case 'widget_event': {
+      // RelayMessage 형식: { type, payload: { sessionId, data, conversationId? } }
+      // CLI에서 Client로 보내는 이벤트 (api.sendEvent 호출 결과)
+      const eventPayload = payload as {
+        sessionId?: string;
+        data?: unknown;
+        conversationId?: number;
+      };
+      const { sessionId, data } = eventPayload;
+
+      if (sessionId && data !== undefined) {
+        // sessionId에 해당하는 위젯에 이벤트 전달
+        emitWidgetEvent(sessionId, data);
       }
       break;
     }

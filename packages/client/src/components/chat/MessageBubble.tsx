@@ -26,12 +26,28 @@ interface MessageBubbleProps {
   } | null;
   /** Widget 입력 핸들러 */
   onWidgetInput?: (data: Record<string, unknown>) => void;
+  /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
+  onWidgetEvent?: (data: unknown) => void;
+  /** Widget v2 취소 핸들러 (ScriptViewNode용) */
+  onWidgetCancel?: () => void;
+  /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
+  widgetAssets?: Record<string, string>;
 }
 
 /**
  * 메시지 버블 (컴팩트)
  */
-export function MessageBubble({ message, onImagePress, childTools, onMcpFileClick, widgetSession, onWidgetInput }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onImagePress,
+  childTools,
+  onMcpFileClick,
+  widgetSession,
+  onWidgetInput,
+  onWidgetEvent,
+  onWidgetCancel,
+  widgetAssets,
+}: MessageBubbleProps) {
   const isUser = message.role === 'user' && message.type === 'text';
   const isToolStart = message.type === 'tool_start';
   const isToolComplete = message.type === 'tool_complete';
@@ -65,6 +81,9 @@ export function MessageBubble({ message, onImagePress, childTools, onMcpFileClic
           toolUseId={toolMsg.id}
           widgetSession={widgetSession}
           onWidgetInput={onWidgetInput}
+          onWidgetEvent={onWidgetEvent}
+          onWidgetCancel={onWidgetCancel}
+          widgetAssets={widgetAssets}
         />
       </div>
     );

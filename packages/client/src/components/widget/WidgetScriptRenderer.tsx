@@ -7,6 +7,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import type { ScriptViewNode } from '@estelle/core';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { subscribeWidgetEvent } from '@/stores/conversationStore';
 
 interface WidgetScriptRendererProps {
   sessionId: string;
@@ -80,6 +81,14 @@ export function WidgetScriptRenderer({
       cleanupRef.current?.();
     };
   }, [view, assets, onEvent, onCancel, setMessageHandler]);
+
+  // widget_event 구독 - CLI에서 오는 이벤트를 위젯에 전달
+  useEffect(() => {
+    const unsubscribe = subscribeWidgetEvent(sessionId, handleMessage);
+    return () => {
+      unsubscribe();
+    };
+  }, [sessionId, handleMessage]);
 
   return (
     <div className={cn('widget-script-renderer relative', className)}>

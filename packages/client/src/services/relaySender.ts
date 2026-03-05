@@ -529,3 +529,28 @@ export function sendWidgetInput(
     to: [pylonId],
   });
 }
+
+/**
+ * Widget 이벤트 전송
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ *
+ * @description
+ * Widget Protocol v2에서 위젯의 이벤트를 Pylon으로 전송합니다.
+ * WidgetScriptRenderer의 onEvent 콜백에서 호출됩니다.
+ */
+export function sendWidgetEvent(
+  conversationId: number,
+  sessionId: string,
+  data: unknown
+): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: 'widget_event',
+    payload: {
+      conversationId,
+      sessionId,
+      data,
+    },
+    to: [pylonId],
+  });
+}

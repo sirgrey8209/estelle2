@@ -51,6 +51,12 @@ interface ToolCardProps {
   } | null;
   /** Widget 입력 핸들러 */
   onWidgetInput?: (data: Record<string, unknown>) => void;
+  /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
+  onWidgetEvent?: (data: unknown) => void;
+  /** Widget v2 취소 핸들러 (ScriptViewNode용) */
+  onWidgetCancel?: () => void;
+  /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
+  widgetAssets?: Record<string, string>;
 }
 
 // McpFileInfo를 export
@@ -211,6 +217,9 @@ export function ToolCard({
   toolUseId,
   widgetSession,
   onWidgetInput,
+  onWidgetEvent,
+  onWidgetCancel,
+  widgetAssets,
 }: ToolCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null);
@@ -471,9 +480,13 @@ export function ToolCard({
         {matchedWidget && (
           <div className="border-t border-border">
             <WidgetRenderer
+              sessionId={matchedWidget.sessionId}
               view={matchedWidget.view}
               inputs={matchedWidget.inputs}
               onInput={onWidgetInput || (() => {})}
+              onEvent={onWidgetEvent}
+              onCancel={onWidgetCancel}
+              assets={widgetAssets}
             />
           </div>
         )}

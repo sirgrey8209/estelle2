@@ -35,6 +35,54 @@ export { createInitialClaudeState as getInitialClaudeState };
 export const EMPTY_SLASH_COMMANDS: string[] = [];
 
 // ============================================================================
+// Widget Event Emitter
+// ============================================================================
+
+/**
+ * Widget 이벤트를 위젯에 전달하기 위한 이벤트 이미터
+ * sessionId별로 리스너를 관리합니다.
+ */
+type WidgetEventListener = (data: unknown) => void;
+const widgetEventListeners = new Map<string, Set<WidgetEventListener>>();
+
+/**
+ * Widget 이벤트 리스너 등록
+ * @param sessionId - 위젯 세션 ID
+ * @param listener - 이벤트 핸들러
+ * @returns unsubscribe 함수
+ */
+export function subscribeWidgetEvent(
+  sessionId: string,
+  listener: WidgetEventListener
+): () => void {
+  let listeners = widgetEventListeners.get(sessionId);
+  if (!listeners) {
+    listeners = new Set();
+    widgetEventListeners.set(sessionId, listeners);
+  }
+  listeners.add(listener);
+
+  return () => {
+    listeners?.delete(listener);
+    if (listeners?.size === 0) {
+      widgetEventListeners.delete(sessionId);
+    }
+  };
+}
+
+/**
+ * Widget 이벤트 발행 (내부용)
+ * @param sessionId - 위젯 세션 ID
+ * @param data - 이벤트 데이터
+ */
+export function emitWidgetEvent(sessionId: string, data: unknown): void {
+  const listeners = widgetEventListeners.get(sessionId);
+  if (listeners) {
+    listeners.forEach((listener) => listener(data));
+  }
+}
+
+// ============================================================================
 // Store Interface
 // ============================================================================
 

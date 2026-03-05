@@ -12,7 +12,7 @@ import { WorkingIndicator } from './WorkingIndicator';
 import { FileViewer } from '../viewers';
 import { WidgetRenderer } from '../widget';
 import { blobService } from '../../services/blobService';
-import { sendWidgetInput } from '../../services/relaySender';
+import { sendWidgetInput, sendWidgetEvent } from '../../services/relaySender';
 import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
 import type { ChildToolInfo, McpFileInfo } from './ToolCard';
 
@@ -217,6 +217,23 @@ export function MessageList({
     sendWidgetInput(conversationId, widgetSession.sessionId, data);
   }, [selectedConversation?.conversationId, widgetSession]);
 
+  // Widget v2 이벤트 핸들러 (Client → Pylon)
+  const handleWidgetEvent = useCallback((data: unknown) => {
+    const conversationId = selectedConversation?.conversationId;
+    if (!conversationId || !widgetSession) return;
+
+    sendWidgetEvent(conversationId, widgetSession.sessionId, data);
+  }, [selectedConversation?.conversationId, widgetSession]);
+
+  // Widget v2 취소 핸들러
+  const handleWidgetCancel = useCallback(() => {
+    const conversationId = selectedConversation?.conversationId;
+    if (!conversationId || !widgetSession) return;
+
+    // Cancel은 특별한 이벤트로 전송
+    sendWidgetEvent(conversationId, widgetSession.sessionId, { type: 'cancel' });
+  }, [selectedConversation?.conversationId, widgetSession]);
+
   const buildDisplayItems = useCallback(() => {
     const items: Array<{ type: string; data: unknown; key: string }> = [];
 
@@ -412,6 +429,8 @@ export function MessageList({
             onMcpFileClick={handleMcpFileClick}
             widgetSession={widgetSession}
             onWidgetInput={handleWidgetInput}
+            onWidgetEvent={handleWidgetEvent}
+            onWidgetCancel={handleWidgetCancel}
           />
         );
       }
