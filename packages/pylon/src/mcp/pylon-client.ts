@@ -441,13 +441,14 @@ export class PylonClient {
       };
     }
 
+    // Widget은 유저가 종료하거나 CLI가 complete을 보낼 때까지 대기 (타임아웃 없음)
     return this._sendRequest<RunWidgetResult>({
       action: 'lookup_and_run_widget',
       toolUseId: options.toolUseId,
       command: options.command,
       cwd: options.cwd,
       args: options.args,
-    });
+    }, { noTimeout: true });
   }
 
   // ============================================================================
@@ -528,15 +529,19 @@ export class PylonClient {
 
   /**
    * TCP 요청 전송
+   * @param request - 요청 객체
+   * @param options - 옵션 (noTimeout: 타임아웃 비활성화)
    */
-  private _sendRequest<T>(request: PylonRequest): Promise<T> {
+  private _sendRequest<T>(request: PylonRequest, options?: { noTimeout?: boolean }): Promise<T> {
     return new Promise((resolve, reject) => {
       const socket = net.createConnection({ port: this._port, host: this._host });
       let buffer = '';
       let timeoutId: NodeJS.Timeout | null = null;
+      let resolved = false;
 
       // 정리 함수
       const cleanup = (): void => {
+        resolved = true;
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
@@ -545,11 +550,13 @@ export class PylonClient {
         socket.destroy();
       };
 
-      // 타임아웃 설정
-      timeoutId = setTimeout(() => {
-        cleanup();
-        reject(new Error('Request timeout'));
-      }, this._timeout);
+      // 타임아웃 설정 (noTimeout이 아닌 경우에만)
+      if (!options?.noTimeout) {
+        timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new Error('Request timeout'));
+        }, this._timeout);
+      }
 
       // 연결 성공
       socket.on('connect', () => {
@@ -578,7 +585,7 @@ export class PylonClient {
       // 연결 종료 (응답 없이)
       socket.on('close', () => {
         // 이미 처리된 경우 무시
-        if (timeoutId) {
+        if (!resolved) {
           cleanup();
           reject(new Error('Connection closed without response'));
         }
