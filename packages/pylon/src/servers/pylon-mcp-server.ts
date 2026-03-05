@@ -433,6 +433,32 @@ export class PylonMcpServer {
   }
 
   /**
+   * sessionId로 위젯 세션 취소 (inline 위젯용)
+   */
+  cancelWidgetBySessionId(sessionId: string, reason?: string): boolean {
+    const pending = this.findPendingWidgetBySessionId(sessionId);
+    if (!pending) {
+      return false;
+    }
+
+    // inline 위젯은 WidgetManager 프로세스가 없음
+    if (!sessionId.startsWith('inline-')) {
+      this._widgetManager?.cancelSession(sessionId);
+    }
+
+    // reject 호출
+    pending.reject(new Error(reason ?? 'Widget cancelled'));
+
+    // pendingWidgets에서 제거
+    this._pendingWidgets.delete(pending.conversationId);
+
+    // widget_close 전송
+    this._onWidgetClose?.(pending.conversationId, pending.toolUseId, pending.widgetSessionId);
+
+    return true;
+  }
+
+  /**
    * TCP 서버 시작
    */
   listen(): Promise<void> {

@@ -255,6 +255,8 @@ export interface PylonMcpServerAdapter {
   getPendingWidget(conversationId: number): PendingWidgetInfo | undefined;
   /** 대화의 위젯 세션 취소 */
   cancelWidgetForConversation(conversationId: number): boolean;
+  /** sessionId로 위젯 세션 취소 (inline 위젯용) */
+  cancelWidgetBySessionId(sessionId: string, reason?: string): boolean;
 }
 
 /**
@@ -978,13 +980,8 @@ export class Pylon {
    * WidgetManager를 통해 CLI로 전달합니다.
    */
   private handleWidgetEvent(payload?: Record<string, unknown>): void {
-    if (!this.deps.widgetManager) {
-      this.log('[Widget] WidgetManager not configured');
-      return;
-    }
-
     const sessionId = payload?.sessionId as string | undefined;
-    const data = payload?.data;
+    const data = payload?.data as Record<string, unknown> | undefined;
 
     if (!sessionId || data === undefined) {
       this.log('[Widget] Missing sessionId or data in widget_event');
@@ -992,6 +989,24 @@ export class Pylon {
     }
 
     this.log(`[Widget] Received event for session ${sessionId}`);
+
+    // Inline 위젯 처리 (sessionId가 inline-으로 시작)
+    if (sessionId.startsWith('inline-')) {
+      // cancel 이벤트면 pendingWidget 종료
+      if (data.type === 'cancel') {
+        this.log(`[Widget] Inline widget cancel: ${sessionId}`);
+        this.deps.mcpServer?.cancelWidgetBySessionId(sessionId, 'User cancelled');
+      }
+      // inline 위젯은 CLI가 없으므로 다른 이벤트는 무시
+      return;
+    }
+
+    // CLI 위젯 처리
+    if (!this.deps.widgetManager) {
+      this.log('[Widget] WidgetManager not configured');
+      return;
+    }
+
     this.deps.widgetManager.sendEvent(sessionId, data);
   }
 
