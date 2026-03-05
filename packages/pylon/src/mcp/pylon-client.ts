@@ -142,9 +142,24 @@ export interface RunWidgetResult {
   error?: string;
 }
 
+/** RunWidgetInline 옵션 타입 */
+export interface RunWidgetInlineOptions {
+  html: string;
+  code?: string;
+  height?: number;
+  toolUseId: string;
+}
+
+/** RunWidgetInline 결과 타입 */
+export interface RunWidgetInlineResult {
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
 /** 요청 타입 */
 interface PylonRequest {
-  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task' | 'lookup_and_run_widget';
+  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task' | 'lookup_and_run_widget' | 'lookup_and_run_widget_inline';
   conversationId?: number;
   toolUseId?: string;
   path?: string;
@@ -158,6 +173,9 @@ interface PylonRequest {
   command?: string;
   cwd?: string;
   args?: string[];
+  html?: string;
+  code?: string;
+  height?: number;
 }
 
 // ============================================================================
@@ -448,6 +466,38 @@ export class PylonClient {
       command: options.command,
       cwd: options.cwd,
       args: options.args,
+    }, { noTimeout: true });
+  }
+
+  /**
+   * Inline Widget 세션 실행
+   * CLI 프로세스 없이 인라인 위젯을 렌더링하고 완료될 때까지 대기합니다.
+   *
+   * @param options - Inline Widget 실행 옵션
+   * @returns Widget 실행 결과
+   */
+  async runWidgetInline(options: RunWidgetInlineOptions): Promise<RunWidgetInlineResult> {
+    if (!options.toolUseId || options.toolUseId === '') {
+      return {
+        success: false,
+        error: 'toolUseId is required',
+      };
+    }
+
+    if (!options.html || options.html === '') {
+      return {
+        success: false,
+        error: 'html is required',
+      };
+    }
+
+    // Widget은 유저가 종료할 때까지 대기 (타임아웃 없음)
+    return this._sendRequest<RunWidgetInlineResult>({
+      action: 'lookup_and_run_widget_inline',
+      toolUseId: options.toolUseId,
+      html: options.html,
+      code: options.code,
+      height: options.height,
     }, { noTimeout: true });
   }
 

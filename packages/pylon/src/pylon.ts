@@ -1022,6 +1022,12 @@ export class Pylon {
       return;
     }
 
+    // inline widget인 경우 (프로세스 없음 → 항상 valid)
+    if (pending.widgetSessionId.startsWith('inline-')) {
+      this.sendWidgetCheckResult(conversationId, sessionId, true, from?.deviceId);
+      return;
+    }
+
     // WidgetManager에서 프로세스 상태 확인
     const session = this.deps.widgetManager?.getSession(pending.widgetSessionId);
 

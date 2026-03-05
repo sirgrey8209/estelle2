@@ -149,6 +149,12 @@ interface McpRequest {
   cwd?: string;
   /** Widget 실행 인자 (run_widget 액션에서 사용) */
   args?: string[];
+  /** Inline Widget HTML (run_widget_inline 액션에서 사용) */
+  html?: string;
+  /** Inline Widget JavaScript (run_widget_inline 액션에서 사용) */
+  code?: string;
+  /** Inline Widget 높이 (run_widget_inline 액션에서 사용) */
+  height?: number;
 }
 
 /** 파일 정보 타입 */
@@ -730,6 +736,15 @@ export class PylonMcpServer {
           request.command,
           request.cwd,
           request.args,
+        );
+
+      case 'run_widget_inline':
+        return this._handleRunWidgetInline(
+          conversationId as ConversationId,
+          request.toolUseId ?? '',
+          request.html,
+          request.code,
+          request.height,
         );
 
       default:
@@ -1910,6 +1925,77 @@ export class PylonMcpServer {
         error: `Failed to start widget session: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
+  }
+
+  /**
+   * run_widget_inline 액션 처리
+   * CLI 프로세스 없이 인라인 위젯을 렌더링합니다.
+   */
+  private async _handleRunWidgetInline(
+    conversationId: ConversationId,
+    toolUseId: string,
+    html?: string,
+    code?: string,
+    height?: number,
+  ): Promise<McpResponse> {
+    console.log(`[Widget] _handleRunWidgetInline: conversationId=${conversationId}`);
+
+    // 중복 위젯 체크
+    if (this._pendingWidgets.has(conversationId)) {
+      return {
+        success: false,
+        error: 'Widget already running in this conversation.',
+      };
+    }
+
+    // html 필수
+    if (!html) {
+      return {
+        success: false,
+        error: 'html is required for run_widget_inline',
+      };
+    }
+
+    // 대화 존재 확인
+    const conversation = this._workspaceStore.getConversation(conversationId);
+    if (!conversation) {
+      return {
+        success: false,
+        error: 'Conversation not found',
+      };
+    }
+
+    // sessionId 생성 (inline- prefix로 CLI 위젯과 구분)
+    const sessionId = `inline-widget-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // ScriptViewNode 구성
+    const view = {
+      type: 'script' as const,
+      html,
+      code,
+      height,
+    };
+
+    // Promise로 완료 대기
+    return new Promise((resolve) => {
+      // pendingWidgets에 등록
+      this._pendingWidgets.set(conversationId, {
+        conversationId,
+        toolUseId,
+        widgetSessionId: sessionId,
+        resolve: (result) => {
+          this._pendingWidgets.delete(conversationId);
+          resolve({ success: true, result });
+        },
+        reject: (error) => {
+          this._pendingWidgets.delete(conversationId);
+          resolve({ success: false, error: error.message });
+        },
+      });
+
+      // Client에 widget_render 전송
+      this._onWidgetRender?.(conversationId, toolUseId, sessionId, view);
+    });
   }
 
   // ============================================================================
