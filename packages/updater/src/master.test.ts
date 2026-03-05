@@ -148,6 +148,79 @@ describe('master', () => {
     );
   });
 
+  it('should include environmentFile in update command to agents', async () => {
+    const mockWss = new EventEmitter() as any;
+    mockWss.clients = new Set();
+
+    vi.mocked(WebSocketServer).mockImplementation(() => mockWss as any);
+
+    const { startMaster } = await import('./master.js');
+    const master = startMaster({
+      port: 9900,
+      whitelist: ['89.167.4.124', '1.2.3.4'],
+      repoRoot: '/app',
+      myIp: '89.167.4.124',
+      machines: {
+        '89.167.4.124': { environmentFile: 'environments.cloud.json' },
+        '1.2.3.4': { environmentFile: 'environments.office.json' },
+      },
+    });
+
+    // Connect two agents
+    const mockSocket1 = new EventEmitter() as any;
+    mockSocket1.close = vi.fn();
+    mockSocket1.send = vi.fn();
+    mockSocket1.readyState = WebSocket.OPEN;
+
+    const mockSocket2 = new EventEmitter() as any;
+    mockSocket2.close = vi.fn();
+    mockSocket2.send = vi.fn();
+    mockSocket2.readyState = WebSocket.OPEN;
+
+    mockWss.emit('connection', mockSocket1, { socket: { remoteAddress: '89.167.4.124' } });
+    mockWss.emit('connection', mockSocket2, { socket: { remoteAddress: '1.2.3.4' } });
+
+    // Broadcast
+    master.broadcast({ type: 'update', target: 'all', branch: 'master' });
+
+    // calls[0] = welcome message, calls[1] = update message
+    const sentMsg1 = JSON.parse(mockSocket1.send.mock.calls[1][0]);
+    expect(sentMsg1.environmentFile).toBe('environments.cloud.json');
+
+    const sentMsg2 = JSON.parse(mockSocket2.send.mock.calls[1][0]);
+    expect(sentMsg2.environmentFile).toBe('environments.office.json');
+  });
+
+  it('should pass environmentFile to executeUpdate for self-update', async () => {
+    const mockWss = new EventEmitter() as any;
+    mockWss.clients = new Set();
+
+    vi.mocked(WebSocketServer).mockImplementation(() => mockWss as any);
+
+    const { startMaster } = await import('./master.js');
+    const { executeUpdate } = await import('./executor.js');
+
+    const master = startMaster({
+      port: 9900,
+      whitelist: ['89.167.4.124'],
+      repoRoot: '/app',
+      myIp: '89.167.4.124',
+      machines: {
+        '89.167.4.124': { environmentFile: 'environments.cloud.json' },
+      },
+    });
+
+    await master.triggerUpdate('all', 'master');
+
+    expect(executeUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branch: 'master',
+        repoRoot: '/app',
+        environmentFile: 'environments.cloud.json',
+      })
+    );
+  });
+
   it('should handle agent disconnect', async () => {
     const mockWss = new EventEmitter() as any;
     mockWss.clients = new Set();

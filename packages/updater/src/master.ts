@@ -4,13 +4,14 @@
  */
 import { WebSocketServer, WebSocket } from 'ws';
 import { executeUpdate } from './executor.js';
-import type { UpdateCommand, AgentMessage, LogMessage, ResultMessage } from './types.js';
+import type { UpdateCommand, AgentMessage, LogMessage, ResultMessage, MachineConfig } from './types.js';
 
 export interface MasterOptions {
   port: number;
   whitelist: string[];
   repoRoot: string;
   myIp: string;
+  machines?: Record<string, MachineConfig>;
 }
 
 interface ConnectedAgent {
@@ -105,15 +106,18 @@ export function startMaster(options: MasterOptions): MasterInstance {
     });
   });
 
-  function broadcast(msg: UpdateCommand): void {
-    const payload = JSON.stringify(msg);
-    for (const agent of agents.values()) {
+  function broadcast(baseCmd: UpdateCommand): void {
+    for (const [ip, agent] of agents) {
       try {
         if (agent.ws.readyState === WebSocket.OPEN) {
-          agent.ws.send(payload);
+          const cmd = {
+            ...baseCmd,
+            environmentFile: options.machines?.[ip]?.environmentFile,
+          };
+          agent.ws.send(JSON.stringify(cmd));
         }
       } catch (err) {
-        console.error(`[Master] Failed to send to ${agent.ip}:`, err);
+        console.error(`[Master] Failed to send to ${ip}:`, err);
       }
     }
   }
@@ -136,6 +140,7 @@ export function startMaster(options: MasterOptions): MasterInstance {
         branch,
         repoRoot,
         isMaster: true,
+        environmentFile: options.machines?.[myIp]?.environmentFile,
         onLog: (message) => {
           const logLine = `[${myIp}] ${message}`;
           console.log(logLine);

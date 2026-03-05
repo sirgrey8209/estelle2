@@ -24,6 +24,8 @@ export interface ExecuteOptions {
   onLog: (message: string) => void;
   /** Master restarts Relay + Pylon, Agent restarts Pylon only */
   isMaster?: boolean;
+  /** Environment config file for this machine (e.g., 'environments.office.json') */
+  environmentFile?: string;
 }
 
 export interface ExecuteResult {
