@@ -8,3 +8,4 @@
 export { WidgetView } from './WidgetView';
 export { WidgetInputs } from './WidgetInputs';
 export { WidgetRenderer, type WidgetRendererProps } from './WidgetRenderer';
+export { WidgetScriptRenderer } from './WidgetScriptRenderer';
