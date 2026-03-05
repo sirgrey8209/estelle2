@@ -1718,5 +1718,101 @@ describe('PylonMcpServer', () => {
       // 정리
       widgetPromise.catch(() => {});
     });
+
+    // ============================================================================
+    // cancelWidgetForConversation 테스트
+    // ============================================================================
+    describe('cancelWidgetForConversation', () => {
+      it('should_cancel_widget_for_conversation', async () => {
+        // Arrange
+        const TEST_TOOL_USE_ID_WIDGET = 'toolu_test_widget_cancel_123';
+        const MOCK_SESSION_ID = 'cancel-test-session-id';
+        let cancelSessionCalled = false;
+        let cancelledSessionId: string | null = null;
+
+        await server.close();
+        TEST_PORT = getRandomPort();
+
+        // Mock WidgetManager
+        const mockWidgetManager = {
+          startSession: async () => MOCK_SESSION_ID,
+          waitForCompletion: () => new Promise(() => {}), // 완료되지 않는 Promise
+          cancelSession: (sessionId: string) => {
+            cancelSessionCalled = true;
+            cancelledSessionId = sessionId;
+            return true;
+          },
+          on: () => {},
+          off: () => {},
+        };
+
+        // onWidgetClose 콜백 추적
+        let widgetCloseCalled = false;
+        let closeConversationId: number | null = null;
+        let closeToolUseId: string | null = null;
+        let closeSessionId: string | null = null;
+
+        const serverWithWidget = new PylonMcpServer(workspaceStore, {
+          port: TEST_PORT,
+          getConversationIdByToolUseId: (toolUseId: string) => {
+            if (toolUseId === TEST_TOOL_USE_ID_WIDGET) {
+              return TEST_CONVERSATION_ID;
+            }
+            return null;
+          },
+          widgetManager: mockWidgetManager as any,
+          onWidgetClose: (conversationId, toolUseId, sessionId) => {
+            widgetCloseCalled = true;
+            closeConversationId = conversationId;
+            closeToolUseId = toolUseId;
+            closeSessionId = sessionId;
+          },
+        });
+
+        server = serverWithWidget;
+        await server.listen();
+        await waitForPort(TEST_PORT);
+
+        // 위젯 시작
+        const widgetPromise = sendRequest(TEST_PORT, {
+          action: 'lookup_and_run_widget',
+          toolUseId: TEST_TOOL_USE_ID_WIDGET,
+          command: 'test',
+          cwd: '/tmp',
+        });
+
+        // 약간 대기 후 위젯이 시작되었는지 확인
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(server.hasPendingWidget(TEST_CONVERSATION_ID)).toBe(true);
+
+        // Act - 위젯 취소
+        const cancelled = server.cancelWidgetForConversation(TEST_CONVERSATION_ID);
+
+        // Assert
+        expect(cancelled).toBe(true);
+        expect(cancelSessionCalled).toBe(true);
+        expect(cancelledSessionId).toBe(MOCK_SESSION_ID);
+        expect(server.hasPendingWidget(TEST_CONVERSATION_ID)).toBe(false);
+        expect(widgetCloseCalled).toBe(true);
+        expect(closeConversationId).toBe(TEST_CONVERSATION_ID);
+        expect(closeToolUseId).toBe(TEST_TOOL_USE_ID_WIDGET);
+        expect(closeSessionId).toBe(MOCK_SESSION_ID);
+
+        // 정리
+        widgetPromise.catch(() => {});
+      });
+
+      it('should_return_false_when_no_widget_to_cancel', () => {
+        // 위젯이 없는 상태에서 취소 시도
+        const cancelled = server.cancelWidgetForConversation(123);
+        expect(cancelled).toBe(false);
+      });
+
+      it('should_return_false_when_cancelling_nonexistent_conversation', () => {
+        // 존재하지 않는 conversationId로 취소 시도
+        const cancelled = server.cancelWidgetForConversation(99999);
+        expect(cancelled).toBe(false);
+      });
+    });
   });
 });

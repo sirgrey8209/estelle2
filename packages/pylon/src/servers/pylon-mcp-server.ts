@@ -404,6 +404,30 @@ export class PylonMcpServer {
   }
 
   /**
+   * 대화의 위젯 세션 취소
+   */
+  cancelWidgetForConversation(conversationId: number): boolean {
+    const pending = this._pendingWidgets.get(conversationId);
+    if (!pending) {
+      return false;
+    }
+
+    // WidgetManager에서 프로세스 종료
+    this._widgetManager?.cancelSession(pending.widgetSessionId);
+
+    // reject 호출 (현재는 더미 함수이므로 실제로는 아무 일도 안 함)
+    pending.reject(new Error('Widget cancelled'));
+
+    // pendingWidgets에서 제거
+    this._pendingWidgets.delete(conversationId);
+
+    // widget_close 전송
+    this._onWidgetClose?.(conversationId, pending.toolUseId, pending.widgetSessionId);
+
+    return true;
+  }
+
+  /**
    * TCP 서버 시작
    */
   listen(): Promise<void> {
