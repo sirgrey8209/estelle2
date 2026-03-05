@@ -11,7 +11,7 @@
     "configDir": "~/.claude-release",
     "credentialsBackupDir": "~/.claude-credentials/release",
     "mcpPort": 9876,
-    "dataDir": "./release-data",
+    "dataDir": "./release-data/data",
     "defaultWorkingDir": "C:\\WorkSpace"
   }
 }
