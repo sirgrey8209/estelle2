@@ -903,8 +903,7 @@ describe('conversationStore - widget session management', () => {
         1001,
         'tool-1',
         'session-1',
-        { type: 'text', content: 'Hello' },
-        []
+        { type: 'script', html: '<div>Hello</div>' }
       );
 
       // 이벤트 리스너 등록 (동적 import로 구현 확인)
@@ -929,8 +928,7 @@ describe('conversationStore - widget session management', () => {
         1001,
         'tool-1',
         'session-1',
-        { type: 'text', content: 'Hello' },
-        []
+        { type: 'script', html: '<div>Hello</div>' }
       );
 
       // Act & Assert: 에러 없이 정상 실행

@@ -728,8 +728,7 @@ describe('routeMessage', () => {
           payload: {
             toolUseId: 'tool-1',
             sessionId: 'session-1',
-            view: { type: 'text', content: 'Hello' },
-            inputs: [],
+            view: { type: 'script', html: '<div>Hello</div>' },
           },
         });
 
@@ -740,8 +739,7 @@ describe('routeMessage', () => {
       it('should_call_setWidgetSession_when_all_required_fields_present', () => {
         // Task 8: 모든 필수 필드가 있으면 정상 처리
         // Arrange
-        const view = { type: 'text', content: 'Hello' };
-        const inputs = [{ id: 'input-1', type: 'text' }];
+        const view = { type: 'script', html: '<div>Hello</div>' };
 
         // Act
         routeMessage({
@@ -751,7 +749,6 @@ describe('routeMessage', () => {
             toolUseId: 'tool-1',
             sessionId: 'session-1',
             view,
-            inputs,
           },
         });
 
@@ -760,8 +757,7 @@ describe('routeMessage', () => {
           CONVERSATION_ID,
           'tool-1',
           'session-1',
-          view,
-          inputs
+          view
         );
       });
 
