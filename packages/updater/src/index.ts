@@ -62,6 +62,7 @@ export async function start(): Promise<void> {
       whitelist: config.whitelist,
       repoRoot,
       myIp,
+      machines: config.machines,
     });
   } else {
     // Agent mode
