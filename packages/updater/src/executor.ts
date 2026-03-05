@@ -61,7 +61,7 @@ function runCommand(
   onLog: (msg: string) => void
 ): Promise<{ success: boolean; output?: string; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, shell: true });
+    const child = spawn(cmd, args, { cwd, shell: true, windowsHide: true });
     let output = '';
 
     child.stdout?.on('data', (data) => {
