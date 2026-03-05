@@ -224,6 +224,8 @@ export interface BugReportWriter {
 export interface WidgetManagerAdapter {
   /** 사용자 입력을 위젯 세션에 전달 */
   sendInput(sessionId: string, data: Record<string, unknown>): void;
+  /** CLI로 이벤트 전송 */
+  sendEvent(sessionId: string, data: unknown): void;
 }
 
 /**
@@ -896,6 +898,12 @@ export class Pylon {
       return;
     }
 
+    // ===== Widget 이벤트 (Client → CLI) =====
+    if (type === 'widget_event') {
+      this.handleWidgetEvent(payload);
+      return;
+    }
+
     // 알 수 없는 메시지는 무시
   }
 
@@ -922,6 +930,31 @@ export class Pylon {
 
     this.log(`[Widget] Received input for session ${sessionId}`);
     this.deps.widgetManager.sendInput(sessionId, data);
+  }
+
+  /**
+   * Widget 이벤트 처리 (Client → CLI)
+   *
+   * @description
+   * 클라이언트에서 Widget 이벤트를 받아서
+   * WidgetManager를 통해 CLI로 전달합니다.
+   */
+  private handleWidgetEvent(payload?: Record<string, unknown>): void {
+    if (!this.deps.widgetManager) {
+      this.log('[Widget] WidgetManager not configured');
+      return;
+    }
+
+    const sessionId = payload?.sessionId as string | undefined;
+    const data = payload?.data;
+
+    if (!sessionId || data === undefined) {
+      this.log('[Widget] Missing sessionId or data in widget_event');
+      return;
+    }
+
+    this.log(`[Widget] Received event for session ${sessionId}`);
+    this.deps.widgetManager.sendEvent(sessionId, data);
   }
 
   /**

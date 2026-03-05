@@ -25,7 +25,7 @@ const __dirname = path.dirname(__filename);
 import type { WorkspaceStore } from '../stores/workspace-store.js';
 import type { ShareStore } from '../stores/share-store.js';
 import type { MessageStore } from '../stores/message-store.js';
-import type { WidgetManager, WidgetRenderEvent, WidgetCompleteEvent, WidgetErrorEvent } from '../managers/widget-manager.js';
+import type { WidgetManager, WidgetRenderEvent, WidgetCompleteEvent, WidgetErrorEvent, WidgetEventEvent } from '../managers/widget-manager.js';
 import { decodeConversationId } from '@estelle/core';
 import type { LinkedDocument, ConversationId, StoreMessage, ViewNode, InputNode } from '@estelle/core';
 
@@ -112,6 +112,8 @@ export interface PylonMcpServerOptions {
   onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
   /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
   onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  /** Widget 이벤트 시 호출되는 콜백 (Client에 WebSocket으로 전달, CLI → Client) */
+  onWidgetEvent?: (sessionId: string, data: unknown) => void;
 }
 
 /** 요청 타입 */
@@ -320,6 +322,7 @@ export class PylonMcpServer {
   private _widgetManager?: WidgetManager;
   private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
   private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
 
   // ============================================================================
   // 생성자
@@ -341,6 +344,7 @@ export class PylonMcpServer {
     this._widgetManager = options?.widgetManager;
     this._onWidgetRender = options?.onWidgetRender;
     this._onWidgetClose = options?.onWidgetClose;
+    this._onWidgetEvent = options?.onWidgetEvent;
   }
 
   // ============================================================================
@@ -1776,10 +1780,19 @@ export class PylonMcpServer {
         }
       };
 
+      // event 이벤트 리스너 등록 (CLI → Client)
+      const onEvent = (event: WidgetEventEvent) => {
+        if (event.sessionId === sessionId) {
+          console.log(`[Widget] Event received for session ${sessionId}`);
+          this._onWidgetEvent?.(sessionId, event.data);
+        }
+      };
+
       // 이벤트 리스너 등록
       this._widgetManager.on('render', onRender);
       this._widgetManager.on('complete', onComplete);
       this._widgetManager.on('error', onError);
+      this._widgetManager.on('event', onEvent);
 
       console.log('[Widget] Waiting for completion...');
 
@@ -1802,6 +1815,7 @@ export class PylonMcpServer {
         this._widgetManager.off('render', onRender);
         this._widgetManager.off('complete', onComplete);
         this._widgetManager.off('error', onError);
+        this._widgetManager.off('event', onEvent);
       }
     } catch (err) {
       console.log(`[Widget] startSession error:`, err);

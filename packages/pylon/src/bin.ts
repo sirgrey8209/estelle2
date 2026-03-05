@@ -516,6 +516,13 @@ async function main(): Promise<void> {
         broadcast: 'clients',
       });
     },
+    onWidgetEvent: (sessionId, data) => {
+      deps.relayClient.send({
+        type: 'widget_event',
+        payload: { sessionId, data },
+        broadcast: 'clients',
+      });
+    },
   });
 
   // Graceful shutdown
