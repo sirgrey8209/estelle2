@@ -1793,12 +1793,10 @@ export class PylonMcpServer {
   ): Promise<McpResponse> {
     console.log(`[Widget] _handleRunWidgetInline: conversationId=${conversationId}`);
 
-    // 중복 위젯 체크
+    // 이전 위젯이 있으면 자동 종료
     if (this._pendingWidgets.has(conversationId)) {
-      return {
-        success: false,
-        error: 'Widget already running in this conversation.',
-      };
+      console.log(`[Widget] Closing previous widget in conversation ${conversationId}`);
+      this.cancelWidgetForConversation(conversationId);
     }
 
     // html 필수
