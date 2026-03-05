@@ -6,7 +6,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { ScriptViewNode } from '@estelle/core';
 import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
 import { subscribeWidgetEvent } from '@/stores/conversationStore';
 
 interface WidgetScriptRendererProps {
@@ -91,21 +90,12 @@ export function WidgetScriptRenderer({
   }, [sessionId, handleMessage]);
 
   return (
-    <div className={cn('widget-script-renderer relative', className)}>
-      {/* X 버튼 */}
-      <button
-        onClick={onCancel}
-        className="absolute top-2 right-2 p-1 rounded hover:bg-muted/80 z-10"
-        aria-label="Close widget"
-      >
-        <X size={16} />
-      </button>
-
+    <div className={cn('widget-script-renderer', className)}>
       {/* 위젯 렌더링 영역 */}
       <div
         ref={containerRef}
         className="widget-content w-full"
-        style={{ height: view.height ? `${view.height}px` : 'auto' }}
+        style={{ minHeight: view.height ? `${view.height}px` : 'auto' }}
       />
     </div>
   );

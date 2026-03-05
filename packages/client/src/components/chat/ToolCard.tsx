@@ -473,7 +473,21 @@ export function ToolCard({
             {mcpInfo.serverName}
           </span>
           <span className="ml-1.5 text-xs text-muted-foreground">Widget</span>
-          <span className={cn('ml-auto', statusColor)}>{statusIcon}</span>
+          {/* 진행 중일 때만 X 버튼 표시 */}
+          {!isComplete && matchedWidget && onWidgetCancel && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onWidgetCancel();
+              }}
+              className="ml-auto p-0.5 rounded hover:bg-muted/80"
+              aria-label="Cancel widget"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+            </button>
+          )}
+          {/* 완료 시 상태 아이콘 */}
+          {isComplete && <span className={cn('ml-auto', statusColor)}>{statusIcon}</span>}
         </div>
 
         {/* Widget 렌더링 */}
