@@ -7,7 +7,11 @@ import type { UpdaterConfig } from './types.js';
 
 export function loadConfig(configPath: string): UpdaterConfig {
   const raw = fs.readFileSync(configPath, 'utf-8');
-  return JSON.parse(raw) as UpdaterConfig;
+  const parsed = JSON.parse(raw);
+  if (parsed.machines && !parsed.whitelist) {
+    parsed.whitelist = Object.keys(parsed.machines);
+  }
+  return parsed as UpdaterConfig;
 }
 
 export function parseMasterIp(masterUrl: string): string {

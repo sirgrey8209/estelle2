@@ -2,15 +2,21 @@
  * estelle-updater Types
  */
 
+export interface MachineConfig {
+  environmentFile: string;
+}
+
 export interface UpdaterConfig {
   masterUrl: string;
   whitelist: string[];
+  machines?: Record<string, MachineConfig>;
 }
 
 export interface UpdateCommand {
   type: 'update';
   target: 'all' | string;  // 'all' or specific IP
   branch: string;
+  environmentFile?: string;
 }
 
 export interface LogMessage {

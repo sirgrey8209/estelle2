@@ -23,6 +23,42 @@ describe('config', () => {
     expect(config.whitelist).toContain('89.167.4.124');
   });
 
+  it('should derive whitelist from machines when whitelist is absent', async () => {
+    vi.resetModules();
+    const mockConfig = {
+      masterUrl: 'ws://89.167.4.124:9900',
+      machines: {
+        '89.167.4.124': { environmentFile: 'environments.cloud.json' },
+        '192.168.1.10': { environmentFile: 'environments.office.json' },
+      },
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+
+    const { loadConfig } = await import('./config.js');
+    const config = loadConfig('/path/to/config.json');
+
+    expect(config.whitelist).toEqual(['89.167.4.124', '192.168.1.10']);
+    expect(config.machines).toBeDefined();
+  });
+
+  it('should not override whitelist when both whitelist and machines are present', async () => {
+    vi.resetModules();
+    const mockConfig = {
+      masterUrl: 'ws://89.167.4.124:9900',
+      whitelist: ['89.167.4.124'],
+      machines: {
+        '89.167.4.124': { environmentFile: 'environments.cloud.json' },
+        '192.168.1.10': { environmentFile: 'environments.office.json' },
+      },
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
+
+    const { loadConfig } = await import('./config.js');
+    const config = loadConfig('/path/to/config.json');
+
+    expect(config.whitelist).toEqual(['89.167.4.124']);
+  });
+
   it('should parse masterUrl to extract IP', async () => {
     vi.resetModules();
     const { parseMasterIp } = await import('./config.js');
