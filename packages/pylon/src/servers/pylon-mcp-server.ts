@@ -16,7 +16,6 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // ESM에서 __dirname 대체
@@ -1062,74 +1061,21 @@ export class PylonMcpServer {
   }
 
   /**
-   * 현재 환경 이름 가져오기 (release, stage, dev)
-   */
-  private _getCurrentEnv(): 'release' | 'stage' | 'dev' {
-    try {
-      const envConfigStr = process.env.ESTELLE_ENV_CONFIG;
-      if (envConfigStr) {
-        const envConfig = JSON.parse(envConfigStr);
-        const envId = envConfig.envId ?? 2;
-        const envNames = ['release', 'stage', 'dev'] as const;
-        return envNames[envId] || 'dev';
-      }
-    } catch {
-      // 파싱 실패 시 기본값
-    }
-    return 'dev';
-  }
-
-  /**
    * deploy 액션 처리 (비동기)
    *
-   * 제약사항:
-   * - 자기 환경으로 배포 불가 (release에서 release, stage에서 stage)
-   * - promote는 stage → release 승격 (stage에서만 실행 가능)
-   * - release는 estelle-updater를 통해 모든 머신에 배포 (master에서만 가능)
+   * release만 지원합니다. estelle-updater를 통해 모든 머신에 배포합니다.
    */
   private async _handleDeploy(
     conversationId: ConversationId,
     target?: string,
   ): Promise<McpResponse> {
-    // target 검사
-    if (target === undefined || target === null || target === '') {
+    if (!target || target !== 'release') {
       return {
         success: false,
-        error: 'Missing target field for deploy action',
+        error: "deploy action은 'release'만 지원해요. (stage/promote 제거됨)",
       };
     }
 
-    // target 유효성 검사
-    const validTargets = ['stage', 'release', 'promote'];
-    if (!validTargets.includes(target)) {
-      return {
-        success: false,
-        error: `Invalid target: must be one of ${validTargets.join(', ')}`,
-      };
-    }
-
-    // 현재 환경 확인
-    const currentEnv = this._getCurrentEnv();
-
-    // 자기 자신 환경 배포 금지
-    if (target === currentEnv) {
-      return {
-        success: false,
-        error: `자기 자신 환경(${currentEnv})으로는 배포할 수 없어요. ${currentEnv === 'release' ? 'stage에서 promote를 사용해주세요.' : '다른 환경에서 배포해주세요.'}`,
-      };
-    }
-
-    // promote는 stage에서만 가능
-    if (target === 'promote') {
-      if (currentEnv !== 'stage') {
-        return {
-          success: false,
-          error: `promote는 stage 환경에서만 실행할 수 있어요. (현재: ${currentEnv})`,
-        };
-      }
-    }
-
-    // 대화 존재 확인
     const conversation = this._workspaceStore.getConversation(conversationId);
     if (!conversation) {
       return {
@@ -1138,63 +1084,7 @@ export class PylonMcpServer {
       };
     }
 
-    // release 배포는 estelle-updater를 통해 처리
-    if (target === 'release') {
-      return this._handleDeployViaUpdater('all', 'master');
-    }
-
-    // promote는 먼저 로컬에서 promote 실행 후 updater 트리거
-    if (target === 'promote') {
-      // 1. 로컬에서 promote 스크립트 실행
-      const repoRoot = this._findRepoRoot();
-      const promoteResult = await this._runLocalPromote(repoRoot);
-
-      if (!promoteResult.success) {
-        return {
-          success: false,
-          error: `Promote failed: ${promoteResult.error}`,
-        };
-      }
-
-      // 2. updater를 통해 모든 머신에 배포
-      return this._handleDeployViaUpdater('all', 'master');
-    }
-
-    // stage 배포는 기존 로컬 스크립트 방식 유지
-    const repoRoot = this._findRepoRoot();
-
-    // 로그 파일 경로 결정
-    const logDir = path.join(repoRoot, 'stage-data', 'logs');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const logFileName = `build-${target}-${timestamp}.log`;
-    const logFilePath = path.join(logDir, logFileName);
-
-    // 로그 디렉토리 생성
-    try {
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-    } catch {
-      // 디렉토리 생성 실패 무시
-    }
-
-    // 비동기 실행 (이벤트 루프 blocking 방지)
-    try {
-      const result = await this._runDeployScript(target, repoRoot, logFilePath);
-
-      return {
-        success: true,
-        target,
-        output: result.message,
-        logFile: logFileName,
-      };
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        error: `Deploy failed: ${errorMsg}`,
-      };
-    }
+    return this._handleDeployViaUpdater('all', 'master');
   }
 
   /**
@@ -1228,6 +1118,7 @@ export class PylonMcpServer {
         whitelist: config.whitelist,
         repoRoot,
         myIp,
+        machines: config.machines,
       });
 
       const logs: string[] = [];
@@ -1236,7 +1127,7 @@ export class PylonMcpServer {
       return {
         success: true,
         target: 'release',
-        output: `배포가 트리거되었습니다. 모든 머신에서 git pull + pnpm deploy:release 실행 중...\n${logs.join('\n')}`,
+        output: `배포가 트리거되었습니다. 모든 머신에서 executor로 업데이트 실행 중...\n${logs.join('\n')}`,
       };
     } catch (err) {
       return {
@@ -1244,71 +1135,6 @@ export class PylonMcpServer {
         error: `Deploy via updater failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
-  }
-
-  /**
-   * 로컬에서 promote 스크립트를 실행합니다.
-   * stage → release 승격을 위해 rsync를 실행합니다.
-   */
-  private async _runLocalPromote(
-    repoRoot: string,
-  ): Promise<{ success: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      const child = spawn('npx', ['tsx', 'scripts/deploy.ts', 'promote'], {
-        cwd: repoRoot,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stderr = '';
-      child.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve({ success: true });
-        } else {
-          resolve({ success: false, error: stderr || `Exit code: ${code}` });
-        }
-      });
-
-      child.on('error', (err) => {
-        resolve({ success: false, error: err.message });
-      });
-    });
-  }
-
-  /**
-   * 배포 스크립트를 detached 프로세스로 실행합니다.
-   * 부모(Pylon)가 재시작되어도 배포는 계속 진행됩니다.
-   */
-  private _runDeployScript(
-    target: string,
-    cwd: string,
-    logFilePath: string,
-  ): Promise<{ success: boolean; message: string }> {
-    return new Promise((resolve) => {
-      const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
-
-      const child = spawn('npx', ['tsx', 'scripts/deploy.ts', target], {
-        cwd,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      // 로그 파일에 기록
-      child.stdout?.pipe(logStream);
-      child.stderr?.pipe(logStream);
-
-      // 부모와 분리
-      child.unref();
-
-      // 즉시 응답 (배포는 백그라운드에서 진행)
-      resolve({
-        success: true,
-        message: `배포가 시작되었습니다. 로그: ${path.basename(logFilePath)}`,
-      });
-    });
   }
 
   /**
@@ -1359,6 +1185,7 @@ export class PylonMcpServer {
         whitelist: config.whitelist,
         repoRoot,
         myIp,
+        machines: config.machines,
       });
 
       const logs: string[] = [];

@@ -28,10 +28,7 @@
     "dev:logs": "node scripts/dev-server.js logs",
     "dev:relay": "pnpm --filter @estelle/relay dev",
     "dev:pylon": "pnpm --filter @estelle/pylon dev",
-    "dev:client": "pnpm --filter @estelle/client dev",
-    "deploy:stage": "npx tsx scripts/deploy.ts stage",
-    "deploy:release": "npx tsx scripts/deploy.ts release",
-    "deploy:release-pylon": "npx tsx scripts/deploy.ts release --pylon-only"
+    "dev:client": "pnpm --filter @estelle/client dev"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
