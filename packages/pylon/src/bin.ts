@@ -502,10 +502,10 @@ async function main(): Promise<void> {
       pylon.triggerInitialContext(conversationId);
     },
     widgetManager: deps.widgetManager as WidgetManager | undefined,
-    onWidgetRender: (conversationId, toolUseId, sessionId, view, inputs) => {
+    onWidgetRender: (conversationId, toolUseId, sessionId, view) => {
       deps.relayClient.send({
         type: 'widget_render',
-        payload: { conversationId, toolUseId, sessionId, view, inputs },
+        payload: { conversationId, toolUseId, sessionId, view },
         broadcast: 'clients',
       });
     },

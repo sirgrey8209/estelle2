@@ -17,7 +17,6 @@ import type {
   RealtimeUsage,
   AssistantTextMessage,
   ViewNode,
-  InputNode,
 } from '@estelle/core';
 import { createInitialClaudeState } from '@estelle/core';
 
@@ -174,8 +173,7 @@ export interface ConversationStoreState {
     conversationId: number,
     toolUseId: string,
     sessionId: string,
-    view: ViewNode,
-    inputs: InputNode[]
+    view: ViewNode
   ) => void;
 
   /** Widget 세션 초기화 */
@@ -476,13 +474,13 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   // === Actions: widgetSession ===
 
-  setWidgetSession: (conversationId, toolUseId, sessionId, view, inputs) => {
+  setWidgetSession: (conversationId, toolUseId, sessionId, view) => {
     const states = new Map(get().states);
     const state = getOrCreateState(states, conversationId);
 
     states.set(conversationId, {
       ...state,
-      widgetSession: { toolUseId, sessionId, view, inputs },
+      widgetSession: { toolUseId, sessionId, view },
     });
     set({ states });
   },

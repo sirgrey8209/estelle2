@@ -5,7 +5,7 @@ import { removeSystemReminder, diffLines } from '../../utils/textUtils';
 import { Collapsible } from '../common/Collapsible';
 import { WidgetRenderer } from '../widget';
 import { cn } from '../../lib/utils';
-import type { ViewNode, InputNode } from '@estelle/core';
+import type { ViewNode } from '@estelle/core';
 
 /**
  * 파일 경로에서 파일명만 추출
@@ -47,10 +47,7 @@ interface ToolCardProps {
     toolUseId: string;
     sessionId: string;
     view: ViewNode;
-    inputs: InputNode[];
   } | null;
-  /** Widget 입력 핸들러 */
-  onWidgetInput?: (data: Record<string, unknown>) => void;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
   /** Widget v2 취소 핸들러 (ScriptViewNode용) */
@@ -216,7 +213,6 @@ export function ToolCard({
   onMcpFileClick,
   toolUseId,
   widgetSession,
-  onWidgetInput,
   onWidgetEvent,
   onWidgetCancel,
   widgetAssets,
@@ -491,13 +487,11 @@ export function ToolCard({
         </div>
 
         {/* Widget 렌더링 */}
-        {matchedWidget && (
+        {matchedWidget && onWidgetEvent && onWidgetCancel && (
           <div className="border-t border-border">
             <WidgetRenderer
               sessionId={matchedWidget.sessionId}
               view={matchedWidget.view}
-              inputs={matchedWidget.inputs}
-              onInput={onWidgetInput || (() => {})}
               onEvent={onWidgetEvent}
               onCancel={onWidgetCancel}
               assets={widgetAssets}

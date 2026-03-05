@@ -76,69 +76,15 @@ export type ViewNode =
   | ScriptViewNode;
 
 // ============================================================================
-// Input Types (유저 입력)
-// ============================================================================
-
-/**
- * 버튼 인풋 노드
- */
-export interface ButtonsInputNode {
-  type: 'buttons';
-  id: string;
-  options: string[];
-  disabled?: string[];
-}
-
-/**
- * 텍스트 인풋 노드
- */
-export interface TextInputNode {
-  type: 'text';
-  id: string;
-  placeholder?: string;
-}
-
-/**
- * 슬라이더 인풋 노드
- */
-export interface SliderInputNode {
-  type: 'slider';
-  id: string;
-  min: number;
-  max: number;
-  step?: number;
-}
-
-/**
- * 확인 버튼 인풋 노드
- */
-export interface ConfirmInputNode {
-  type: 'confirm';
-  id: string;
-  label: string;
-}
-
-/**
- * 모든 인풋 노드 유니온
- */
-export type InputNode =
-  | ButtonsInputNode
-  | TextInputNode
-  | SliderInputNode
-  | ConfirmInputNode;
-
-// ============================================================================
 // CLI Protocol Messages
 // ============================================================================
 
 /**
  * CLI → Pylon: 렌더 메시지
- * v2: ScriptViewNode일 경우 inputs는 선택적 (클라이언트 드리븐)
  */
 export interface WidgetCliRenderMessage {
   type: 'render';
   view: ViewNode;
-  inputs?: InputNode[];  // v2: optional for ScriptViewNode
 }
 
 /**
@@ -216,7 +162,6 @@ export interface WidgetRenderMessage {
   type: 'widget_render';
   sessionId: string;
   view: ViewNode;
-  inputs: InputNode[];
 }
 
 /**

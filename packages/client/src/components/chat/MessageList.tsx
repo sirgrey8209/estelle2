@@ -12,7 +12,7 @@ import { WorkingIndicator } from './WorkingIndicator';
 import { FileViewer } from '../viewers';
 import { WidgetRenderer } from '../widget';
 import { blobService } from '../../services/blobService';
-import { sendWidgetInput, sendWidgetEvent } from '../../services/relaySender';
+import { sendWidgetEvent } from '../../services/relaySender';
 import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
 import type { ChildToolInfo, McpFileInfo } from './ToolCard';
 
@@ -208,14 +208,6 @@ export function MessageList({
       filePath,
     });
   }, [selectedConversation, openFileViewer]);
-
-  // Widget 인풋 핸들러
-  const handleWidgetInput = useCallback((data: Record<string, unknown>) => {
-    const conversationId = selectedConversation?.conversationId;
-    if (!conversationId || !widgetSession) return;
-
-    sendWidgetInput(conversationId, widgetSession.sessionId, data);
-  }, [selectedConversation?.conversationId, widgetSession]);
 
   // Widget v2 이벤트 핸들러 (Client → Pylon)
   const handleWidgetEvent = useCallback((data: unknown) => {
@@ -428,7 +420,6 @@ export function MessageList({
             }}
             onMcpFileClick={handleMcpFileClick}
             widgetSession={widgetSession}
-            onWidgetInput={handleWidgetInput}
             onWidgetEvent={handleWidgetEvent}
             onWidgetCancel={handleWidgetCancel}
           />

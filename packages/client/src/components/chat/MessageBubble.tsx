@@ -23,10 +23,7 @@ interface MessageBubbleProps {
     toolUseId: string;
     sessionId: string;
     view: import('@estelle/core').ViewNode;
-    inputs: import('@estelle/core').InputNode[];
   } | null;
-  /** Widget 입력 핸들러 */
-  onWidgetInput?: (data: Record<string, unknown>) => void;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
   /** Widget v2 취소 핸들러 (ScriptViewNode용) */
@@ -44,7 +41,6 @@ export function MessageBubble({
   childTools,
   onMcpFileClick,
   widgetSession,
-  onWidgetInput,
   onWidgetEvent,
   onWidgetCancel,
   widgetAssets,
@@ -81,7 +77,6 @@ export function MessageBubble({
           onMcpFileClick={onMcpFileClick}
           toolUseId={toolMsg.id}
           widgetSession={widgetSession}
-          onWidgetInput={onWidgetInput}
           onWidgetEvent={onWidgetEvent}
           onWidgetCancel={onWidgetCancel}
           widgetAssets={widgetAssets}

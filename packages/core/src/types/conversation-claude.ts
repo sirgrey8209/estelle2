@@ -7,7 +7,7 @@
  */
 
 import type { StoreMessage } from './store-message.js';
-import type { ViewNode, InputNode } from './widget.js';
+import type { ViewNode } from './widget.js';
 
 // ============================================================================
 // Status Types
@@ -153,8 +153,6 @@ export interface WidgetSession {
   sessionId: string;
   /** 렌더링할 View 노드 */
   view: ViewNode;
-  /** 입력 노드 배열 */
-  inputs: InputNode[];
 }
 
 // ============================================================================

@@ -27,7 +27,7 @@ import type { ShareStore } from '../stores/share-store.js';
 import type { MessageStore } from '../stores/message-store.js';
 import type { WidgetManager, WidgetRenderEvent, WidgetCompleteEvent, WidgetErrorEvent, WidgetEventEvent } from '../managers/widget-manager.js';
 import { decodeConversationId } from '@estelle/core';
-import type { LinkedDocument, ConversationId, StoreMessage, ViewNode, InputNode } from '@estelle/core';
+import type { LinkedDocument, ConversationId, StoreMessage, ViewNode } from '@estelle/core';
 
 // ============================================================================
 // 상수
@@ -118,7 +118,7 @@ export interface PylonMcpServerOptions {
   /** Widget 세션 관리자 (run_widget 액션에 필요) */
   widgetManager?: WidgetManager;
   /** Widget 렌더 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
-  onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
   /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
   onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
   /** Widget 이벤트 시 호출되는 콜백 (Client에 WebSocket으로 전달, CLI → Client) */
@@ -329,7 +329,7 @@ export class PylonMcpServer {
   private _onConversationCreate?: (conversationId: number) => void;
   private _onContinueTask?: (conversationId: number, reason?: string) => void;
   private _widgetManager?: WidgetManager;
-  private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, inputs: InputNode[]) => void;
+  private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
   private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
   private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
 
@@ -1841,7 +1841,7 @@ export class PylonMcpServer {
       const onRender = (event: WidgetRenderEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Render event received for session ${sessionId}`);
-          this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view, event.inputs);
+          this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view);
         }
       };
 

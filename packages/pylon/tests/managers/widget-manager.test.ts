@@ -170,23 +170,16 @@ describe('WidgetManager', () => {
         manager.on('render', resolve);
       });
 
-      // CLI가 render 메시지 출력
+      // CLI가 render 메시지 출력 (v2: inputs 필드 없음)
       const renderMessage = JSON.stringify({
         type: 'render',
         view: { type: 'text', content: 'Hello' },
-        inputs: [{ type: 'buttons', id: 'btn', options: ['OK', 'Cancel'] }],
       });
       mockProcess.emitLine(renderMessage);
 
       const event = await renderPromise;
       expect(event.sessionId).toBe(sessionId);
       expect(event.view).toEqual({ type: 'text', content: 'Hello' });
-      expect(event.inputs).toHaveLength(1);
-      expect(event.inputs[0]).toEqual({
-        type: 'buttons',
-        id: 'btn',
-        options: ['OK', 'Cancel'],
-      });
     });
 
     it('should correctly parse complex view structure', async () => {
@@ -217,7 +210,6 @@ describe('WidgetManager', () => {
       const renderMessage = JSON.stringify({
         type: 'render',
         view: complexView,
-        inputs: [],
       });
       mockProcess.emitLine(renderMessage);
 
@@ -225,7 +217,7 @@ describe('WidgetManager', () => {
       expect(event.view).toEqual(complexView);
     });
 
-    it('should parse multiple input types correctly', async () => {
+    it('should emit render event for ScriptViewNode', async () => {
       await manager.startSession({
         command: 'node',
         cwd: '/workspace',
@@ -235,21 +227,20 @@ describe('WidgetManager', () => {
         manager.on('render', resolve);
       });
 
-      const inputs = [
-        { type: 'buttons', id: 'choice', options: ['A', 'B'], disabled: ['B'] },
-        { type: 'text', id: 'name', placeholder: 'Enter name' },
-        { type: 'slider', id: 'volume', min: 0, max: 100, step: 5 },
-        { type: 'confirm', id: 'submit', label: 'Submit' },
-      ];
+      const scriptView = {
+        type: 'script',
+        code: 'console.log("hello")',
+        html: '<div id="root"></div>',
+        height: 300,
+      };
 
       mockProcess.emitLine(JSON.stringify({
         type: 'render',
-        view: { type: 'text', content: 'Form' },
-        inputs,
+        view: scriptView,
       }));
 
       const event = await renderPromise;
-      expect(event.inputs).toEqual(inputs);
+      expect(event.view).toEqual(scriptView);
     });
   });
 

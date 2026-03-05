@@ -7,7 +7,7 @@
  */
 
 import { MessageType } from '@estelle/core';
-import type { WorkspaceWithActive, StoreMessage, ViewNode, InputNode } from '@estelle/core';
+import type { WorkspaceWithActive, StoreMessage, ViewNode } from '@estelle/core';
 import type { RelayMessage } from '../services/relayService';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useConversationStore, emitWidgetEvent } from '../stores/conversationStore';
@@ -355,16 +355,15 @@ export function routeMessage(message: RelayMessage): void {
 
     // === Widget 메시지 ===
     case 'widget_render': {
-      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId, view, inputs? } }
+      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId, view } }
       // conversationId는 필수 (Pylon에서 세션 관리)
       const widgetPayload = payload as {
         conversationId: number;
         toolUseId: string;
         sessionId: string;
         view: ViewNode;
-        inputs?: InputNode[];
       };
-      const { conversationId, toolUseId, sessionId, view, inputs } = widgetPayload;
+      const { conversationId, toolUseId, sessionId, view } = widgetPayload;
 
       // conversationId가 없으면 무시 (필수 필드)
       if (!conversationId || !toolUseId || !sessionId || !view) {
@@ -376,8 +375,7 @@ export function routeMessage(message: RelayMessage): void {
         conversationId,
         toolUseId,
         sessionId,
-        view,
-        inputs ?? []  // v2: inputs is optional for ScriptViewNode
+        view
       );
       break;
     }

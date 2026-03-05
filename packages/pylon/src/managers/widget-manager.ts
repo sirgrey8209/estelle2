@@ -10,7 +10,6 @@ import { EventEmitter } from 'events';
 import readline from 'readline';
 import {
   ViewNode,
-  InputNode,
   WidgetCliMessage,
   isWidgetCliRenderMessage,
   isWidgetCliCompleteMessage,
@@ -41,7 +40,6 @@ export interface WidgetStartOptions {
 export interface WidgetRenderEvent {
   sessionId: string;
   view: ViewNode;
-  inputs: InputNode[];
 }
 
 export interface WidgetCompleteEvent {
@@ -155,7 +153,6 @@ export class WidgetManager extends EventEmitter {
         this.emit('render', {
           sessionId,
           view: message.view,
-          inputs: message.inputs ?? [],  // v2: inputs is optional
         } as WidgetRenderEvent);
       } else if (isWidgetCliCompleteMessage(message)) {
         session.status = 'completed';
