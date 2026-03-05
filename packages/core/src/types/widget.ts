@@ -133,11 +133,12 @@ export type InputNode =
 
 /**
  * CLI → Pylon: 렌더 메시지
+ * v2: ScriptViewNode일 경우 inputs는 선택적 (클라이언트 드리븐)
  */
 export interface WidgetCliRenderMessage {
   type: 'render';
   view: ViewNode;
-  inputs: InputNode[];
+  inputs?: InputNode[];  // v2: optional for ScriptViewNode
 }
 
 /**
@@ -261,7 +262,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function isWidgetCliRenderMessage(value: unknown): value is WidgetCliRenderMessage {
-  return isObject(value) && value.type === 'render' && 'view' in value && 'inputs' in value;
+  // v2: inputs is optional for ScriptViewNode
+  return isObject(value) && value.type === 'render' && 'view' in value;
 }
 
 export function isWidgetCliCompleteMessage(value: unknown): value is WidgetCliCompleteMessage {

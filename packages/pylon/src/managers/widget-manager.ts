@@ -155,7 +155,7 @@ export class WidgetManager extends EventEmitter {
         this.emit('render', {
           sessionId,
           view: message.view,
-          inputs: message.inputs,
+          inputs: message.inputs ?? [],  // v2: inputs is optional
         } as WidgetRenderEvent);
       } else if (isWidgetCliCompleteMessage(message)) {
         session.status = 'completed';
