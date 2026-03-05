@@ -1,3 +1,5 @@
+import { MarkdownContent } from '../../lib/markdown';
+
 interface StreamingBubbleProps {
   text: string;
 }
@@ -12,10 +14,7 @@ export function StreamingBubble({ text }: StreamingBubbleProps) {
     <div
       className="my-0.5 ml-2 pl-1.5 pr-2 border-l-2 border-transparent max-w-[90%]"
     >
-      <p className="text-sm opacity-85 leading-relaxed select-text whitespace-pre-wrap">
-        {text}
-        <span className="text-primary animate-pulse">▋</span>
-      </p>
+      <MarkdownContent content={text} showCursor />
     </div>
   );
 }
