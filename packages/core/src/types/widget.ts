@@ -52,6 +52,19 @@ export interface HtmlViewNode {
 }
 
 /**
+ * 스크립트 뷰 노드 (v2)
+ * 인라인 JS 또는 외부 JS 파일과 HTML 템플릿을 조합하여 렌더링
+ */
+export interface ScriptViewNode {
+  type: 'script';
+  code?: string;                      // 인라인 JS 코드
+  file?: string;                      // 또는 JS 파일 경로
+  html: string;                       // HTML 템플릿
+  assets?: Record<string, string>;    // 에셋 경로 맵
+  height?: number;                    // 초기 높이 (없으면 auto)
+}
+
+/**
  * 모든 뷰 노드 유니온
  */
 export type ViewNode =
@@ -59,7 +72,8 @@ export type ViewNode =
   | LayoutViewNode
   | ImageViewNode
   | SpacerViewNode
-  | HtmlViewNode;
+  | HtmlViewNode
+  | ScriptViewNode;
 
 // ============================================================================
 // Input Types (유저 입력)
@@ -143,12 +157,21 @@ export interface WidgetCliErrorMessage {
 }
 
 /**
+ * CLI → Pylon: 이벤트 메시지 (v2)
+ */
+export interface WidgetCliEventMessage {
+  type: 'event';
+  data: unknown;
+}
+
+/**
  * CLI → Pylon 메시지 유니온
  */
 export type WidgetCliMessage =
   | WidgetCliRenderMessage
   | WidgetCliCompleteMessage
-  | WidgetCliErrorMessage;
+  | WidgetCliErrorMessage
+  | WidgetCliEventMessage;
 
 /**
  * Pylon → CLI: 인풋 메시지
@@ -166,11 +189,20 @@ export interface WidgetPylonCancelMessage {
 }
 
 /**
+ * Pylon → CLI: 이벤트 메시지 (v2)
+ */
+export interface WidgetPylonEventMessage {
+  type: 'event';
+  data: unknown;
+}
+
+/**
  * Pylon → CLI 메시지 유니온
  */
 export type WidgetPylonMessage =
   | WidgetPylonInputMessage
-  | WidgetPylonCancelMessage;
+  | WidgetPylonCancelMessage
+  | WidgetPylonEventMessage;
 
 // ============================================================================
 // Pylon ↔ Client Messages (WebSocket)
@@ -211,6 +243,15 @@ export interface WidgetCancelMessage {
   sessionId: string;
 }
 
+/**
+ * Pylon ↔ Client: 위젯 이벤트 메시지 (v2)
+ */
+export interface WidgetEventWsMessage {
+  type: 'widget_event';
+  sessionId: string;
+  data: unknown;
+}
+
 // ============================================================================
 // Type Guards
 // ============================================================================
@@ -245,4 +286,18 @@ export function isWidgetInputMessage(value: unknown): value is WidgetInputMessag
 
 export function isWidgetCancelMessage(value: unknown): value is WidgetCancelMessage {
   return isObject(value) && value.type === 'widget_cancel' && typeof value.sessionId === 'string';
+}
+
+// v2 Type Guards
+
+export function isScriptViewNode(node: ViewNode): node is ScriptViewNode {
+  return node.type === 'script';
+}
+
+export function isWidgetCliEventMessage(value: unknown): value is WidgetCliEventMessage {
+  return isObject(value) && value.type === 'event' && 'data' in value;
+}
+
+export function isWidgetEventWsMessage(value: unknown): value is WidgetEventWsMessage {
+  return isObject(value) && value.type === 'widget_event' && typeof value.sessionId === 'string';
 }
