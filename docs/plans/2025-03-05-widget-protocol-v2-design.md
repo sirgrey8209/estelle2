@@ -342,25 +342,33 @@ CLI는 초기 상태 + 게임 로직 JS를 전송, Client에서 렌더링과 애
 ## 구현 범위
 
 ### Core
-- [ ] 메시지 타입 정의 업데이트 (widget.ts)
+- [x] 메시지 타입 정의 업데이트 (widget.ts)
+  - [x] ScriptViewNode 추가
+  - [x] WidgetCliEventMessage, WidgetPylonEventMessage 추가
+  - [x] WidgetEventWsMessage 추가
+  - [x] Type guards 추가
 
 ### Pylon
-- [ ] WidgetManager 업데이트
-  - [ ] `event` 메시지 타입 지원
-  - [ ] 파일 경로 기반 코드 로딩
-  - [ ] 에셋 서빙
-- [ ] 로깅 시스템
+- [x] WidgetManager 업데이트
+  - [x] `event` 메시지 타입 지원
+  - [x] sendEvent 메서드 추가
+- [x] 에셋 서빙 (widget-asset-handler.ts)
+- [x] WebSocket 메시지 (widget_event 양방향)
+- [x] 로깅 시스템 (WidgetLogger)
 
 ### Client
-- [ ] WidgetRenderer 업데이트
-  - [ ] JS 코드 실행 (eval)
-  - [ ] WidgetAPI 주입
-  - [ ] cleanup 로직
-- [ ] 버블 UI
-  - [ ] X 버튼 (강제 종료)
-  - [ ] 세로 리사이즈
-- [ ] 플랫폼 추상화 API
+- [x] WidgetScriptRenderer 구현
+  - [x] JS 코드 실행 (new Function)
+  - [x] WidgetAPI 주입
+  - [x] cleanup 로직
+- [x] 버블 UI
+  - [x] X 버튼 (강제 종료)
+  - [x] 세로 리사이즈 (requestHeight)
+- [x] 플랫폼 추상화 API (bubble, input, output)
+- [x] widget_event 양방향 연동
 
 ### 블랙잭
-- [ ] Widget Protocol v2로 마이그레이션
-- [ ] 애니메이션 추가
+- [x] Widget Protocol v2로 마이그레이션
+- [x] 카드 딜링 애니메이션
+- [x] 카드 뒤집기 애니메이션
+- [x] 승패 결과 연출
