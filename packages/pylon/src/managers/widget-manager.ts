@@ -15,6 +15,7 @@ import {
   isWidgetCliRenderMessage,
   isWidgetCliCompleteMessage,
   isWidgetCliErrorMessage,
+  isWidgetCliEventMessage,
 } from '@estelle/core';
 
 // ============================================================================
@@ -49,6 +50,11 @@ export interface WidgetCompleteEvent {
 export interface WidgetErrorEvent {
   sessionId: string;
   error: string;
+}
+
+export interface WidgetEventEvent {
+  sessionId: string;
+  data: unknown;
 }
 
 // ============================================================================
@@ -150,6 +156,11 @@ export class WidgetManager extends EventEmitter {
           sessionId,
           error: message.message,
         } as WidgetErrorEvent);
+      } else if (isWidgetCliEventMessage(message)) {
+        this.emit('event', {
+          sessionId,
+          data: message.data,
+        } as WidgetEventEvent);
       }
     } catch (err) {
       // JSON 파싱 실패 - 일반 로그로 처리
@@ -167,6 +178,20 @@ export class WidgetManager extends EventEmitter {
     }
 
     const message = JSON.stringify({ type: 'input', data }) + '\n';
+    session.process.stdin?.write(message);
+    return true;
+  }
+
+  /**
+   * CLI로 이벤트 전송
+   */
+  sendEvent(sessionId: string, data: unknown): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.status !== 'running') {
+      return false;
+    }
+
+    const message = JSON.stringify({ type: 'event', data }) + '\n';
     session.process.stdin?.write(message);
     return true;
   }
