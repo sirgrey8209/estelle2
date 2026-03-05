@@ -72,11 +72,12 @@ export function startAgent(options: AgentOptions): WebSocket {
           return; // Not for us
         }
 
-        log(`[Agent] Received update command: branch=${updateMsg.branch}`);
+        log(`[Agent] Received update command: branch=${updateMsg.branch}, env=${updateMsg.environmentFile || 'none'}`);
 
         const result = await executeUpdate({
           branch: updateMsg.branch,
           repoRoot,
+          environmentFile: updateMsg.environmentFile,
           onLog: (message) => {
             const logMsg: LogMessage = { type: 'log', ip: myIp, message };
             safeSend(ws, logMsg);
