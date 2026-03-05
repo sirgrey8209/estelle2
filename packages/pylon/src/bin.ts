@@ -525,6 +525,9 @@ async function main(): Promise<void> {
     },
   });
 
+  // Pylon에 mcpServer 주입 (지연 바인딩)
+  deps.mcpServer = pylonMcpServer;
+
   // Graceful shutdown
   process.on('SIGINT', async () => {
     logger.log('Shutting down...');
