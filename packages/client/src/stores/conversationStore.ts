@@ -181,6 +181,9 @@ export interface ConversationStoreState {
   /** Widget 세션 초기화 */
   clearWidgetSession: (conversationId: number) => void;
 
+  /** Widget 이벤트 리스너 제거 */
+  removeWidgetEventListener: (sessionId: string) => void;
+
   // === Actions: 대화 관리 ===
 
   /** 대화 상태 삭제 */
@@ -488,11 +491,21 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const states = new Map(get().states);
     const state = getOrCreateState(states, conversationId);
 
+    // 이벤트 리스너 정리
+    const sessionId = state.widgetSession?.sessionId;
+    if (sessionId) {
+      widgetEventListeners.delete(sessionId);
+    }
+
     states.set(conversationId, {
       ...state,
       widgetSession: null,
     });
     set({ states });
+  },
+
+  removeWidgetEventListener: (sessionId) => {
+    widgetEventListeners.delete(sessionId);
   },
 
   // === Actions: 대화 관리 ===

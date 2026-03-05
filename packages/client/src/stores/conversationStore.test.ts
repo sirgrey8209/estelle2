@@ -881,3 +881,92 @@ describe('conversationStore - slashCommands 관리', () => {
     });
   });
 });
+
+// ============================================================================
+// Widget 세션 관리 테스트 (Task 11)
+// ============================================================================
+
+describe('conversationStore - widget session management', () => {
+  beforeEach(() => {
+    useConversationStore.getState().reset();
+  });
+
+  describe('clearWidgetSession with event listener cleanup', () => {
+    it('should_cleanup_event_listeners_when_clearing_widget_session', async () => {
+      // Task 11: clearWidgetSession 시 이벤트 리스너 정리
+      // Arrange
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      // 위젯 세션 설정
+      store.setWidgetSession(
+        1001,
+        'tool-1',
+        'session-1',
+        { type: 'text', content: 'Hello' },
+        []
+      );
+
+      // 이벤트 리스너 등록 (동적 import로 구현 확인)
+      const { subscribeWidgetEvent } = await import('./conversationStore');
+      const mockListener = vi.fn();
+      subscribeWidgetEvent('session-1', mockListener);
+
+      // Act
+      store.clearWidgetSession(1001);
+
+      // Assert: 위젯 세션 제거됨
+      expect(store.getState(1001)?.widgetSession).toBeNull();
+    });
+
+    it('should_not_throw_when_no_event_listeners_registered', () => {
+      // Task 11: 리스너가 없어도 에러 발생하지 않음
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      // 위젯 세션 설정 (이벤트 리스너 없음)
+      store.setWidgetSession(
+        1001,
+        'tool-1',
+        'session-1',
+        { type: 'text', content: 'Hello' },
+        []
+      );
+
+      // Act & Assert: 에러 없이 정상 실행
+      expect(() => store.clearWidgetSession(1001)).not.toThrow();
+      expect(store.getState(1001)?.widgetSession).toBeNull();
+    });
+
+    it('should_not_throw_when_no_widget_session', () => {
+      // Task 11: 위젯 세션이 없을 때도 에러 발생하지 않음
+      const store = useConversationStore.getState();
+      store.setCurrentConversation(1001);
+
+      // Act & Assert
+      expect(() => store.clearWidgetSession(1001)).not.toThrow();
+    });
+  });
+
+  describe('removeWidgetEventListener', () => {
+    it('should_remove_specific_session_listeners', async () => {
+      // Task 9: removeWidgetEventListener 메서드
+      const { subscribeWidgetEvent, emitWidgetEvent } = await import('./conversationStore');
+      const store = useConversationStore.getState();
+
+      const mockListener = vi.fn();
+      subscribeWidgetEvent('session-1', mockListener);
+
+      // 이벤트 발생 확인
+      emitWidgetEvent('session-1', { test: 'data' });
+      expect(mockListener).toHaveBeenCalledTimes(1);
+
+      // Act: 리스너 제거
+      store.removeWidgetEventListener('session-1');
+
+      // Assert: 이벤트가 더 이상 전달되지 않음
+      emitWidgetEvent('session-1', { test: 'data2' });
+      expect(mockListener).toHaveBeenCalledTimes(1); // 여전히 1회
+    });
+  });
+});

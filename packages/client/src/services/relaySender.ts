@@ -554,3 +554,26 @@ export function sendWidgetEvent(
     to: [pylonId],
   });
 }
+
+/**
+ * Widget 세션 유효성 검사 요청
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ *
+ * @description
+ * 대화 선택 시 해당 대화에 위젯 세션이 있으면 프로세스가 살아있는지 확인합니다.
+ * Pylon은 widget_check_result로 응답합니다.
+ */
+export function sendWidgetCheck(
+  conversationId: number,
+  sessionId: string
+): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: 'widget_check',
+    payload: {
+      conversationId,
+      sessionId,
+    },
+    to: [pylonId],
+  });
+}

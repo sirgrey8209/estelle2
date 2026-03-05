@@ -15,6 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
+import { sendWidgetCheck } from '../services/relaySender';
 // import { debugLog } from '../stores/debugStore';
 
 /**
@@ -240,6 +241,14 @@ export function routeMessage(message: RelayMessage): void {
           }
 
           // slashCommands는 / 입력 시 쿼리로 가져오므로 여기서는 처리하지 않음
+
+          // 대화 선택 시 위젯 세션이 있으면 프로세스 유효성 검사 요청
+          // (Task 10: widget_check 전송)
+          const convState = convStore.getState(targetConversationId);
+          const widgetSession = convState?.widgetSession;
+          if (widgetSession && widgetSession.sessionId) {
+            sendWidgetCheck(targetConversationId, widgetSession.sessionId);
+          }
         }
       }
       break;
@@ -346,43 +355,50 @@ export function routeMessage(message: RelayMessage): void {
 
     // === Widget 메시지 ===
     case 'widget_render': {
-      // RelayMessage 형식: { type, payload: { toolUseId, sessionId, view, inputs, conversationId? } }
+      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId, view, inputs? } }
+      // conversationId는 필수 (Pylon에서 세션 관리)
       const widgetPayload = payload as {
-        toolUseId?: string;
-        sessionId?: string;
-        view?: ViewNode;
+        conversationId: number;
+        toolUseId: string;
+        sessionId: string;
+        view: ViewNode;
         inputs?: InputNode[];
-        conversationId?: number;
       };
-      const { toolUseId, sessionId, view, inputs } = widgetPayload;
-      const conversationId = widgetPayload.conversationId
-        ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
+      const { conversationId, toolUseId, sessionId, view, inputs } = widgetPayload;
 
-      if (conversationId && toolUseId && sessionId && view) {
-        useConversationStore.getState().setWidgetSession(
-          conversationId,
-          toolUseId,
-          sessionId,
-          view,
-          inputs ?? []  // v2: inputs is optional for ScriptViewNode
-        );
+      // conversationId가 없으면 무시 (필수 필드)
+      if (!conversationId || !toolUseId || !sessionId || !view) {
+        console.warn('[MessageRouter] widget_render missing required fields');
+        break;
       }
+
+      useConversationStore.getState().setWidgetSession(
+        conversationId,
+        toolUseId,
+        sessionId,
+        view,
+        inputs ?? []  // v2: inputs is optional for ScriptViewNode
+      );
       break;
     }
 
     case 'widget_close': {
-      // RelayMessage 형식: { type, payload: { toolUseId, sessionId, conversationId? } }
+      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId } }
+      // conversationId는 필수 (Pylon에서 세션 관리)
       const closePayload = payload as {
+        conversationId: number;
         toolUseId?: string;
         sessionId?: string;
-        conversationId?: number;
       };
-      const conversationId = closePayload.conversationId
-        ?? useWorkspaceStore.getState().selectedConversation?.conversationId;
+      const { conversationId } = closePayload;
 
-      if (conversationId) {
-        useConversationStore.getState().clearWidgetSession(conversationId);
+      // conversationId가 없으면 무시 (필수 필드)
+      if (!conversationId) {
+        console.warn('[MessageRouter] widget_close missing conversationId');
+        break;
       }
+
+      useConversationStore.getState().clearWidgetSession(conversationId);
       break;
     }
 
@@ -399,6 +415,27 @@ export function routeMessage(message: RelayMessage): void {
       if (sessionId && data !== undefined) {
         // sessionId에 해당하는 위젯에 이벤트 전달
         emitWidgetEvent(sessionId, data);
+      }
+      break;
+    }
+
+    case 'widget_check_result': {
+      // RelayMessage 형식: { type, payload: { conversationId, sessionId, valid } }
+      // Pylon이 widget_check 요청에 대해 프로세스 상태를 응답
+      const { conversationId, sessionId, valid } = payload as {
+        conversationId: number;
+        sessionId: string;
+        valid: boolean;
+      };
+
+      // valid=false면 위젯 세션 정리
+      if (!valid && conversationId) {
+        const convStore = useConversationStore.getState();
+        convStore.clearWidgetSession(conversationId);
+        // 이벤트 리스너도 정리
+        if (sessionId) {
+          convStore.removeWidgetEventListener(sessionId);
+        }
       }
       break;
     }

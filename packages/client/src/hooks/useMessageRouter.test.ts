@@ -40,6 +40,9 @@ const mockConversationStore = {
   getState: vi.fn(() => ({ messages: [] })),
   deleteConversation: vi.fn(),
   setSlashCommands: vi.fn(),
+  setWidgetSession: vi.fn(),
+  clearWidgetSession: vi.fn(),
+  removeWidgetEventListener: vi.fn(),
 };
 
 // vi.mock은 호이스팅되므로 순서 주의
@@ -706,6 +709,206 @@ describe('routeMessage', () => {
 
       // Assert
       expect(mockConversationStore.setSlashCommands).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Widget 세션 관리 테스트 (Task 8-11)
+  // ==========================================================================
+
+  describe('widget session management', () => {
+    describe('widget_render', () => {
+      it('should_require_conversationId_in_widget_render', () => {
+        // Task 8: conversationId 필수
+        // Arrange: conversationId 없이 widget_render 수신
+
+        // Act
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+            view: { type: 'text', content: 'Hello' },
+            inputs: [],
+          },
+        });
+
+        // Assert: conversationId 없으면 setWidgetSession 호출되지 않음
+        expect(mockConversationStore.setWidgetSession).not.toHaveBeenCalled();
+      });
+
+      it('should_call_setWidgetSession_when_all_required_fields_present', () => {
+        // Task 8: 모든 필수 필드가 있으면 정상 처리
+        // Arrange
+        const view = { type: 'text', content: 'Hello' };
+        const inputs = [{ id: 'input-1', type: 'text' }];
+
+        // Act
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+            view,
+            inputs,
+          },
+        });
+
+        // Assert
+        expect(mockConversationStore.setWidgetSession).toHaveBeenCalledWith(
+          CONVERSATION_ID,
+          'tool-1',
+          'session-1',
+          view,
+          inputs
+        );
+      });
+
+      it('should_not_fallback_to_selectedConversation', () => {
+        // Task 8: fallback 제거 검증
+        // Arrange: selectedConversation 설정해도 무시됨
+        mockWorkspaceStore.selectedConversation = { conversationId: CONVERSATION_ID };
+
+        // Act: conversationId 없이 전송
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+            view: { type: 'text', content: 'Hello' },
+          },
+        });
+
+        // Assert: fallback 사용하지 않음
+        expect(mockConversationStore.setWidgetSession).not.toHaveBeenCalled();
+      });
+
+      it('should_ignore_widget_render_without_toolUseId', () => {
+        // Task 8: toolUseId 필수
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            sessionId: 'session-1',
+            view: { type: 'text', content: 'Hello' },
+          },
+        });
+
+        expect(mockConversationStore.setWidgetSession).not.toHaveBeenCalled();
+      });
+
+      it('should_ignore_widget_render_without_sessionId', () => {
+        // Task 8: sessionId 필수
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            toolUseId: 'tool-1',
+            view: { type: 'text', content: 'Hello' },
+          },
+        });
+
+        expect(mockConversationStore.setWidgetSession).not.toHaveBeenCalled();
+      });
+
+      it('should_ignore_widget_render_without_view', () => {
+        // Task 8: view 필수
+        routeMessage({
+          type: 'widget_render',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+          },
+        });
+
+        expect(mockConversationStore.setWidgetSession).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('widget_close', () => {
+      it('should_require_conversationId_in_widget_close', () => {
+        // Task 8: widget_close에서도 conversationId 필수
+        // Arrange: selectedConversation 설정해도 무시
+        mockWorkspaceStore.selectedConversation = { conversationId: CONVERSATION_ID };
+
+        // Act
+        routeMessage({
+          type: 'widget_close',
+          payload: {
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+          },
+        });
+
+        // Assert: fallback 사용하지 않음
+        expect(mockConversationStore.clearWidgetSession).not.toHaveBeenCalled();
+      });
+
+      it('should_call_clearWidgetSession_when_conversationId_present', () => {
+        // Act
+        routeMessage({
+          type: 'widget_close',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            toolUseId: 'tool-1',
+            sessionId: 'session-1',
+          },
+        });
+
+        // Assert
+        expect(mockConversationStore.clearWidgetSession).toHaveBeenCalledWith(CONVERSATION_ID);
+      });
+    });
+
+    describe('widget_check_result', () => {
+      it('should_clear_widget_session_when_invalid', () => {
+        // Task 9: widget_check_result 핸들러
+        // Arrange: invalid = true면 위젯 세션 정리
+
+        // Act
+        routeMessage({
+          type: 'widget_check_result',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            sessionId: 'session-1',
+            valid: false,
+          },
+        });
+
+        // Assert
+        expect(mockConversationStore.clearWidgetSession).toHaveBeenCalledWith(CONVERSATION_ID);
+        expect(mockConversationStore.removeWidgetEventListener).toHaveBeenCalledWith('session-1');
+      });
+
+      it('should_not_clear_widget_session_when_valid', () => {
+        // Task 9: valid=true면 아무것도 하지 않음
+        routeMessage({
+          type: 'widget_check_result',
+          payload: {
+            conversationId: CONVERSATION_ID,
+            sessionId: 'session-1',
+            valid: true,
+          },
+        });
+
+        expect(mockConversationStore.clearWidgetSession).not.toHaveBeenCalled();
+        expect(mockConversationStore.removeWidgetEventListener).not.toHaveBeenCalled();
+      });
+
+      it('should_not_clear_when_conversationId_missing', () => {
+        // Task 9: conversationId 없으면 무시
+        routeMessage({
+          type: 'widget_check_result',
+          payload: {
+            sessionId: 'session-1',
+            valid: false,
+          },
+        });
+
+        expect(mockConversationStore.clearWidgetSession).not.toHaveBeenCalled();
+      });
     });
   });
 });
