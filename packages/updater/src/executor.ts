@@ -2,15 +2,14 @@
 /**
  * Git pull + build + PM2 restart executor
  *
- * Simple update flow:
+ * Update flow:
  * 1. git fetch + checkout + pull
- * 2. pnpm build
- * 3. Copy dist to release/
- * 4. pm2 restart (Relay + Pylon for Master, Pylon only for Agent)
- *
- * Cross-platform support for logging:
- * - Linux/Mac: spawn with detached + stdio file descriptors (native support)
- * - Windows: spawn wrapper script that handles redirection (Node.js limitation)
+ * 2. pnpm install
+ * 3. pnpm build
+ * 4. Copy dist to release/
+ * 5. Read version + environment config
+ * 6. PM2 delete/start via ecosystem file
+ * 7. pm2 save
  */
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -32,6 +31,14 @@ export interface ExecuteResult {
   success: boolean;
   version?: string;
   error?: string;
+}
+
+/** Expand ~ to home directory */
+function expandPath(p: string): string {
+  if (p.startsWith('~/')) {
+    return path.join(process.env.HOME || process.env.USERPROFILE || '', p.slice(2));
+  }
+  return p;
 }
 
 /** Local log function - writes to both callback and local file */
@@ -93,7 +100,7 @@ function runCommand(
 }
 
 export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteResult> {
-  const { branch, repoRoot, onLog, isMaster = false } = options;
+  const { branch, repoRoot, onLog, isMaster = false, environmentFile } = options;
   const { log, close } = createLogger(repoRoot, onLog);
 
   try {
@@ -101,7 +108,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     log(`=== Update started (${role}) ===`);
 
     // Step 1: git fetch
-    log(`[1/7] git fetch origin...`);
+    log(`[1/8] git fetch origin...`);
     const fetchResult = await runCommand('git', ['fetch', 'origin'], repoRoot, log);
     if (!fetchResult.success) {
       log(`✗ git fetch failed: ${fetchResult.error}`);
@@ -109,7 +116,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 2: git checkout
-    log(`[2/7] git checkout ${branch}...`);
+    log(`[2/8] git checkout ${branch}...`);
     const checkoutResult = await runCommand('git', ['checkout', branch], repoRoot, log);
     if (!checkoutResult.success) {
       log(`✗ git checkout failed: ${checkoutResult.error}`);
@@ -117,7 +124,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 3: git pull
-    log(`[3/7] git pull origin ${branch}...`);
+    log(`[3/8] git pull origin ${branch}...`);
     const pullResult = await runCommand('git', ['pull', 'origin', branch], repoRoot, log);
     if (!pullResult.success) {
       log(`✗ git pull failed: ${pullResult.error}`);
@@ -125,7 +132,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 4: pnpm install (for new dependencies)
-    log(`[4/7] pnpm install...`);
+    log(`[4/8] pnpm install...`);
     const installResult = await runCommand('pnpm', ['install'], repoRoot, log);
     if (!installResult.success) {
       log(`✗ pnpm install failed: ${installResult.error}`);
@@ -133,7 +140,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 5: pnpm build
-    log(`[5/7] pnpm build...`);
+    log(`[5/8] pnpm build...`);
     const buildResult = await runCommand('pnpm', ['build'], repoRoot, log);
     if (!buildResult.success) {
       log(`✗ pnpm build failed: ${buildResult.error}`);
@@ -141,7 +148,7 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     }
 
     // Step 6: Copy build artifacts to release/
-    log(`[6/7] Copying build artifacts to release/...`);
+    log(`[6/8] Copying build artifacts to release/...`);
     const releaseDir = path.join(repoRoot, 'release');
     const pkgDir = path.join(repoRoot, 'packages');
 
@@ -151,13 +158,6 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
     fs.mkdirSync(coreDistDest, { recursive: true });
     fs.cpSync(coreDistSrc, coreDistDest, { recursive: true });
     log(`  core/dist → release/core/dist`);
-
-    // Also update pylon's node_modules copy of @estelle/core
-    const pylonCoreDest = path.join(releaseDir, 'pylon', 'node_modules', '@estelle', 'core', 'dist');
-    if (fs.existsSync(path.dirname(pylonCoreDest))) {
-      fs.cpSync(coreDistSrc, pylonCoreDest, { recursive: true });
-      log(`  core/dist → release/pylon/node_modules/@estelle/core/dist`);
-    }
 
     // Copy updater/dist (required by pylon via workspace symlinks)
     const updaterDistSrc = path.join(pkgDir, 'updater', 'dist');
@@ -189,35 +189,102 @@ export async function executeUpdate(options: ExecuteOptions): Promise<ExecuteRes
       log(`  relay/public → release/relay/public`);
     }
 
-    // Step 7: pm2 restart
-    log(`[7/7] pm2 restart...`);
+    // Read version from config/version.json
+    const versionPath = path.join(repoRoot, 'config', 'version.json');
+    let version = 'dev';
+    try {
+      const versionJson = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
+      version = versionJson.version;
+      log(`  Version: ${version}`);
+    } catch {
+      log('  Warning: could not read config/version.json, using "dev"');
+    }
 
-    if (isMaster) {
-      // Master: restart both Relay and Pylon
-      log(`Restarting estelle-relay...`);
-      const relayResult = await runCommand('pm2', ['restart', 'estelle-relay'], repoRoot, log);
-      if (!relayResult.success) {
-        log(`⚠ estelle-relay restart failed (may not exist): ${relayResult.error}`);
-      }
-
-      log(`Restarting estelle-pylon...`);
-      const pylonResult = await runCommand('pm2', ['restart', 'estelle-pylon'], repoRoot, log);
-      if (!pylonResult.success) {
-        log(`✗ estelle-pylon restart failed: ${pylonResult.error}`);
-        return { success: false, error: `pm2 restart estelle-pylon failed: ${pylonResult.error}` };
-      }
-    } else {
-      // Agent: restart Pylon only
-      log(`Restarting estelle-pylon...`);
-      const pylonResult = await runCommand('pm2', ['restart', 'estelle-pylon'], repoRoot, log);
-      if (!pylonResult.success) {
-        log(`✗ estelle-pylon restart failed: ${pylonResult.error}`);
-        return { success: false, error: `pm2 restart estelle-pylon failed: ${pylonResult.error}` };
+    // Load environment config
+    let envConfig: Record<string, any> | null = null;
+    if (environmentFile) {
+      const envPath = path.join(repoRoot, 'config', environmentFile);
+      try {
+        envConfig = JSON.parse(fs.readFileSync(envPath, 'utf-8'));
+        log(`  Environment: ${environmentFile}`);
+      } catch {
+        log(`  Warning: could not read ${environmentFile}`);
       }
     }
 
-    log(`✓ Update complete`);
-    return { success: true };
+    // Step 7: PM2 services
+    log(`[7/8] PM2 services...`);
+
+    // Build ecosystem config
+    const apps: Array<Record<string, unknown>> = [];
+
+    const pylonPm2Name = envConfig?.pylon?.pm2Name || 'estelle-pylon';
+    const pylonEnv: Record<string, string> = {
+      ESTELLE_VERSION: version,
+    };
+
+    if (envConfig) {
+      pylonEnv.ESTELLE_ENV_CONFIG = JSON.stringify({
+        envId: envConfig.envId,
+        pylon: {
+          pylonIndex: (envConfig.pylon as any).pylonIndex,
+          relayUrl: (envConfig.pylon as any).relayUrl,
+          configDir: expandPath((envConfig.pylon as any).configDir),
+          credentialsBackupDir: expandPath((envConfig.pylon as any).credentialsBackupDir),
+          dataDir: path.resolve(repoRoot, (envConfig.pylon as any).dataDir),
+          mcpPort: (envConfig.pylon as any).mcpPort,
+          defaultWorkingDir: expandPath((envConfig.pylon as any).defaultWorkingDir),
+        },
+      });
+    }
+
+    apps.push({
+      name: pylonPm2Name,
+      script: 'dist/bin.js',
+      cwd: path.join(repoRoot, 'release', 'pylon'),
+      env: pylonEnv,
+    });
+
+    if (isMaster && envConfig?.relay) {
+      const relayPm2Name = (envConfig.relay as any).pm2Name;
+      if (relayPm2Name) {
+        const relayPort = (envConfig.relay as any).port || 8080;
+        apps.unshift({
+          name: relayPm2Name,
+          script: 'dist/bin.js',
+          cwd: path.join(repoRoot, 'release', 'relay'),
+          env: {
+            PORT: String(relayPort),
+            STATIC_DIR: path.join(repoRoot, 'release', 'relay', 'public'),
+          },
+        });
+      }
+    }
+
+    // Delete existing processes (ignore failures - may not exist)
+    for (const app of apps) {
+      log(`  Stopping ${app.name}...`);
+      await runCommand('pm2', ['delete', app.name as string], repoRoot, log);
+    }
+
+    // Write ecosystem file and start
+    const ecosystemPath = path.join(repoRoot, 'release', 'ecosystem.config.cjs');
+    const ecosystemContent = `module.exports = ${JSON.stringify({ apps }, null, 2)};`;
+    fs.writeFileSync(ecosystemPath, ecosystemContent);
+    log(`  Starting services via ecosystem config...`);
+
+    const startResult = await runCommand('pm2', ['start', ecosystemPath], repoRoot, log);
+    if (!startResult.success) {
+      log(`✗ pm2 start failed: ${startResult.error}`);
+      return { success: false, error: `pm2 start failed: ${startResult.error}` };
+    }
+
+    // Step 8: pm2 save
+    log(`[8/8] pm2 save...`);
+    await runCommand('pm2', ['save'], repoRoot, log);
+
+    log(`✓ Update complete (${version})`);
+    return { success: true, version };
   } finally {
     close();
   }
