@@ -994,8 +994,8 @@ export class Pylon {
     if (sessionId.startsWith('inline-')) {
       // cancel 이벤트면 pendingWidget 종료
       if (data.type === 'cancel') {
-        this.log(`[Widget] Inline widget cancel: ${sessionId}`);
-        this.deps.mcpServer?.cancelWidgetBySessionId(sessionId, 'User cancelled');
+        const cancelled = this.deps.mcpServer?.cancelWidgetBySessionId(sessionId, 'User cancelled');
+        this.log(`[Widget] Inline widget cancel: ${sessionId}, result=${cancelled}`);
       }
       // inline 위젯은 CLI가 없으므로 다른 이벤트는 무시
       return;
