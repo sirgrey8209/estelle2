@@ -520,7 +520,7 @@ async function main(): Promise<void> {
       });
     },
     onWidgetComplete: (conversationId, toolUseId, sessionId, view, result) => {
-      pylon.sendWidgetComplete(conversationId, sessionId, toolUseId, view, result);
+      pylon.sendWidgetComplete(conversationId, toolUseId, sessionId, view, result);
     },
     onWidgetEvent: (sessionId, data) => {
       deps.relayClient.send({
