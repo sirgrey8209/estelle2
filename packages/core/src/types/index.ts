@@ -52,3 +52,10 @@ export * from './share.js';
 
 // widget.js - Widget Protocol 타입
 export * from './widget.js';
+
+// agent.js - 에이전트 타입
+export {
+  type AgentType,
+  DEFAULT_AGENT_TYPE,
+  isAgentType,
+} from './agent.js';

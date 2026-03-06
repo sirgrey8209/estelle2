@@ -9,7 +9,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@quiverai/sdk": "^1.0.0"
+    "@quiverai/sdk": "^0.4.1"
   },
   "devDependencies": {
     "typescript": "^5.3.0",
