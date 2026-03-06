@@ -1253,7 +1253,7 @@ describe('AgentManager', () => {
 
       expect(events).toContainEqual({
         sessionId: 'session-1',
-        event: { type: 'error', error: 'Agent adapter not configured' },
+        event: { type: 'error', error: 'claude adapter not configured' },
       });
     });
   });
