@@ -37,7 +37,7 @@
  * ```
  */
 
-import type { PermissionModeValue } from '@estelle/core';
+import type { AgentType, PermissionModeValue } from '@estelle/core';
 import { PermissionMode } from '@estelle/core';
 import {
   checkPermission,
@@ -250,6 +250,9 @@ export interface SendMessageOptions {
 
   /** 플러그인 설정 */
   plugins?: Array<{ type: 'local'; path: string }>;
+
+  /** 에이전트 타입 (기본값: 'claude') */
+  agentType?: AgentType;
 }
 
 /**
@@ -453,6 +456,12 @@ export interface AgentManagerOptions {
   /** Agent 어댑터 (테스트용, 미지정 시 기본 SDK 사용) */
   adapter?: AgentAdapter;
 
+  /** Claude SDK 어댑터 */
+  claudeAdapter?: AgentAdapter;
+
+  /** Codex SDK 어댑터 */
+  codexAdapter?: AgentAdapter;
+
   /** SDK raw 메시지 로거 (선택) */
   onRawMessage?: RawMessageLogger;
 
@@ -507,8 +516,14 @@ export class AgentManager {
   /** MCP 설정 로드 함수 */
   private readonly loadMcpConfig?: LoadMcpConfigFn;
 
-  /** Agent 어댑터 */
+  /** Agent 어댑터 (하위 호환용) */
   private readonly adapter?: AgentAdapter;
+
+  /** Claude SDK 어댑터 */
+  private readonly claudeAdapter?: AgentAdapter;
+
+  /** Codex SDK 어댑터 */
+  private readonly codexAdapter?: AgentAdapter;
 
   /** SDK raw 메시지 로거 */
   private readonly onRawMessage?: RawMessageLogger;
@@ -540,6 +555,8 @@ export class AgentManager {
     this.getPermissionMode = options.getPermissionMode;
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
+    this.claudeAdapter = options.claudeAdapter;
+    this.codexAdapter = options.codexAdapter;
     this.onRawMessage = options.onRawMessage;
     this.agentConfigDir = options.agentConfigDir;
   }
@@ -603,6 +620,7 @@ export class AgentManager {
           systemPrompt: options.systemPrompt,
           systemReminder: options.systemReminder,
           plugins: options.plugins,
+          agentType: options.agentType,
         },
         message
       );
@@ -935,6 +953,7 @@ export class AgentManager {
       systemPrompt?: string | SystemPromptPreset;
       systemReminder?: string;
       plugins?: Array<{ type: 'local'; path: string }>;
+      agentType?: AgentType;
     },
     message: string
   ): Promise<void> {
@@ -1017,17 +1036,23 @@ export class AgentManager {
       }
     }
 
-    // 어댑터가 없으면 실제 SDK 호출 불가 (테스트용)
-    if (!this.adapter) {
+    // 어댑터 선택
+    const agentType = sessionInfo.agentType || 'claude';
+    // 새 어댑터가 있으면 사용, 없으면 기존 adapter 사용 (하위 호환)
+    const adapter = agentType === 'codex'
+      ? this.codexAdapter
+      : (this.claudeAdapter || this.adapter);
+
+    if (!adapter) {
       this.emitEvent(sessionId, {
         type: 'error',
-        error: 'Agent adapter not configured',
+        error: `${agentType} adapter not configured`,
       });
       return;
     }
 
     // 쿼리 실행
-    const query = this.adapter.query(queryOptions);
+    const query = adapter.query(queryOptions);
 
     for await (const msg of query) {
       this.handleMessage(sessionId, session, msg);
