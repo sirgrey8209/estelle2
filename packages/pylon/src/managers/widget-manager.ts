@@ -301,6 +301,62 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
+   * 핸드셰이크 시작 (소유권 할당 전 단계)
+   */
+  startHandshake(
+    sessionId: string,
+    targetClientId: number,
+    timeout: number,
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        resolve(false);
+        return;
+      }
+
+      session.status = 'handshaking';
+
+      // handler를 hoisting하기 위해 let으로 선언
+      let handler: (ack: { sessionId: string; visible: boolean; clientId: number }) => void;
+
+      const timeoutId = setTimeout(() => {
+        if (session.status === 'handshaking') {
+          session.status = 'pending';
+          this.off('handshake_ack', handler);  // 타임아웃 시에도 리스너 제거
+          resolve(false);
+        }
+      }, timeout);
+
+      // 핸드셰이크 응답 대기
+      handler = (ack: { sessionId: string; visible: boolean; clientId: number }) => {
+        if (ack.sessionId === sessionId && ack.clientId === targetClientId) {
+          clearTimeout(timeoutId);
+          this.off('handshake_ack', handler);
+
+          if (ack.visible) {
+            session.status = 'running';
+            session.ownerClientId = targetClientId;
+            resolve(true);
+          } else {
+            session.status = 'pending';
+            resolve(false);
+          }
+        }
+      };
+
+      this.on('handshake_ack', handler);
+    });
+  }
+
+  /**
+   * 핸드셰이크 응답 처리
+   */
+  handleHandshakeAck(sessionId: string, visible: boolean, clientId: number): void {
+    this.emit('handshake_ack', { sessionId, visible, clientId });
+  }
+
+  /**
    * 모든 세션 정리
    */
   cleanup(): void {
