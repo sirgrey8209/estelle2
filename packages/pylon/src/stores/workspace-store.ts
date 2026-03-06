@@ -125,6 +125,9 @@ export interface Conversation {
 
   /** 커스텀 시스템 프롬프트 (선택, 파일 내용 또는 직접 입력) */
   customSystemPrompt?: string;
+
+  /** 마지막 활성 클라이언트 ID (Widget의 DeviceId) */
+  lastActiveClientId?: number;
 }
 
 /**
@@ -888,5 +891,45 @@ export class WorkspaceStore {
     }
 
     return result;
+  }
+
+  // ============================================================================
+  // Last Active Client 관리
+  // ============================================================================
+
+  /**
+   * 대화의 마지막 활성 클라이언트 업데이트
+   *
+   * @param conversationId 대화 ConversationId
+   * @param clientId 클라이언트 ID (Widget의 DeviceId)
+   */
+  updateLastActiveClient(conversationId: ConversationId, clientId: number): void {
+    for (const workspace of this._workspaces) {
+      const conversation = workspace.conversations.find(
+        (c) => c.conversationId === conversationId
+      );
+      if (conversation) {
+        conversation.lastActiveClientId = clientId;
+        return;
+      }
+    }
+  }
+
+  /**
+   * 대화의 마지막 활성 클라이언트 조회
+   *
+   * @param conversationId 대화 ConversationId
+   * @returns 마지막 활성 클라이언트 ID (없으면 undefined)
+   */
+  getLastActiveClient(conversationId: ConversationId): number | undefined {
+    for (const workspace of this._workspaces) {
+      const conversation = workspace.conversations.find(
+        (c) => c.conversationId === conversationId
+      );
+      if (conversation) {
+        return conversation.lastActiveClientId;
+      }
+    }
+    return undefined;
   }
 }
