@@ -6,6 +6,7 @@ import { Collapsible } from '../common/Collapsible';
 import { WidgetRenderer } from '../widget';
 import { cn } from '../../lib/utils';
 import type { ViewNode } from '@estelle/core';
+import { FilePathLink } from './FilePathLink';
 
 /**
  * 파일 경로에서 파일명만 추출
@@ -54,6 +55,8 @@ interface ToolCardProps {
   onWidgetCancel?: () => void;
   /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
   widgetAssets?: Record<string, string>;
+  /** 파일 경로 클릭 핸들러 */
+  onFilePathClick?: (path: string) => void;
 }
 
 // McpFileInfo를 export
@@ -153,23 +156,14 @@ function renderMcpTool(
 
       {/* send_file 성공 시: 파일 카드 (한 줄) */}
       {mcpToolName === 'send_file' && fileInfo && (
-        <button
-          onClick={() => onFileClick?.(fileInfo!)}
-          className="w-full flex items-center gap-1.5 px-2 py-1 border-t border-border/50 hover:bg-accent/30 transition-colors"
-        >
-          <span className="text-sm">{getFileTypeIcon(fileInfo.mimeType, fileInfo.filename)}</span>
-          <span className="text-xs truncate flex-1 text-left">
-            {fileInfo.description || fileInfo.filename}
-          </span>
-          {fileInfo.filename && fileInfo.description && (
-            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
-              {fileInfo.filename}
-            </span>
-          )}
-          <span className="text-[10px] text-muted-foreground/60 shrink-0">
-            {formatSize(fileInfo.size)}
-          </span>
-        </button>
+        <div className="px-2 py-1 border-t border-border/50">
+          <FilePathLink
+            path={fileInfo.path}
+            description={fileInfo.description ?? undefined}
+            size={fileInfo.size}
+            onClick={() => onFileClick?.(fileInfo!)}
+          />
+        </div>
       )}
 
       {/* 확장 시: output JSON raw */}
@@ -216,6 +210,7 @@ export function ToolCard({
   onWidgetEvent,
   onWidgetCancel,
   widgetAssets,
+  onFilePathClick,
 }: ToolCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedChildId, setExpandedChildId] = useState<string | null>(null);
@@ -759,7 +754,54 @@ export function ToolCard({
   if (toolName === 'Read') {
     const filePath = (toolInput?.file_path as string) || '';
     const fileName = extractFileName(filePath);
-    return renderSpecialTool('Read', fileName, filePath);
+
+    return (
+      <div
+        className={cn(
+          'my-0.5 ml-2 rounded border border-l-2 bg-card overflow-hidden max-w-[400px]',
+          borderColor
+        )}
+        style={{ borderLeftColor: isComplete ? (success ? '#22c55e' : '#ef4444') : '#eab308' }}
+      >
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
+        >
+          <span className={statusColor}>{statusIcon}</span>
+          <span className="ml-1.5 text-sm font-medium">Read</span>
+          <span className="flex-1 ml-1.5 text-xs text-muted-foreground truncate text-left">
+            {fileName}
+          </span>
+          {isExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </button>
+
+        <Collapsible expanded={isExpanded}>
+          <div className="border-t border-border">
+            <div className="px-2 py-1">
+              <FilePathLink
+                path={filePath}
+                onClick={() => onFilePathClick?.(filePath)}
+              />
+            </div>
+            {isComplete && cleanedOutput !== undefined && (
+              <div className="bg-muted p-2 rounded-b">
+                <p className="text-xs opacity-80 select-text whitespace-pre-wrap break-all">
+                  {typeof cleanedOutput === 'string'
+                    ? cleanedOutput.length > 500
+                      ? cleanedOutput.substring(0, 500) + '...'
+                      : cleanedOutput
+                    : JSON.stringify(cleanedOutput, null, 2)}
+                </p>
+              </div>
+            )}
+          </div>
+        </Collapsible>
+      </div>
+    );
   }
 
   if (toolName === 'Write') {
@@ -793,9 +835,12 @@ export function ToolCard({
 
         <Collapsible expanded={isExpanded}>
           <div className="border-t border-border">
-            <p className="px-2 py-1 text-xs text-muted-foreground/50 truncate select-text">
-              {filePath}
-            </p>
+            <div className="px-2 py-1">
+              <FilePathLink
+                path={filePath}
+                onClick={() => onFilePathClick?.(filePath)}
+              />
+            </div>
             {content && (
               <div className="bg-muted p-2 rounded-b">
                 <p className="text-xs opacity-80 select-text whitespace-pre-wrap">
@@ -841,9 +886,12 @@ export function ToolCard({
 
         <Collapsible expanded={isExpanded}>
           <div className="border-t border-border">
-            <p className="px-2 py-1 text-xs text-muted-foreground/50 truncate select-text">
-              {filePath}
-            </p>
+            <div className="px-2 py-1">
+              <FilePathLink
+                path={filePath}
+                onClick={() => onFilePathClick?.(filePath)}
+              />
+            </div>
             <div className="bg-muted p-2 rounded-b">
               {(() => {
                 const diff = diffLines(oldString, newString);
