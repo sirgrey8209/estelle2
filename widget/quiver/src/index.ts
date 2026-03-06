@@ -10,6 +10,8 @@ const client = new QuiverAI({
   bearerAuth: process.env.QUIVERAI_API_KEY,
 });
 
+let lastSavedPath: string | null = null;
+
 // ============================================================================
 // HTML/JS Templates
 // ============================================================================
@@ -184,7 +186,12 @@ rl.on('line', (line) => {
     if (msg.type === 'event') {
       handleClientEvent(msg.data);
     } else if ((msg as { type: string }).type === 'cancel') {
-      process.exit(0);
+      // 정상 종료 시 결과 반환
+      complete({
+        success: true,
+        path: lastSavedPath,
+        message: lastSavedPath ? `SVG saved to ${lastSavedPath}` : 'No SVG generated'
+      });
     }
   } catch {
     // JSON 파싱 실패 무시
@@ -240,6 +247,9 @@ async function generateSvg(prompt: string): Promise<void> {
     const filename = `quiver-${Date.now()}.svg`;
     const filepath = path.join(uploadsDir, filename);
     fs.writeFileSync(filepath, finalSvg);
+
+    // filepath를 lastSavedPath에 저장
+    lastSavedPath = filepath;
 
     sendEvent({ type: 'svg', phase: 'done', data: finalSvg, path: filepath });
   } catch (err) {
