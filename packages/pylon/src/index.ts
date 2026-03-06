@@ -116,7 +116,7 @@ export {
   type PermissionDenyResult,
   type PermissionAskResult,
   type AutoDenyPattern,
-} from './claude/index.js';
+} from './agent/index.js';
 
 // persistence - 영속성 모듈
 export {

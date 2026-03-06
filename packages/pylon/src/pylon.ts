@@ -44,7 +44,7 @@ import { decodeConversationIdFull, isWidgetCheckPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
-import type { ClaudeManagerEvent } from './claude/claude-manager.js';
+import type { ClaudeManagerEvent } from './agent/claude-manager.js';
 import type { PersistenceAdapter, PersistedAccount } from './persistence/types.js';
 import { generateThumbnail } from './utils/thumbnail.js';
 import {
