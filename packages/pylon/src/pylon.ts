@@ -223,6 +223,8 @@ export interface BugReportWriter {
  */
 export interface WidgetSessionInfo {
   sessionId: string;
+  conversationId: number;
+  toolUseId: string;
   status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
 }
 
@@ -242,6 +244,10 @@ export interface WidgetManagerAdapter {
   claimOwnership(sessionId: string, clientId: number): boolean;
   /** 소유자 확인 */
   isOwner(sessionId: string, clientId: number): boolean;
+  /** 특정 클라이언트가 소유한 세션 목록 조회 */
+  getSessionsByOwner(clientId: number): WidgetSessionInfo[];
+  /** 세션 취소 */
+  cancelSession(sessionId: string): boolean;
 }
 
 /**
@@ -696,6 +702,7 @@ export class Pylon {
       const deviceId = (payload as { deviceId?: number })?.deviceId;
       if (deviceId !== undefined) {
         this.unregisterSessionViewer(deviceId);
+        this.handleClientDisconnect(deviceId);
       }
       return;
     }
@@ -1210,6 +1217,36 @@ export class Pylon {
       },
       broadcast: 'clients',
     });
+  }
+
+  /**
+   * 클라이언트 연결 해제 시 위젯 정리
+   *
+   * @description
+   * 해당 클라이언트가 소유한 모든 위젯 세션을 종료하고,
+   * 다른 클라이언트들에게 에러를 브로드캐스트합니다.
+   *
+   * @param clientId - 연결 해제된 클라이언트 ID
+   */
+  private handleClientDisconnect(clientId: number): void {
+    const sessions = this.deps.widgetManager?.getSessionsByOwner(clientId);
+
+    for (const session of sessions ?? []) {
+      // 위젯 강제 종료
+      this.deps.widgetManager?.cancelSession(session.sessionId);
+
+      // 에러 브로드캐스트
+      this.send({
+        type: 'widget_error',
+        payload: {
+          conversationId: session.conversationId,
+          sessionId: session.sessionId,
+          toolUseId: session.toolUseId,
+          error: 'Widget owner disconnected',
+        },
+        broadcast: 'clients',
+      });
+    }
   }
 
   /**

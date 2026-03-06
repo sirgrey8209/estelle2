@@ -381,6 +381,19 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
+   * 특정 클라이언트가 소유한 세션 목록 조회
+   */
+  getSessionsByOwner(clientId: number): WidgetSession[] {
+    const result: WidgetSession[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.ownerClientId === clientId && session.status === 'running') {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+
+  /**
    * 모든 세션 정리
    */
   cleanup(): void {
