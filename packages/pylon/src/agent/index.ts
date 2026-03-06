@@ -15,7 +15,7 @@
  *   checkPermission,
  *   isPermissionAllow,
  *   AUTO_ALLOW_TOOLS,
- * } from './claude/index.js';
+ * } from './agent/index.js';
  *
  * // ClaudeManager 사용
  * const manager = new ClaudeManager({

@@ -228,25 +228,6 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@22.19.7)(jsdom@26.1.0)(lightningcss@1.31.1)(terser@5.46.0)
 
-  widget/quiver:
-    dependencies:
-      '@huggingface/inference':
-        specifier: ^4.13.14
-        version: 4.13.14
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.37
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.3.0
-        version: 5.9.3
-
 packages:
 
   '@adobe/css-tools@4.4.4':
@@ -1455,17 +1436,6 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@huggingface/inference@4.13.14':
-    resolution: {integrity: sha512-1HgrmRig7zixBEfR50KBnKddko36q7kU9WxAIksMHgm4BV7HQ0y8sqfixgMUXvVrPmaaX8HaBrZ0Wsi2ulWeog==}
-    engines: {node: '>=18'}
-
-  '@huggingface/jinja@0.5.5':
-    resolution: {integrity: sha512-xRlzazC+QZwr6z4ixEqYHo9fgwhTZ3xNSdljlKfUFGZSdlvt166DljRELFUfFytlYOYvo3vTisA/AFOuOAzFQQ==}
-    engines: {node: '>=18'}
-
-  '@huggingface/tasks@0.19.89':
-    resolution: {integrity: sha512-2NJLrMRLoZ/ojkMVi3yuwL7ESETc7/ZYDYNG3FHFNKX6xZBaC1BNypBg4/a/gj40PMkiDg01/14Hpz+cphIkdA==}
-
   '@img/colour@1.0.0':
     resolution: {integrity: sha512-A5P/LfWGFSl6nsckYtjw9da+19jB8hkJ6ACTGcDfEJ0aE+l2n2El7dsVM7UVHZQ9s2lmYMWlrS21YLy2IR1LUw==}
     engines: {node: '>=18'}
@@ -2267,9 +2237,6 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
-
-  '@types/node@20.19.37':
-    resolution: {integrity: sha512-8kzdPJ3FsNsVIurqBs7oodNnCEVbni9yUEkaHbgptDACOPW04jimGagZ51E6+lXUwJjgnBw+hyko/lkFWCldqw==}
 
   '@types/node@22.19.7':
     resolution: {integrity: sha512-MciR4AKGHWl7xwxkBa6xUGxQJ4VBOmPTF7sL+iGzuahOFaO0jHCsuEfS80pan1ef4gWId1oWOweIhrDEYLuaOw==}
@@ -5572,15 +5539,6 @@ snapshots:
     dependencies:
       hono: 4.11.8
 
-  '@huggingface/inference@4.13.14':
-    dependencies:
-      '@huggingface/jinja': 0.5.5
-      '@huggingface/tasks': 0.19.89
-
-  '@huggingface/jinja@0.5.5': {}
-
-  '@huggingface/tasks@0.19.89': {}
-
   '@img/colour@1.0.0': {}
 
   '@img/sharp-darwin-arm64@0.34.5':
@@ -6266,10 +6224,6 @@ snapshots:
   '@types/estree@0.0.39': {}
 
   '@types/estree@1.0.8': {}
-
-  '@types/node@20.19.37':
-    dependencies:
-      undici-types: 6.21.0
 
   '@types/node@22.19.7':
     dependencies:

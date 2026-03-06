@@ -18,7 +18,7 @@
  *
  * @example
  * ```typescript
- * import { ClaudeManager } from './claude/index.js';
+ * import { ClaudeManager } from './agent/index.js';
  *
  * const manager = new ClaudeManager({
  *   onEvent: (sessionId, event) => {
