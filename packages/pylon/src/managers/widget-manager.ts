@@ -230,10 +230,12 @@ export class WidgetManager extends EventEmitter {
           error: message.message,
         } as WidgetErrorEvent);
       } else if (isWidgetCliEventMessage(message)) {
+        console.log(`[WidgetManager] CLI event received: sessionId=${sessionId}, data=`, message.data);
         this.emit('event', {
           sessionId,
           data: message.data,
         } as WidgetEventEvent);
+        console.log(`[WidgetManager] event emitted`);
       }
     } catch (err) {
       // JSON 파싱 실패 - 일반 로그로 처리

@@ -117,6 +117,9 @@ function createWidgetAPI(options: CreateWidgetAPIOptions) {
   return {
     // 코어
     sendEvent: (data: unknown) => onEvent(data),
+    // CLI → Client 이벤트 수신 (서버에서 오는 이벤트)
+    onEvent: (callback: (data: unknown) => void) => setMessageHandler(callback),
+    // onMessage는 onEvent의 alias (하위 호환)
     onMessage: (callback: (data: unknown) => void) => setMessageHandler(callback),
     onCancel: (callback: () => void) => {
       // TODO: cancel 이벤트 연동

@@ -505,28 +505,31 @@ async function main(): Promise<void> {
       pylon.triggerInitialContext(conversationId);
     },
     widgetManager: deps.widgetManager as WidgetManager | undefined,
-    onWidgetRender: (conversationId, toolUseId, sessionId, view) => {
+    onWidgetRender: (conversationId, toolUseId, sessionId, view, ownerClientId) => {
+      console.log(`[Pylon] onWidgetRender: owner=${ownerClientId}`);
       deps.relayClient.send({
         type: 'widget_render',
         payload: { conversationId, toolUseId, sessionId, view },
-        broadcast: 'clients',
+        to: [ownerClientId],
       });
     },
-    onWidgetClose: (conversationId, toolUseId, sessionId) => {
+    onWidgetClose: (conversationId, toolUseId, sessionId, ownerClientId) => {
+      console.log(`[Pylon] onWidgetClose: owner=${ownerClientId}`);
       deps.relayClient.send({
         type: 'widget_close',
         payload: { conversationId, toolUseId, sessionId },
-        broadcast: 'clients',
+        to: [ownerClientId],
       });
     },
     onWidgetComplete: (conversationId, toolUseId, sessionId, view, result) => {
       pylon.sendWidgetComplete(conversationId, toolUseId, sessionId, view, result);
     },
-    onWidgetEvent: (sessionId, data) => {
+    onWidgetEvent: (sessionId, data, ownerClientId) => {
+      console.log(`[Pylon] onWidgetEvent: sessionId=${sessionId}, owner=${ownerClientId}, data=`, data);
       deps.relayClient.send({
         type: 'widget_event',
         payload: { sessionId, data },
-        broadcast: 'clients',
+        to: [ownerClientId],
       });
     },
     initiateWidgetHandshake: (sessionId, conversationId, toolUseId) => {

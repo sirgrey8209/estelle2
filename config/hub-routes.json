@@ -1,6 +1,13 @@
 {
   "projects": [
     {
+      "name": "Divider Game",
+      "path": "/projects/divider-game",
+      "port": 3005,
+      "url": "https://estelle-hub.mooo.com/divider-game/",
+      "description": "숫자 나누기 퍼즐 게임"
+    },
+    {
       "name": "Neon Grid Defense",
       "path": "/projects/web-td",
       "port": 3004,

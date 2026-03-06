@@ -116,14 +116,14 @@ export interface PylonMcpServerOptions {
   onContinueTask?: (conversationId: number, reason?: string) => void;
   /** Widget 세션 관리자 (run_widget 액션에 필요) */
   widgetManager?: WidgetManager;
-  /** Widget 렌더 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
-  onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
-  /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
-  onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  /** Widget 렌더 시 호출되는 콜백 (owner Client에 전달) */
+  onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, ownerClientId: number) => void;
+  /** Widget 닫기 시 호출되는 콜백 (owner Client에 전달) */
+  onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string, ownerClientId: number) => void;
   /** Widget 완료 시 호출되는 콜백 (모든 Client에 브로드캐스트) */
   onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
-  /** Widget 이벤트 시 호출되는 콜백 (Client에 WebSocket으로 전달, CLI → Client) */
-  onWidgetEvent?: (sessionId: string, data: unknown) => void;
+  /** Widget 이벤트 시 호출되는 콜백 (owner Client에 전달, CLI → Client) */
+  onWidgetEvent?: (sessionId: string, data: unknown, ownerClientId: number) => void;
   /**
    * Widget 핸드셰이크 시작 콜백
    * Pylon에서 lastActiveClient에게 widget_handshake 메시지를 전송하고,
@@ -350,10 +350,10 @@ export class PylonMcpServer {
   private _onConversationCreate?: (conversationId: number) => void;
   private _onContinueTask?: (conversationId: number, reason?: string) => void;
   private _widgetManager?: WidgetManager;
-  private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
-  private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, ownerClientId: number) => void;
+  private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string, ownerClientId: number) => void;
   private _onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
-  private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
+  private _onWidgetEvent?: (sessionId: string, data: unknown, ownerClientId: number) => void;
   private _initiateWidgetHandshake?: (
     sessionId: string,
     conversationId: ConversationId,
@@ -443,6 +443,9 @@ export class PylonMcpServer {
       return false;
     }
 
+    // ownerClientId 가져오기
+    const ownerClientId = this._widgetManager?.getSession(pending.widgetSessionId)?.ownerClientId;
+
     // WidgetManager에서 프로세스 종료
     this._widgetManager?.cancelSession(pending.widgetSessionId);
 
@@ -452,8 +455,10 @@ export class PylonMcpServer {
     // pendingWidgets에서 제거
     this._pendingWidgets.delete(conversationId);
 
-    // widget_close 전송
-    this._onWidgetClose?.(conversationId, pending.toolUseId, pending.widgetSessionId);
+    // widget_close 전송 (owner가 있을 때만)
+    if (ownerClientId !== null && ownerClientId !== undefined) {
+      this._onWidgetClose?.(conversationId, pending.toolUseId, pending.widgetSessionId, ownerClientId);
+    }
 
     return true;
   }
@@ -467,6 +472,9 @@ export class PylonMcpServer {
       return false;
     }
 
+    // ownerClientId 가져오기
+    const ownerClientId = this._widgetManager?.getSession(sessionId)?.ownerClientId;
+
     // inline 위젯은 WidgetManager 프로세스가 없음
     if (!sessionId.startsWith('inline-')) {
       this._widgetManager?.cancelSession(sessionId);
@@ -478,8 +486,10 @@ export class PylonMcpServer {
     // pendingWidgets에서 제거
     this._pendingWidgets.delete(pending.conversationId);
 
-    // widget_close 전송
-    this._onWidgetClose?.(pending.conversationId, pending.toolUseId, pending.widgetSessionId);
+    // widget_close 전송 (owner가 있을 때만)
+    if (ownerClientId !== null && ownerClientId !== undefined) {
+      this._onWidgetClose?.(pending.conversationId, pending.toolUseId, pending.widgetSessionId, ownerClientId);
+    }
 
     return true;
   }
@@ -1761,40 +1771,59 @@ export class PylonMcpServer {
       // 마지막 렌더링된 view를 추적
       let lastView: ViewNode | null = null;
 
+      // 세션에서 ownerClientId를 가져오는 헬퍼
+      const getOwnerClientId = (): number | null => {
+        return this._widgetManager?.getSession(sessionId)?.ownerClientId ?? null;
+      };
+
       // render 이벤트 리스너 등록
       const onRender = (event: WidgetRenderEvent) => {
         if (event.sessionId === sessionId) {
-          console.log(`[Widget] Render event received for session ${sessionId}`);
+          const owner = getOwnerClientId();
+          console.log(`[Widget] Render event received for session ${sessionId}, owner=${owner}`);
           lastView = event.view;
-          this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view);
+          if (owner !== null) {
+            this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view, owner);
+          }
         }
       };
 
       // complete 이벤트 리스너 등록
       const onComplete = (event: WidgetCompleteEvent) => {
         if (event.sessionId === sessionId) {
-          console.log(`[Widget] Complete event received for session ${sessionId}, result:`, event.result);
+          const owner = getOwnerClientId();
+          console.log(`[Widget] Complete event received for session ${sessionId}, owner=${owner}, result:`, event.result);
           // 마지막 view가 있으면 widget_complete 브로드캐스트
           if (lastView) {
             this._onWidgetComplete?.(conversationId, toolUseId, sessionId, lastView, event.result);
           }
-          this._onWidgetClose?.(conversationId, toolUseId, sessionId);
+          if (owner !== null) {
+            this._onWidgetClose?.(conversationId, toolUseId, sessionId, owner);
+          }
         }
       };
 
       // error 이벤트 리스너 등록
       const onError = (event: WidgetErrorEvent) => {
         if (event.sessionId === sessionId) {
-          console.log(`[Widget] Error event received for session ${sessionId}:`, event.error);
-          this._onWidgetClose?.(conversationId, toolUseId, sessionId);
+          const owner = getOwnerClientId();
+          console.log(`[Widget] Error event received for session ${sessionId}, owner=${owner}:`, event.error);
+          if (owner !== null) {
+            this._onWidgetClose?.(conversationId, toolUseId, sessionId, owner);
+          }
         }
       };
 
       // event 이벤트 리스너 등록 (CLI → Client)
       const onEvent = (event: WidgetEventEvent) => {
         if (event.sessionId === sessionId) {
-          console.log(`[Widget] Event received for session ${sessionId}`);
-          this._onWidgetEvent?.(sessionId, event.data);
+          const owner = getOwnerClientId();
+          console.log(`[Widget] Event received for session ${sessionId}, owner=${owner}`);
+          if (owner !== null) {
+            this._onWidgetEvent?.(sessionId, event.data, owner);
+          } else {
+            console.log(`[Widget] Event dropped: no owner for session ${sessionId}`);
+          }
         }
       };
 
@@ -1880,6 +1909,15 @@ export class PylonMcpServer {
     // sessionId 생성 (inline- prefix로 CLI 위젯과 구분)
     const sessionId = `inline-widget-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    // lastActiveClient를 owner로 사용 (inline 위젯은 핸드셰이크 없음)
+    const ownerClientId = this._workspaceStore.getLastActiveClient(conversationId);
+    if (ownerClientId === null || ownerClientId === undefined) {
+      return {
+        success: false,
+        error: 'No active client for conversation',
+      };
+    }
+
     // ScriptViewNode 구성
     const view = {
       type: 'script' as const,
@@ -1905,8 +1943,8 @@ export class PylonMcpServer {
         },
       });
 
-      // Client에 widget_render 전송
-      this._onWidgetRender?.(conversationId, toolUseId, sessionId, view);
+      // Client에 widget_render 전송 (owner에게만)
+      this._onWidgetRender?.(conversationId, toolUseId, sessionId, view, ownerClientId);
     });
   }
 

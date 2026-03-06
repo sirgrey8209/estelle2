@@ -15,6 +15,11 @@ function complete(result: unknown) {
   process.exit(0);
 }
 
+// CLI → Client 이벤트 전송 (서버에서 클라이언트로)
+function sendEvent(data: unknown) {
+  console.log(JSON.stringify({ type: 'event', data }));
+}
+
 // 이벤트 핸들러
 rl.on('line', (line) => {
   try {
@@ -22,11 +27,11 @@ rl.on('line', (line) => {
     if (msg.type === 'event') {
       const data = msg.data;
       if (data.type === 'close') {
-        // 닫기 버튼 (cancel 아님)
+        clearInterval(timer);
         complete({ closed: true, reason: 'user_close_button' });
       }
     } else if (msg.type === 'cancel') {
-      // X 버튼
+      clearInterval(timer);
       complete({ closed: true, reason: 'x_button' });
     }
   } catch (e) {
@@ -39,41 +44,57 @@ render({
   type: 'script',
   html: `
     <div style="padding: 20px; font-family: sans-serif;">
-      <h3 style="margin: 0 0 15px 0;">버튼 테스트</h3>
-      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-        <button id="btn1" style="padding: 10px 20px; cursor: pointer;">버튼 1</button>
-        <button id="btn2" style="padding: 10px 20px; cursor: pointer;">버튼 2</button>
-        <button id="btn3" style="padding: 10px 20px; cursor: pointer;">버튼 3</button>
+      <h3 style="margin: 0 0 15px 0;">서버 시간 위젯</h3>
+      <div id="time" style="font-size: 24px; font-weight: bold; padding: 20px; background: #f0f0f0; border-radius: 8px; text-align: center;">
+        로딩 중...
       </div>
-      <div id="result" style="padding: 10px; background: #f0f0f0; border-radius: 4px; min-height: 20px;">
-        버튼을 클릭하세요
-      </div>
-      <button id="closeBtn" style="margin-top: 15px; padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      <p id="updateCount" style="margin-top: 10px; color: #666; text-align: center;">
+        업데이트: 0회
+      </p>
+      <button id="closeBtn" style="margin-top: 15px; padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
         닫기
       </button>
     </div>
   `,
   code: `
-    const result = document.getElementById('result');
+    let updateCount = 0;
+    const timeEl = document.getElementById('time');
+    const countEl = document.getElementById('updateCount');
 
-    document.getElementById('btn1').onclick = () => {
-      result.textContent = '버튼 1 클릭됨';
-      api.sendEvent({ type: 'button_click', button: 1 });
-    };
-
-    document.getElementById('btn2').onclick = () => {
-      result.textContent = '버튼 2 클릭됨';
-      api.sendEvent({ type: 'button_click', button: 2 });
-    };
-
-    document.getElementById('btn3').onclick = () => {
-      result.textContent = '버튼 3 클릭됨';
-      api.sendEvent({ type: 'button_click', button: 3 });
-    };
+    // 서버에서 오는 이벤트 수신
+    api.onEvent((data) => {
+      if (data.type === 'time_update') {
+        timeEl.textContent = data.time;
+        updateCount++;
+        countEl.textContent = '업데이트: ' + updateCount + '회';
+      }
+    });
 
     document.getElementById('closeBtn').onclick = () => {
       api.sendEvent({ type: 'close' });
     };
   `,
-  height: 200
+  height: 220
 });
+
+// 5초마다 서버 시간 전송
+const timer = setInterval(() => {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  sendEvent({ type: 'time_update', time: timeStr });
+}, 5000);
+
+// 즉시 첫 번째 시간 전송
+const now = new Date();
+const timeStr = now.toLocaleTimeString('ko-KR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+});
+sendEvent({ type: 'time_update', time: timeStr });

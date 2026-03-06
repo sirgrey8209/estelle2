@@ -403,6 +403,7 @@ export function routeMessage(message: RelayMessage): void {
     case 'widget_event': {
       // RelayMessage 형식: { type, payload: { sessionId, data, conversationId? } }
       // CLI에서 Client로 보내는 이벤트 (api.sendEvent 호출 결과)
+      console.log('[MessageRouter] widget_event received:', payload);
       const eventPayload = payload as {
         sessionId?: string;
         data?: unknown;
@@ -411,8 +412,11 @@ export function routeMessage(message: RelayMessage): void {
       const { sessionId, data } = eventPayload;
 
       if (sessionId && data !== undefined) {
+        console.log(`[MessageRouter] emitting widget event: sessionId=${sessionId}`);
         // sessionId에 해당하는 위젯에 이벤트 전달
         emitWidgetEvent(sessionId, data);
+      } else {
+        console.log('[MessageRouter] widget_event missing sessionId or data');
       }
       break;
     }
@@ -458,7 +462,7 @@ export function routeMessage(message: RelayMessage): void {
       const selectedConversation = useWorkspaceStore.getState().selectedConversation;
       const isVisible = selectedConversation?.conversationId === conversationId;
 
-      console.log(`[MessageRouter] widget_handshake: session=${sessionId}, visible=${isVisible}`);
+      console.log(`[MessageRouter] widget_handshake: session=${sessionId}, visible=${isVisible}, selectedConvId=${selectedConversation?.conversationId} (${typeof selectedConversation?.conversationId}), payloadConvId=${conversationId} (${typeof conversationId})`);
 
       // 핸드셰이크 응답 전송
       sendWidgetHandshakeAck(conversationId, sessionId, isVisible);
