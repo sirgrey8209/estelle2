@@ -286,3 +286,142 @@ export function isWidgetCheckResultPayload(value: unknown): value is WidgetCheck
     typeof value.valid === 'boolean'
   );
 }
+
+// ============================================================================
+// Widget Ownership Messages (소유권 관리)
+// ============================================================================
+
+/**
+ * 위젯 세션 상태
+ */
+export type WidgetSessionStatus =
+  | 'handshaking'  // 핸드셰이크 진행 중
+  | 'pending'      // 대기 중 (실행 버튼 상태)
+  | 'running'      // 실행 중 (소유자 있음)
+  | 'completed'    // 완료
+  | 'error';       // 에러
+
+/**
+ * Pylon → Client: 핸드셰이크 요청
+ */
+export interface WidgetHandshakePayload {
+  conversationId: number;
+  sessionId: string;
+  toolUseId: string;
+  timeout: number;  // ms
+}
+
+/**
+ * Client → Pylon: 핸드셰이크 응답
+ */
+export interface WidgetHandshakeAckPayload {
+  sessionId: string;
+  visible: boolean;
+}
+
+/**
+ * Pylon → Client: 위젯 대기 상태 (실행 버튼)
+ */
+export interface WidgetPendingPayload {
+  conversationId: number;
+  sessionId: string;
+  toolUseId: string;
+}
+
+/**
+ * Client → Pylon: 위젯 소유권 요청
+ */
+export interface WidgetClaimPayload {
+  sessionId: string;
+}
+
+/**
+ * Pylon → Client: 위젯이 다른 클라이언트에서 실행 중
+ */
+export interface WidgetClaimedPayload {
+  sessionId: string;
+  ownerClientId: number;  // 소유자의 deviceId
+}
+
+/**
+ * Pylon → Client: 위젯 완료 (전체 브로드캐스트)
+ */
+export interface WidgetCompletePayload {
+  conversationId: number;
+  sessionId: string;
+  toolUseId: string;
+  view: ViewNode;  // 종료 페이지
+  result: unknown;
+}
+
+/**
+ * Pylon → Client: 위젯 에러 (전체 브로드캐스트)
+ */
+export interface WidgetErrorPayload {
+  conversationId: number;
+  sessionId: string;
+  toolUseId: string;
+  error: string;
+}
+
+// Type Guards
+
+export function isWidgetHandshakePayload(value: unknown): value is WidgetHandshakePayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.toolUseId === 'string' &&
+    typeof value.timeout === 'number'
+  );
+}
+
+export function isWidgetHandshakeAckPayload(value: unknown): value is WidgetHandshakeAckPayload {
+  return (
+    isObject(value) &&
+    typeof value.sessionId === 'string' &&
+    typeof value.visible === 'boolean'
+  );
+}
+
+export function isWidgetPendingPayload(value: unknown): value is WidgetPendingPayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.toolUseId === 'string'
+  );
+}
+
+export function isWidgetClaimPayload(value: unknown): value is WidgetClaimPayload {
+  return isObject(value) && typeof value.sessionId === 'string';
+}
+
+export function isWidgetClaimedPayload(value: unknown): value is WidgetClaimedPayload {
+  return (
+    isObject(value) &&
+    typeof value.sessionId === 'string' &&
+    typeof value.ownerClientId === 'number'
+  );
+}
+
+export function isWidgetCompletePayload(value: unknown): value is WidgetCompletePayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.toolUseId === 'string' &&
+    'view' in value &&
+    'result' in value
+  );
+}
+
+export function isWidgetErrorPayload(value: unknown): value is WidgetErrorPayload {
+  return (
+    isObject(value) &&
+    typeof value.conversationId === 'number' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.toolUseId === 'string' &&
+    typeof value.error === 'string'
+  );
+}
