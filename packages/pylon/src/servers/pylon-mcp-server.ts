@@ -1688,6 +1688,8 @@ export class PylonMcpServer {
         command,
         cwd,
         args,
+        conversationId,
+        toolUseId,
       });
 
       console.log(`[Widget] Session started: ${sessionId}`);

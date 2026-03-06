@@ -223,7 +223,7 @@ export interface BugReportWriter {
  */
 export interface WidgetSessionInfo {
   sessionId: string;
-  status: 'running' | 'completed' | 'error' | 'cancelled';
+  status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
 }
 
 /**

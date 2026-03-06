@@ -24,8 +24,11 @@ import { WidgetLogger } from '../utils/widget-logger.js';
 
 export interface WidgetSession {
   sessionId: string;
+  conversationId: number;
+  toolUseId: string;
   process: ChildProcess;
-  status: 'running' | 'completed' | 'error' | 'cancelled';
+  status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+  ownerClientId: number | null;
   result?: unknown;
   error?: string;
   logger?: WidgetLogger;
@@ -35,6 +38,8 @@ export interface WidgetStartOptions {
   command: string;
   cwd: string;
   args?: string[];
+  conversationId: number;
+  toolUseId: string;
 }
 
 export interface WidgetRenderEvent {
@@ -83,8 +88,11 @@ export class WidgetManager extends EventEmitter {
 
     const session: WidgetSession = {
       sessionId,
+      conversationId: options.conversationId,
+      toolUseId: options.toolUseId,
       process: proc,
       status: 'running',
+      ownerClientId: null,
       logger,
     };
 
