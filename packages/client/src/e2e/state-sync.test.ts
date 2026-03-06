@@ -73,6 +73,7 @@ function createMockWorkspace(id: string, convs: Array<{ id: string; conversation
       unread: false,
       permissionMode: 'default' as const,
       createdAt: Date.now(),
+      agentType: 'claude' as const,
       claudeSessionId: null,
     })),
   };

@@ -116,6 +116,9 @@ export interface Conversation {
   /** 대화 생성 시각 (Unix timestamp) */
   createdAt: number;
 
+  /** 에이전트 타입 (claude, codex) */
+  agentType: 'claude' | 'codex';
+
   /** 연결된 문서 목록 */
   linkedDocuments?: LinkedDocument[];
 
@@ -535,6 +538,7 @@ export class WorkspaceStore {
       unread: false,
       permissionMode: PermissionMode.BYPASS,
       createdAt: Date.now(),
+      agentType: 'claude',
     };
 
     workspace.conversations.push(newConversation);

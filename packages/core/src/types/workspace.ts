@@ -9,6 +9,7 @@
 
 import type { ConversationStatusValue } from '../constants/conversation-status.js';
 import type { PermissionModeValue } from '../constants/permission-mode.js';
+import type { AgentType } from './agent.js';
 
 // ============================================================================
 // LinkedDocument (연결된 문서)
@@ -81,6 +82,9 @@ export interface Conversation {
 
   /** 대화 생성 시각 (Unix timestamp) */
   createdAt: number;
+
+  /** 에이전트 타입 (claude, codex) */
+  agentType: AgentType;
 
   /** 연결된 문서 목록 (선택) */
   linkedDocuments?: LinkedDocument[];
