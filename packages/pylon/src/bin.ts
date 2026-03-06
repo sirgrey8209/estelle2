@@ -21,6 +21,7 @@ import { ShareStore } from './stores/share-store.js';
 import { createRelayClient } from './network/relay-client.js';
 import { AgentManager } from './agent/agent-manager.js';
 import { ClaudeSDKAdapter } from './agent/claude-sdk-adapter.js';
+import { CodexSDKAdapter } from './agent/codex-sdk-adapter.js';
 import { BlobHandler, type FileSystemAdapter } from './handlers/blob-handler.js';
 import { TaskManager, type FileSystem } from './managers/task-manager.js';
 import { WorkerManager } from './managers/worker-manager.js';
@@ -363,13 +364,15 @@ function createDependencies(): PylonDependencies & {
     reconnectInterval: 5000,
   });
 
-  // AgentAdapter - SDK 직접 사용
-  logger.log(`[Agent] Using ClaudeSDKAdapter (direct SDK, configDir=${claudeConfigDir})`);
-  const agentAdapter = new ClaudeSDKAdapter();
+  // AgentAdapters - Claude와 Codex SDK 직접 사용
+  logger.log(`[Agent] Creating ClaudeSDKAdapter and CodexSDKAdapter (configDir=${claudeConfigDir})`);
+  const claudeAdapter = new ClaudeSDKAdapter();
+  const codexAdapter = new CodexSDKAdapter();
 
   // AgentManager - 지연 바인딩으로 pylon 연결
   const agentManager = new AgentManager({
-    adapter: agentAdapter,
+    claudeAdapter,
+    codexAdapter,
     getPermissionMode: (conversationId: number) => {
       const conversation = workspaceStore.getConversation(conversationId as ConversationId);
       return conversation?.permissionMode ?? 'default';
