@@ -15,7 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { sendWidgetCheck } from '../services/relaySender';
+import { sendWidgetCheck, sendWidgetHandshakeAck } from '../services/relaySender';
 // import { debugLog } from '../stores/debugStore';
 
 /**
@@ -435,6 +435,57 @@ export function routeMessage(message: RelayMessage): void {
           convStore.removeWidgetEventListener(sessionId);
         }
       }
+      break;
+    }
+
+    case 'widget_handshake': {
+      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId, timeout } }
+      // Pylon이 위젯 시작 전 핸드셰이크 요청
+      // 클라이언트는 해당 대화를 보고 있으면 visible=true로 응답
+      const { conversationId, sessionId } = payload as {
+        conversationId: number;
+        sessionId: string;
+        toolUseId: string;
+        timeout: number;
+      };
+
+      if (!conversationId || !sessionId) {
+        console.warn('[MessageRouter] widget_handshake missing required fields');
+        break;
+      }
+
+      // 현재 선택된 대화와 비교하여 visible 여부 결정
+      const selectedConversation = useWorkspaceStore.getState().selectedConversation;
+      const isVisible = selectedConversation?.conversationId === conversationId;
+
+      console.log(`[MessageRouter] widget_handshake: session=${sessionId}, visible=${isVisible}`);
+
+      // 핸드셰이크 응답 전송
+      sendWidgetHandshakeAck(conversationId, sessionId, isVisible);
+      break;
+    }
+
+    case 'widget_pending': {
+      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId } }
+      // 핸드셰이크 실패 시 위젯이 pending 상태가 됨
+      // 현재는 로깅만 (나중에 UI 표시 가능)
+      const { conversationId, sessionId } = payload as {
+        conversationId: number;
+        sessionId: string;
+        toolUseId: string;
+      };
+      console.log(`[MessageRouter] widget_pending: conversation=${conversationId}, session=${sessionId}`);
+      break;
+    }
+
+    case 'widget_claimed': {
+      // RelayMessage 형식: { type, payload: { sessionId, ownerClientId } }
+      // 다른 클라이언트가 위젯 소유권을 획득함
+      const { sessionId, ownerClientId } = payload as {
+        sessionId: string;
+        ownerClientId: number;
+      };
+      console.log(`[MessageRouter] widget_claimed: session=${sessionId}, owner=${ownerClientId}`);
       break;
     }
 
