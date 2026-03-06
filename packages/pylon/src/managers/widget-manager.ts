@@ -357,6 +357,30 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
+   * 소유권 요청 처리 (first-come-first-served)
+   * @returns 성공 여부
+   */
+  claimOwnership(sessionId: string, clientId: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    // pending 상태일 때만 claim 가능
+    if (session.status !== 'pending') return false;
+
+    session.status = 'running';
+    session.ownerClientId = clientId;
+    return true;
+  }
+
+  /**
+   * 소유자 확인
+   */
+  isOwner(sessionId: string, clientId: number): boolean {
+    const session = this.sessions.get(sessionId);
+    return session?.ownerClientId === clientId;
+  }
+
+  /**
    * 모든 세션 정리
    */
   cleanup(): void {

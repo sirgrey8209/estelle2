@@ -40,7 +40,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
-import { decodeConversationIdFull, isWidgetCheckPayload, isWidgetHandshakeAckPayload } from '@estelle/core';
+import { decodeConversationIdFull, isWidgetCheckPayload, isWidgetHandshakeAckPayload, isWidgetClaimPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
@@ -238,6 +238,10 @@ export interface WidgetManagerAdapter {
   getSession(sessionId: string): WidgetSessionInfo | undefined;
   /** 핸드셰이크 응답 처리 */
   handleHandshakeAck(sessionId: string, visible: boolean, clientId: number): void;
+  /** 소유권 요청 처리 (first-come-first-served) */
+  claimOwnership(sessionId: string, clientId: number): boolean;
+  /** 소유자 확인 */
+  isOwner(sessionId: string, clientId: number): boolean;
 }
 
 /**
@@ -954,6 +958,12 @@ export class Pylon {
       return;
     }
 
+    // ===== Widget 소유권 요청 =====
+    if (type === 'widget_claim') {
+      this.handleWidgetClaim(payload, from);
+      return;
+    }
+
     // ===== Widget 세션 유효성 확인 =====
     if (type === 'widget_check') {
       this.handleWidgetCheck(payload, from);
@@ -1055,6 +1065,41 @@ export class Pylon {
 
     this.log(`[Widget] Handshake ack: session=${sessionId}, visible=${visible}, client=${clientId}`);
     this.deps.widgetManager?.handleHandshakeAck(sessionId, visible, clientId);
+  }
+
+  /**
+   * Widget 소유권 요청 처리
+   */
+  private handleWidgetClaim(
+    payload: Record<string, unknown> | undefined,
+    from?: MessageFrom,
+  ): void {
+    if (!isWidgetClaimPayload(payload)) {
+      this.log('[Widget] Invalid widget_claim payload');
+      return;
+    }
+
+    const { sessionId } = payload;
+    const clientId = from?.deviceId;
+
+    if (clientId === undefined) {
+      this.log('[Widget] Missing clientId in widget_claim');
+      return;
+    }
+
+    const success = this.deps.widgetManager?.claimOwnership(sessionId, clientId);
+
+    if (success) {
+      this.log(`[Widget] Ownership claimed: session=${sessionId}, owner=${clientId}`);
+
+      // 다른 클라이언트에게 widget_claimed 전송
+      this.send({
+        type: 'widget_claimed',
+        payload: { sessionId, ownerClientId: clientId },
+      });
+    } else {
+      this.log(`[Widget] Ownership claim failed: session=${sessionId}, client=${clientId}`);
+    }
   }
 
   /**
