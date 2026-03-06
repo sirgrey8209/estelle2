@@ -866,19 +866,12 @@ describe('PylonMcpServer', () => {
     // 스크립트 실행 테스트는 실제 환경에서 수동으로 검증
     // 여기서는 환경 검증 로직만 테스트
 
-    it('should_reject_deploy_to_same_environment', async () => {
-      // Arrange - 현재 환경과 같은 환경으로 배포 시도
-      const currentEnv = getCurrentEnv();
-
-      // dev 환경에서는 자기 자신 배포 테스트 불가 (dev는 배포 대상이 아님)
-      if (currentEnv === 'dev') {
-        return; // skip
-      }
-
+    it('should_return_error_when_target_is_not_release', async () => {
+      // Arrange - release가 아닌 target으로 요청
       const request = {
         action: 'deploy',
         conversationId: TEST_CONVERSATION_ID,
-        target: currentEnv,
+        target: 'stage', // release가 아님
       };
 
       // Act
@@ -887,35 +880,9 @@ describe('PylonMcpServer', () => {
         error: string;
       };
 
-      // Assert
+      // Assert - release만 지원
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/자기 자신 환경/);
-    });
-
-    it('should_reject_promote_from_non_stage_environment', async () => {
-      // Arrange - promote는 stage에서만 가능
-      const currentEnv = getCurrentEnv();
-
-      // stage에서는 promote가 성공해야 하므로 이 테스트는 stage가 아닌 환경에서만 유효
-      if (currentEnv === 'stage') {
-        return; // skip
-      }
-
-      const request = {
-        action: 'deploy',
-        conversationId: TEST_CONVERSATION_ID,
-        target: 'promote',
-      };
-
-      // Act
-      const response = (await sendRequest(TEST_PORT, request)) as {
-        success: boolean;
-        error: string;
-      };
-
-      // Assert
-      expect(response.success).toBe(false);
-      expect(response.error).toMatch(/stage 환경에서만/);
+      expect(response.error).toContain("'release'만 지원");
     });
 
     it('should_return_error_when_target_is_missing', async () => {
@@ -931,9 +898,9 @@ describe('PylonMcpServer', () => {
         error: string;
       };
 
-      // Assert
+      // Assert - release만 지원
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/target/i);
+      expect(response.error).toContain("'release'만 지원");
     });
 
     it('should_return_error_when_target_is_invalid', async () => {
@@ -950,9 +917,9 @@ describe('PylonMcpServer', () => {
         error: string;
       };
 
-      // Assert
+      // Assert - release만 지원
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/stage.*release.*promote/i);
+      expect(response.error).toContain("'release'만 지원");
     });
 
     it('should_return_error_when_target_is_empty', async () => {
@@ -969,28 +936,9 @@ describe('PylonMcpServer', () => {
         error: string;
       };
 
-      // Assert
+      // Assert - release만 지원
       expect(response.success).toBe(false);
-      expect(response.error).toMatch(/target/i);
-    });
-
-    it('should_return_error_when_conversationId_not_found', async () => {
-      // Arrange
-      const request = {
-        action: 'deploy',
-        conversationId: 99999, // 존재하지 않는 conversationId
-        target: 'stage',
-      };
-
-      // Act
-      const response = (await sendRequest(TEST_PORT, request)) as {
-        success: boolean;
-        error: string;
-      };
-
-      // Assert
-      expect(response.success).toBe(false);
-      expect(response.error).toMatch(/not found|invalid/i);
+      expect(response.error).toContain("'release'만 지원");
     });
 
     // 스크립트 실행 테스트는 제거 (동기 실행으로 변경됨, 실제 환경에서 수동 검증)
@@ -1554,7 +1502,7 @@ describe('PylonMcpServer', () => {
       expect(server.findPendingWidgetBySessionId('nonexistent-session')).toBeUndefined();
     });
 
-    it('should_reject_duplicate_widget_in_same_conversation', async () => {
+    it('should_auto_close_previous_widget_when_starting_new_widget', async () => {
       // Arrange - widgetManager가 필요하므로 mock 설정
       const TEST_TOOL_USE_ID_WIDGET_1 = 'toolu_test_widget_dup_123';
       const TEST_TOOL_USE_ID_WIDGET_2 = 'toolu_test_widget_dup_456';
@@ -1562,10 +1510,20 @@ describe('PylonMcpServer', () => {
       await server.close();
       TEST_PORT = getRandomPort();
 
+      let sessionCount = 0;
+      let cancelSessionCalled = false;
+
       // Mock WidgetManager 생성
       const mockWidgetManager = {
-        startSession: async () => 'mock-session-id',
+        startSession: async () => {
+          sessionCount++;
+          return `mock-session-id-${sessionCount}`;
+        },
         waitForCompletion: () => new Promise(() => {}), // 완료되지 않는 Promise
+        cancelSession: () => {
+          cancelSessionCalled = true;
+          return true;
+        },
         on: () => {},
         off: () => {},
       };
@@ -1598,16 +1556,20 @@ describe('PylonMcpServer', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // 두 번째 위젯 요청 - 같은 conversationId로 매핑되는 다른 toolUseId
-      const secondResponse = (await sendRequest(TEST_PORT, {
+      // 이전 위젯이 자동 종료되고 새 위젯이 시작되어야 함
+      sendRequest(TEST_PORT, {
         action: 'lookup_and_run_widget',
         toolUseId: TEST_TOOL_USE_ID_WIDGET_2,
         command: 'test2',
         cwd: '/tmp',
-      })) as { success: boolean; error?: string };
+      }).catch(() => {}); // 응답 대기하지 않음
 
-      // Assert - 두 번째 요청은 중복으로 거부되어야 함
-      expect(secondResponse.success).toBe(false);
-      expect(secondResponse.error).toContain('Widget already running');
+      // 약간 대기
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Assert - 이전 위젯이 취소되고 두 번째 세션이 시작됨
+      expect(cancelSessionCalled).toBe(true);
+      expect(sessionCount).toBe(2);
 
       // 정리
       firstRequest.catch(() => {}); // 응답 대기 취소

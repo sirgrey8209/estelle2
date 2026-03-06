@@ -48,7 +48,7 @@ function createMockDependencies(): PylonDependencies {
       onMessage: vi.fn(),
       onStatusChange: vi.fn(),
     },
-    claudeManager: {
+    agentManager: {
       sendMessage: vi.fn(),
       stop: vi.fn(),
       newSession: vi.fn(),
