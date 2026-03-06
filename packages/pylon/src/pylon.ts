@@ -948,7 +948,7 @@ export class Pylon {
 
     // ===== Widget 이벤트 (Client → CLI) =====
     if (type === 'widget_event') {
-      this.handleWidgetEvent(payload);
+      this.handleWidgetEvent(payload, from);
       return;
     }
 
@@ -1005,13 +1005,23 @@ export class Pylon {
    * 클라이언트에서 Widget 이벤트를 받아서
    * WidgetManager를 통해 CLI로 전달합니다.
    */
-  private handleWidgetEvent(payload?: Record<string, unknown>): void {
+  private handleWidgetEvent(payload?: Record<string, unknown>, from?: MessageFrom): void {
     const sessionId = payload?.sessionId as string | undefined;
     const data = payload?.data as Record<string, unknown> | undefined;
+    const clientId = from?.deviceId;
 
     if (!sessionId || data === undefined) {
       this.log('[Widget] Missing sessionId or data in widget_event');
       return;
+    }
+
+    // 소유자 검증 (inline 위젯 제외)
+    if (!sessionId.startsWith('inline-') && clientId !== undefined) {
+      const isOwner = this.deps.widgetManager?.isOwner(sessionId, clientId);
+      if (!isOwner) {
+        this.log(`[Widget] Event rejected: client ${clientId} is not owner of ${sessionId}`);
+        return;
+      }
     }
 
     this.log(`[Widget] Received event for session ${sessionId}`);
