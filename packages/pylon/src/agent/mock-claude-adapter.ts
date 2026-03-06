@@ -1,9 +1,9 @@
 /**
  * @file mock-claude-adapter.ts
- * @description 테스트용 Mock Claude 어댑터
+ * @description 테스트용 Mock Agent 어댑터
  *
- * 실제 Claude SDK 없이 메시지 시퀀스를 시뮬레이션합니다.
- * E2E Mock 테스트에서 Pylon의 ClaudeManager 동작을 검증할 때 사용합니다.
+ * 실제 Agent SDK 없이 메시지 시퀀스를 시뮬레이션합니다.
+ * E2E Mock 테스트에서 Pylon의 AgentManager 동작을 검증할 때 사용합니다.
  *
  * @example
  * ```typescript
@@ -12,8 +12,8 @@
  * // 간단한 텍스트 응답 설정
  * mockAdapter.setSimpleResponse('Hello! How can I help you?');
  *
- * // ClaudeManager에 주입
- * const manager = new ClaudeManager({
+ * // AgentManager에 주입
+ * const manager = new AgentManager({
  *   adapter: mockAdapter,
  *   onEvent: (sessionId, event) => console.log(event),
  *   getPermissionMode: () => 'default',
@@ -22,10 +22,10 @@
  */
 
 import type {
-  ClaudeAdapter,
-  ClaudeQueryOptions,
-  ClaudeMessage,
-} from './claude-manager.js';
+  AgentAdapter,
+  AgentQueryOptions,
+  AgentMessage,
+} from './agent-manager.js';
 
 /**
  * Mock Claude 응답 시나리오 타입
@@ -82,15 +82,15 @@ export interface MockStreamingScenario {
  */
 export interface MockCustomScenario {
   type: 'custom';
-  messages: ClaudeMessage[];
+  messages: AgentMessage[];
 }
 
 /**
- * Mock Claude 어댑터
+ * Mock Agent 어댑터
  *
- * 테스트에서 실제 Claude SDK 없이 응답을 시뮬레이션합니다.
+ * 테스트에서 실제 Agent SDK 없이 응답을 시뮬레이션합니다.
  */
-export class MockClaudeAdapter implements ClaudeAdapter {
+export class MockClaudeAdapter implements AgentAdapter {
   private scenarios: MockScenario[] = [];
   private scenarioIndex = 0;
   private sessionIdCounter = 0;
@@ -161,9 +161,9 @@ export class MockClaudeAdapter implements ClaudeAdapter {
   }
 
   /**
-   * Claude에 쿼리 실행 (Mock)
+   * Agent에 쿼리 실행 (Mock)
    */
-  async *query(options: ClaudeQueryOptions): AsyncIterable<ClaudeMessage> {
+  async *query(options: AgentQueryOptions): AsyncIterable<AgentMessage> {
     const scenario = this.scenarios[this.scenarioIndex];
     if (!scenario) {
       // 시나리오 없으면 빈 응답
@@ -217,7 +217,7 @@ export class MockClaudeAdapter implements ClaudeAdapter {
     sessionId: string,
     text: string,
     checkAbort: () => void
-  ): AsyncIterable<ClaudeMessage> {
+  ): AsyncIterable<AgentMessage> {
     checkAbort();
 
     // 1. init 메시지
@@ -284,9 +284,9 @@ export class MockClaudeAdapter implements ClaudeAdapter {
   private async *generateToolUse(
     sessionId: string,
     scenario: MockToolUseScenario,
-    options: ClaudeQueryOptions,
+    options: AgentQueryOptions,
     checkAbort: () => void
-  ): AsyncIterable<ClaudeMessage> {
+  ): AsyncIterable<AgentMessage> {
     const toolUseId = `toolu_${Date.now()}`;
 
     checkAbort();
@@ -440,7 +440,7 @@ export class MockClaudeAdapter implements ClaudeAdapter {
     sessionId: string,
     scenario: MockStreamingScenario,
     checkAbort: () => void
-  ): AsyncIterable<ClaudeMessage> {
+  ): AsyncIterable<AgentMessage> {
     checkAbort();
 
     // 1. init 메시지

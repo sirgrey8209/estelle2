@@ -3,7 +3,7 @@
  * @description Pylon - Estelle 시스템의 핵심 서비스
  *
  * Pylon은 Claude Code와 클라이언트 앱 사이를 중계하는 핵심 서비스입니다.
- * 모든 모듈(WorkspaceStore, MessageStore, ClaudeManager, BlobHandler 등)을
+ * 모든 모듈(WorkspaceStore, MessageStore, AgentManager, BlobHandler 등)을
  * 통합하고 메시지 라우팅을 담당합니다.
  *
  * 주요 기능:
@@ -44,7 +44,7 @@ import { decodeConversationIdFull, isWidgetCheckPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
-import type { ClaudeManagerEvent } from './agent/claude-manager.js';
+import type { AgentManagerEvent } from './agent/agent-manager.js';
 import type { PersistenceAdapter, PersistedAccount } from './persistence/types.js';
 import { generateThumbnail } from './utils/thumbnail.js';
 import {
@@ -97,7 +97,7 @@ export interface RelayClientAdapter {
 }
 
 /**
- * 시스템 프롬프트 프리셋 타입 (ClaudeManager와 동일)
+ * 시스템 프롬프트 프리셋 타입 (AgentManager와 동일)
  */
 interface SystemPromptPreset {
   type: 'preset';
@@ -106,12 +106,12 @@ interface SystemPromptPreset {
 }
 
 /**
- * ClaudeManager 인터페이스 (의존성 주입용)
+ * AgentManager 인터페이스 (의존성 주입용)
  */
-export interface ClaudeManagerAdapter {
+export interface AgentManagerAdapter {
   sendMessage(conversationId: number, message: string, options: {
     workingDir: string;
-    claudeSessionId?: string;
+    agentSessionId?: string;
     systemPrompt?: string | SystemPromptPreset;
     systemReminder?: string;
     plugins?: Array<{ type: 'local'; path: string }>;
@@ -266,7 +266,7 @@ export interface PylonDependencies {
   workspaceStore: WorkspaceStore;
   messageStore: MessageStore;
   relayClient: RelayClientAdapter;
-  claudeManager: ClaudeManagerAdapter;
+  agentManager: AgentManagerAdapter;
   blobHandler: BlobHandlerAdapter;
   taskManager: TaskManagerAdapter;
   workerManager: WorkerManagerAdapter;
@@ -558,7 +558,7 @@ export class Pylon {
     await this.saveWorkspaceStore();
 
     // Claude 세션 정리
-    this.deps.claudeManager.cleanup();
+    this.deps.agentManager.cleanup();
 
     // 에셋 서버 종료
     if (this.assetServer) {
@@ -622,7 +622,7 @@ export class Pylon {
    * 기존 세션을 정리하고, 메시지 저장소를 초기화하고, 새 세션을 시작합니다.
    */
   triggerNewSession(conversationId: number): void {
-    this.deps.claudeManager.newSession(conversationId);
+    this.deps.agentManager.newSession(conversationId);
     this.deps.messageStore.clear(conversationId);
     this.sendInitialContext(conversationId);
   }
@@ -1089,23 +1089,23 @@ export class Pylon {
    * Claude 이벤트 전달
    *
    * @description
-   * ClaudeManager에서 발생한 이벤트를 클라이언트에게 전달합니다.
+   * AgentManager에서 발생한 이벤트를 클라이언트에게 전달합니다.
    *
    * @param conversationId - 대화 ID
    * @param event - Claude 이벤트
    */
-  sendClaudeEvent(conversationId: number, event: ClaudeManagerEvent): void {
+  sendClaudeEvent(conversationId: number, event: AgentManagerEvent): void {
     // 이벤트 타입별 메시지 저장
     this.saveEventToHistory(conversationId, event);
 
-    // init 이벤트에서 claudeSessionId 저장
+    // init 이벤트에서 agentSessionId 저장
     if (event.type === 'init' && (event as Record<string, unknown>).session_id) {
-      this.deps.workspaceStore.updateClaudeSessionId(
+      this.deps.workspaceStore.updateAgentSessionId(
         conversationId as ConversationId,
         (event as Record<string, unknown>).session_id as string
       );
       this.saveWorkspaceStore().catch((err) => {
-        this.log(`[Persistence] Failed to save claudeSessionId: ${err}`);
+        this.log(`[Persistence] Failed to save agentSessionId: ${err}`);
       });
     }
 
@@ -1148,7 +1148,7 @@ export class Pylon {
     }
 
     // 안 보고 있는 앱에게 unread 알림
-    if (['textComplete', 'toolComplete', 'result', 'claudeAborted'].includes(event.type)) {
+    if (['textComplete', 'toolComplete', 'result', 'agentAborted'].includes(event.type)) {
       this.sendUnreadToNonViewers(conversationId, viewers);
     }
   }
@@ -1778,11 +1778,11 @@ export class Pylon {
       });
 
       // 활성 세션에 리마인더 전송
-      if (this.deps.claudeManager.hasActiveSession(eid)) {
+      if (this.deps.agentManager.hasActiveSession(eid)) {
         const reminder = buildConversationRenamedReminder(oldName, newName as string);
         const workingDir = this.getWorkingDirForConversation(eid);
         if (workingDir) {
-          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+          this.deps.agentManager.sendMessage(eid, reminder, { workingDir });
         }
       }
     }
@@ -1807,11 +1807,11 @@ export class Pylon {
       });
 
       // 활성 세션에 리마인더 전송
-      if (this.deps.claudeManager.hasActiveSession(eid)) {
+      if (this.deps.agentManager.hasActiveSession(eid)) {
         const reminder = buildDocumentAddedReminder(docPath);
         const workingDir = this.getWorkingDirForConversation(eid);
         if (workingDir) {
-          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+          this.deps.agentManager.sendMessage(eid, reminder, { workingDir });
         }
       }
     }
@@ -1836,11 +1836,11 @@ export class Pylon {
       });
 
       // 활성 세션에 리마인더 전송
-      if (this.deps.claudeManager.hasActiveSession(eid)) {
+      if (this.deps.agentManager.hasActiveSession(eid)) {
         const reminder = buildDocumentRemovedReminder(docPath);
         const workingDir = this.getWorkingDirForConversation(eid);
         if (workingDir) {
-          this.deps.claudeManager.sendMessage(eid, reminder, { workingDir });
+          this.deps.agentManager.sendMessage(eid, reminder, { workingDir });
         }
       }
     }
@@ -1934,8 +1934,8 @@ export class Pylon {
       this.registerSessionViewer(from.deviceId, eid);
 
       // 활성 세션 정보
-      const hasActiveSession = this.deps.claudeManager.hasActiveSession(eid);
-      const workStartTime = this.deps.claudeManager.getSessionStartTime(eid);
+      const hasActiveSession = this.deps.agentManager.hasActiveSession(eid);
+      const workStartTime = this.deps.agentManager.getSessionStartTime(eid);
 
       // 현재 상태 판단 (재연결 시 정확한 상태 동기화)
       // idle: 활성 세션 없음
@@ -1943,7 +1943,7 @@ export class Pylon {
       // working: 활성 세션 있고 pending 이벤트 없음
       let currentStatus: 'idle' | 'working' | 'permission' = 'idle';
       if (hasActiveSession) {
-        const pendingEvent = this.deps.claudeManager.getPendingEvent(eid);
+        const pendingEvent = this.deps.agentManager.getPendingEvent(eid);
         if (pendingEvent) {
           currentStatus = 'permission';
         } else {
@@ -1973,7 +1973,7 @@ export class Pylon {
       });
 
       // pending 이벤트가 있으면 전송
-      const pendingEvent = this.deps.claudeManager.getPendingEvent(eid);
+      const pendingEvent = this.deps.agentManager.getPendingEvent(eid);
       if (pendingEvent) {
         const pe = pendingEvent as { type: string };
         if (pe.type === 'permission_request' || pe.type === 'askQuestion') {
@@ -2093,7 +2093,7 @@ export class Pylon {
         promptToSend = `[시스템: 아래 파일들을 Read 도구로 읽을 것]\n${filePaths}${messageText ? '\n\n' + messageText : ''}`;
       }
 
-      const claudeSessionId = conversation?.claudeSessionId ?? undefined;
+      const agentSessionId = conversation?.claudeSessionId ?? undefined;
 
       // 세션 컨텍스트 빌드
       const linkedDocs = conversation?.linkedDocuments?.map((d) => d.path) || [];
@@ -2113,9 +2113,9 @@ export class Pylon {
         autorunDoc ? { autorunDoc } : undefined
       );
 
-      this.deps.claudeManager.sendMessage(eid, promptToSend, {
+      this.deps.agentManager.sendMessage(eid, promptToSend, {
         workingDir,
-        claudeSessionId,
+        agentSessionId,
         systemPrompt,
         systemReminder,
       });
@@ -2129,7 +2129,7 @@ export class Pylon {
     const { conversationId, toolUseId, decision } = payload || {};
     if (!conversationId || !toolUseId || !decision) return;
 
-    this.deps.claudeManager.respondPermission(
+    this.deps.agentManager.respondPermission(
       conversationId as number,
       toolUseId as string,
       decision as 'allow' | 'deny' | 'allowAll'
@@ -2143,7 +2143,7 @@ export class Pylon {
     const { conversationId, toolUseId, answer } = payload || {};
     if (!conversationId || !toolUseId) return;
 
-    this.deps.claudeManager.respondQuestion(
+    this.deps.agentManager.respondQuestion(
       conversationId as number,
       toolUseId as string,
       answer as string
@@ -2161,11 +2161,11 @@ export class Pylon {
 
     switch (action) {
       case 'stop':
-        this.deps.claudeManager.stop(eid);
+        this.deps.agentManager.stop(eid);
         break;
       case 'new_session':
       case 'clear':
-        this.deps.claudeManager.newSession(eid);
+        this.deps.agentManager.newSession(eid);
         this.deps.messageStore.clear(eid);
         // 새 세션 시작 시 초기 컨텍스트 자동 전송
         this.sendInitialContext(eid);
@@ -2214,7 +2214,7 @@ export class Pylon {
       autorunDoc ? { autorunDoc } : undefined
     );
 
-    this.deps.claudeManager.sendMessage(conversationId, systemReminder, {
+    this.deps.agentManager.sendMessage(conversationId, systemReminder, {
       workingDir,
       systemPrompt,
     });
@@ -2585,7 +2585,7 @@ export class Pylon {
         }
 
         this.deps.workspaceStore.setActiveConversation(conversation.conversationId);
-        this.deps.claudeManager.sendMessage(conversation.conversationId, prompt, { workingDir });
+        this.deps.agentManager.sendMessage(conversation.conversationId, prompt, { workingDir });
 
         return {
           process: null,
@@ -2905,7 +2905,7 @@ Message: ${message}
   /**
    * 이벤트를 메시지 히스토리에 저장
    */
-  private saveEventToHistory(conversationId: number, event: ClaudeManagerEvent): void {
+  private saveEventToHistory(conversationId: number, event: AgentManagerEvent): void {
     const e = event as Record<string, unknown>;
     let shouldSave = false;
 
@@ -2954,7 +2954,7 @@ Message: ${message}
         break;
       }
 
-      case 'claudeAborted':
+      case 'agentAborted':
         this.deps.messageStore.addAborted(conversationId, (e.reason as 'user' | 'session_ended') || 'user');
         shouldSave = true;
         break;
@@ -2969,7 +2969,7 @@ Message: ${message}
   /**
    * 사용량 누적
    */
-  private accumulateUsage(event: ClaudeManagerEvent): void {
+  private accumulateUsage(event: AgentManagerEvent): void {
     const e = event as Record<string, unknown>;
     if (e.total_cost_usd) {
       this.claudeUsage.totalCostUsd += e.total_cost_usd as number;
@@ -3263,7 +3263,7 @@ Message: ${message}
         this.log(`[Account] Switching to account: ${account}`);
 
         // 1. 모든 세션 중단
-        const abortedSessions = this.deps.claudeManager.abortAllSessions();
+        const abortedSessions = this.deps.agentManager.abortAllSessions();
         if (abortedSessions.length > 0) {
           this.log(`[Account] Aborted ${abortedSessions.length} active sessions`);
         }

@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MockClaudeAdapter } from '../../src/claude/mock-claude-adapter.js';
-import type { ClaudeMessage } from '../../src/claude/claude-manager.js';
+import { MockClaudeAdapter } from '../../src/agent/mock-claude-adapter.js';
+import type { AgentMessage } from '../../src/agent/agent-manager.js';
 
 describe('MockClaudeAdapter', () => {
   let adapter: MockClaudeAdapter;
@@ -18,7 +18,7 @@ describe('MockClaudeAdapter', () => {
     it('setSimpleResponse로 텍스트 응답 설정', async () => {
       adapter.setSimpleResponse('Hello, world!');
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query({
         prompt: 'test',
         cwd: '/test',
@@ -57,7 +57,7 @@ describe('MockClaudeAdapter', () => {
         finalText: 'I read the file for you.',
       });
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query({
         prompt: 'read file',
         cwd: '/test',
@@ -102,7 +102,7 @@ describe('MockClaudeAdapter', () => {
     it('권한 거부 시 에러 결과 반환', async () => {
       adapter.setToolUseResponse('Bash', { command: 'rm -rf /' });
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query({
         prompt: 'delete everything',
         cwd: '/test',
@@ -164,7 +164,7 @@ describe('MockClaudeAdapter', () => {
       adapter.setErrorResponse('Something went wrong');
 
       await expect(async () => {
-        const messages: ClaudeMessage[] = [];
+        const messages: AgentMessage[] = [];
         for await (const msg of adapter.query({
           prompt: 'test',
           cwd: '/test',
@@ -178,7 +178,7 @@ describe('MockClaudeAdapter', () => {
 
   describe('커스텀 메시지 시퀀스', () => {
     it('custom 시나리오로 임의 메시지 시퀀스', async () => {
-      const customMessages: ClaudeMessage[] = [
+      const customMessages: AgentMessage[] = [
         { type: 'system', subtype: 'init', session_id: 'custom-1' },
         { type: 'assistant', message: { content: [{ type: 'text', text: 'Custom!' }] } },
         { type: 'result', subtype: 'success' },
@@ -189,7 +189,7 @@ describe('MockClaudeAdapter', () => {
         messages: customMessages,
       });
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query({
         prompt: 'test',
         cwd: '/test',

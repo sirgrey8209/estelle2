@@ -639,11 +639,11 @@ describe('WorkspaceStore', () => {
       });
     });
 
-    describe('updateClaudeSessionId', () => {
+    describe('updateAgentSessionId', () => {
       it('should update claude session ID', () => {
         const sessionId = 'session-123';
 
-        const result = store.updateClaudeSessionId(conversationId, sessionId);
+        const result = store.updateAgentSessionId(conversationId, sessionId);
 
         expect(result).toBe(true);
         const conv = store.getConversation(conversationId);
@@ -654,7 +654,7 @@ describe('WorkspaceStore', () => {
         const workspace = store.getActiveWorkspace();
         const originalLastUsed = workspace!.lastUsed;
 
-        store.updateClaudeSessionId(conversationId, 'session-123');
+        store.updateAgentSessionId(conversationId, 'session-123');
 
         const updated = store.getActiveWorkspace();
         expect(updated?.lastUsed).toBeGreaterThanOrEqual(originalLastUsed);

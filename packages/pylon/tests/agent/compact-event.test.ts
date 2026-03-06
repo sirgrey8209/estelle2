@@ -3,34 +3,34 @@
  * @description Compact 이벤트 처리 테스트
  *
  * SDK에서 오는 compact 관련 시스템 메시지(compacting, compact_boundary)를
- * ClaudeManager에서 처리하여 이벤트로 변환하는 기능을 테스트합니다.
+ * AgentManager에서 처리하여 이벤트로 변환하는 기능을 테스트합니다.
  *
  * TDD: 2-TEST 단계 - 구현 전 테스트 작성
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  ClaudeManager,
-  type ClaudeManagerOptions,
-  type ClaudeManagerEvent,
-  type ClaudeAdapter,
-  type ClaudeQueryOptions,
-  type ClaudeMessage,
-} from '../../src/claude/claude-manager.js';
+  AgentManager,
+  type AgentManagerOptions,
+  type AgentManagerEvent,
+  type AgentAdapter,
+  type AgentQueryOptions,
+  type AgentMessage,
+} from '../../src/agent/agent-manager.js';
 import { PermissionMode } from '@estelle/core';
 
-describe('ClaudeManager - Compact Event', () => {
-  let manager: ClaudeManager;
-  let events: Array<{ sessionId: number; event: ClaudeManagerEvent }>;
-  let mockAdapter: ClaudeAdapter;
-  let queryMessages: ClaudeMessage[];
+describe('AgentManager - Compact Event', () => {
+  let manager: AgentManager;
+  let events: Array<{ sessionId: number; event: AgentManagerEvent }>;
+  let mockAdapter: AgentAdapter;
+  let queryMessages: AgentMessage[];
 
   /**
-   * 모킹된 Claude 어댑터 생성
+   * 모킹된 Agent 어댑터 생성
    */
-  function createMockAdapter(messages: ClaudeMessage[] = []): ClaudeAdapter {
+  function createMockAdapter(messages: AgentMessage[] = []): AgentAdapter {
     return {
-      async *query(_options: ClaudeQueryOptions): AsyncIterable<ClaudeMessage> {
+      async *query(_options: AgentQueryOptions): AsyncIterable<AgentMessage> {
         for (const msg of messages) {
           yield msg;
         }
@@ -39,12 +39,12 @@ describe('ClaudeManager - Compact Event', () => {
   }
 
   /**
-   * 기본 설정으로 ClaudeManager 생성
+   * 기본 설정으로 AgentManager 생성
    */
   function createManager(
-    options: Partial<ClaudeManagerOptions> = {}
-  ): ClaudeManager {
-    return new ClaudeManager({
+    options: Partial<AgentManagerOptions> = {}
+  ): AgentManager {
+    return new AgentManager({
       onEvent: (sessionId, event) => {
         events.push({ sessionId, event });
       },
@@ -381,9 +381,9 @@ describe('ClaudeManager - Compact Event', () => {
   });
 
   // ============================================================================
-  // ClaudeManagerEventType 확장 테스트
+  // AgentManagerEventType 확장 테스트
   // ============================================================================
-  describe('ClaudeManagerEventType extension', () => {
+  describe('AgentManagerEventType extension', () => {
     /**
      * 이 테스트는 타입 시스템 검증용입니다.
      * ClaudeManagerEventType에 'compactStart' | 'compactComplete'가
@@ -392,7 +392,7 @@ describe('ClaudeManager - Compact Event', () => {
     it('should_accept_compactStart_as_valid_event_type', async () => {
       // Arrange
       let receivedEventType: string | null = null;
-      manager = new ClaudeManager({
+      manager = new AgentManager({
         onEvent: (sessionId, event) => {
           if (event.type === 'compactStart') {
             receivedEventType = event.type;
@@ -419,7 +419,7 @@ describe('ClaudeManager - Compact Event', () => {
     it('should_accept_compactComplete_as_valid_event_type', async () => {
       // Arrange
       let receivedEventType: string | null = null;
-      manager = new ClaudeManager({
+      manager = new AgentManager({
         onEvent: (sessionId, event) => {
           if (event.type === 'compactComplete') {
             receivedEventType = event.type;

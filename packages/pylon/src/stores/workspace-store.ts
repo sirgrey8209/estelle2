@@ -610,7 +610,7 @@ export class WorkspaceStore {
     return true;
   }
 
-  updateClaudeSessionId(
+  updateAgentSessionId(
     conversationId: ConversationId,
     sessionId: string | null
   ): boolean {

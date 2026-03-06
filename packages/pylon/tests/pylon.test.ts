@@ -54,7 +54,7 @@ function createMockDependencies(): PylonDependencies {
       onMessage: vi.fn(),
       onStatusChange: vi.fn(),
     },
-    claudeManager: {
+    agentManager: {
       sendMessage: vi.fn(),
       stop: vi.fn(),
       newSession: vi.fn(),
@@ -179,7 +179,7 @@ describe('Pylon', () => {
       await pylon.stop();
 
       expect(deps.relayClient.disconnect).toHaveBeenCalled();
-      expect(deps.claudeManager.cleanup).toHaveBeenCalled();
+      expect(deps.agentManager.cleanup).toHaveBeenCalled();
     });
   });
 
@@ -353,7 +353,7 @@ describe('Pylon', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // Claude 세션이 idle 상태 (hasActiveSession = false)
-      vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(false);
+      vi.mocked(deps.agentManager.hasActiveSession).mockReturnValue(false);
 
       // Act
       pylon.handleMessage({
@@ -383,8 +383,8 @@ describe('Pylon', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // Claude 세션이 working 상태
-      vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(true);
-      vi.mocked(deps.claudeManager.getPendingEvent).mockReturnValue(null);
+      vi.mocked(deps.agentManager.hasActiveSession).mockReturnValue(true);
+      vi.mocked(deps.agentManager.getPendingEvent).mockReturnValue(null);
 
       // Act
       pylon.handleMessage({
@@ -414,8 +414,8 @@ describe('Pylon', () => {
       const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
       // Claude 세션이 permission 대기 상태
-      vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(true);
-      vi.mocked(deps.claudeManager.getPendingEvent).mockReturnValue({
+      vi.mocked(deps.agentManager.hasActiveSession).mockReturnValue(true);
+      vi.mocked(deps.agentManager.getPendingEvent).mockReturnValue({
         type: 'permission_request',
         toolUseId: 'tool-1',
         toolName: 'Bash',
@@ -483,7 +483,7 @@ describe('Pylon', () => {
         })
       );
 
-      // NOTE: claudeManager.sendMessage는 handleClaudeSend 내부에서
+      // NOTE: agentManager.sendMessage는 handleClaudeSend 내부에서
       // decodeConversationIdFull(eid).workspaceIndex로 workspace를 조회하지만,
       // 인코딩된 workspaceId와 raw workspaceIndex가 다르므로 workspace를 찾지 못함.
       // 이는 pylon.ts의 알려진 이슈 (decoded.workspaceId를 사용해야 함).
@@ -502,7 +502,7 @@ describe('Pylon', () => {
         },
       });
 
-      expect(deps.claudeManager.respondPermission).toHaveBeenCalledWith(
+      expect(deps.agentManager.respondPermission).toHaveBeenCalledWith(
         conversation.conversationId,
         'tool-1',
         'allow'
@@ -522,7 +522,7 @@ describe('Pylon', () => {
         },
       });
 
-      expect(deps.claudeManager.respondQuestion).toHaveBeenCalledWith(
+      expect(deps.agentManager.respondQuestion).toHaveBeenCalledWith(
         conversation.conversationId,
         'tool-1',
         'Yes'
@@ -541,7 +541,7 @@ describe('Pylon', () => {
         },
       });
 
-      expect(deps.claudeManager.stop).toHaveBeenCalledWith(conversation.conversationId);
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conversation.conversationId);
     });
 
     it('should handle claude_control new_session action', () => {
@@ -556,7 +556,7 @@ describe('Pylon', () => {
         },
       });
 
-      expect(deps.claudeManager.newSession).toHaveBeenCalledWith(conversation.conversationId);
+      expect(deps.agentManager.newSession).toHaveBeenCalledWith(conversation.conversationId);
     });
   });
 
@@ -796,7 +796,7 @@ describe('Pylon', () => {
       });
 
       // Claude가 A에서 작업 중
-      vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+      vi.mocked(deps.agentManager.hasActiveSession).mockImplementation(
         (eid: number) => eid === convA.conversationId
       );
 
@@ -1381,8 +1381,8 @@ describe('Pylon', () => {
           },
         });
 
-        // Assert: claudeManager.sendMessage에 systemPrompt가 전달되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        // Assert: agentManager.sendMessage에 systemPrompt가 전달되어야 함
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           'Hello Claude',
           expect.objectContaining({
@@ -1411,7 +1411,7 @@ describe('Pylon', () => {
         });
 
         // Assert: systemReminder에 대화명이 포함되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           'Hello',
           expect.objectContaining({
@@ -1443,7 +1443,7 @@ describe('Pylon', () => {
         });
 
         // Assert: systemReminder에 연결된 문서 경로가 포함되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           'Hello',
           expect.objectContaining({
@@ -1464,7 +1464,7 @@ describe('Pylon', () => {
         const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
         // 활성 세션 설정
-        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+        vi.mocked(deps.agentManager.hasActiveSession).mockImplementation(
           (eid: number) => eid === conversation.conversationId
         );
 
@@ -1481,7 +1481,7 @@ describe('Pylon', () => {
         });
 
         // Assert: 활성 세션에 리마인더 메시지가 전송되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           expect.stringContaining('readme.md'),
           expect.objectContaining({
@@ -1496,7 +1496,7 @@ describe('Pylon', () => {
         const conversation = deps.workspaceStore.createConversation(workspace.workspaceId)!;
 
         // 비활성 세션 (기본 mock: hasActiveSession = false)
-        vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(false);
+        vi.mocked(deps.agentManager.hasActiveSession).mockReturnValue(false);
 
         vi.clearAllMocks();
 
@@ -1511,7 +1511,7 @@ describe('Pylon', () => {
         });
 
         // Assert: 비활성 세션에는 리마인더가 전송되지 않아야 함
-        expect(deps.claudeManager.sendMessage).not.toHaveBeenCalled();
+        expect(deps.agentManager.sendMessage).not.toHaveBeenCalled();
       });
 
       it('should_send_document_removed_reminder_when_document_unlinked_and_session_active', () => {
@@ -1523,7 +1523,7 @@ describe('Pylon', () => {
         deps.workspaceStore.linkDocument(conversation.conversationId, 'C:\\docs\\readme.md');
 
         // 활성 세션 설정
-        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+        vi.mocked(deps.agentManager.hasActiveSession).mockImplementation(
           (eid: number) => eid === conversation.conversationId
         );
 
@@ -1540,7 +1540,7 @@ describe('Pylon', () => {
         });
 
         // Assert: 활성 세션에 문서 해제 리마인더가 전송되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           expect.stringContaining('readme.md'),
           expect.objectContaining({
@@ -1561,7 +1561,7 @@ describe('Pylon', () => {
         const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Old Name')!;
 
         // 활성 세션 설정
-        vi.mocked(deps.claudeManager.hasActiveSession).mockImplementation(
+        vi.mocked(deps.agentManager.hasActiveSession).mockImplementation(
           (eid: number) => eid === conversation.conversationId
         );
 
@@ -1578,7 +1578,7 @@ describe('Pylon', () => {
         });
 
         // Assert: 활성 세션에 대화명 변경 리마인더가 전송되어야 함
-        expect(deps.claudeManager.sendMessage).toHaveBeenCalledWith(
+        expect(deps.agentManager.sendMessage).toHaveBeenCalledWith(
           conversation.conversationId,
           expect.stringMatching(/Old Name.*New Name/),
           expect.objectContaining({
@@ -1593,7 +1593,7 @@ describe('Pylon', () => {
         const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Old Name')!;
 
         // 비활성 세션
-        vi.mocked(deps.claudeManager.hasActiveSession).mockReturnValue(false);
+        vi.mocked(deps.agentManager.hasActiveSession).mockReturnValue(false);
 
         vi.clearAllMocks();
 
@@ -1608,7 +1608,7 @@ describe('Pylon', () => {
         });
 
         // Assert: 비활성 세션에는 리마인더가 전송되지 않아야 함
-        expect(deps.claudeManager.sendMessage).not.toHaveBeenCalled();
+        expect(deps.agentManager.sendMessage).not.toHaveBeenCalled();
       });
     });
   });

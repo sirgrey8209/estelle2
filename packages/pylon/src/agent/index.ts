@@ -1,24 +1,24 @@
 /**
  * @file index.ts
- * @description Claude 모듈 진입점
+ * @description Agent 모듈 진입점
  *
- * Claude Agent SDK 연동 관련 기능을 제공합니다.
+ * Agent SDK 연동 관련 기능을 제공합니다.
  *
  * 주요 구성요소:
- * - ClaudeManager: Claude SDK 연동 핵심 클래스
+ * - AgentManager: Agent SDK 연동 핵심 클래스
  * - permission-rules: 도구 실행 권한 결정 순수 함수
  *
  * @example
  * ```typescript
  * import {
- *   ClaudeManager,
+ *   AgentManager,
  *   checkPermission,
  *   isPermissionAllow,
  *   AUTO_ALLOW_TOOLS,
  * } from './agent/index.js';
  *
- * // ClaudeManager 사용
- * const manager = new ClaudeManager({
+ * // AgentManager 사용
+ * const manager = new AgentManager({
  *   onEvent: (sessionId, event) => console.log(event),
  *   getPermissionMode: (sessionId) => 'default',
  * });
@@ -32,29 +32,29 @@
  */
 
 // ============================================================================
-// ClaudeManager
+// AgentManager
 // ============================================================================
 
 export {
-  ClaudeManager,
-  type ClaudeManagerOptions,
-  type ClaudeManagerEvent,
-  type ClaudeManagerEventType,
-  type ClaudeState,
+  AgentManager,
+  type AgentManagerOptions,
+  type AgentManagerEvent,
+  type AgentManagerEventType,
+  type AgentState,
   type TokenUsage,
-  type ClaudeSession,
+  type AgentSession,
   type PendingPermission,
   type PendingQuestion,
   type PendingEvent,
   type PermissionCallbackResult,
   type SendMessageOptions,
-  type ClaudeEventHandler,
+  type AgentEventHandler,
   type GetPermissionModeFn,
   type LoadMcpConfigFn,
-  type ClaudeAdapter,
-  type ClaudeQueryOptions,
-  type ClaudeMessage,
-} from './claude-manager.js';
+  type AgentAdapter,
+  type AgentQueryOptions,
+  type AgentMessage,
+} from './agent-manager.js';
 
 // ============================================================================
 // Permission Rules

@@ -18,7 +18,7 @@ import {
   AUTO_ALLOW_TOOLS,
   EDIT_TOOLS,
   AUTO_DENY_PATTERNS,
-} from '../../src/claude/permission-rules.js';
+} from '../../src/agent/permission-rules.js';
 import { PermissionMode } from '@estelle/core';
 
 describe('permission-rules', () => {

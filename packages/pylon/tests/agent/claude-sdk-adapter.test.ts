@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { ClaudeQueryOptions, ClaudeMessage } from '../../src/claude/claude-manager.js';
+import type { AgentQueryOptions, AgentMessage } from '../../src/agent/agent-manager.js';
 
 // SDK 모킹
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -14,7 +14,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 }));
 
 import { query as mockQuery } from '@anthropic-ai/claude-agent-sdk';
-import { ClaudeSDKAdapter } from '../../src/claude/claude-sdk-adapter.js';
+import { ClaudeSDKAdapter } from '../../src/agent/claude-sdk-adapter.js';
 
 describe('ClaudeSDKAdapter', () => {
   let adapter: ClaudeSDKAdapter;
@@ -31,7 +31,7 @@ describe('ClaudeSDKAdapter', () => {
   /**
    * 모킹된 SDK 응답 생성
    */
-  function createMockSDKResponse(messages: ClaudeMessage[]): AsyncIterable<ClaudeMessage> {
+  function createMockSDKResponse(messages: AgentMessage[]): AsyncIterable<AgentMessage> {
     return {
       async *[Symbol.asyncIterator]() {
         for (const msg of messages) {
@@ -50,10 +50,10 @@ describe('ClaudeSDKAdapter', () => {
     });
 
     it('should call SDK query with correct options', async () => {
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -62,7 +62,7 @@ describe('ClaudeSDKAdapter', () => {
       };
 
       // 메시지 수집
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query(options)) {
         messages.push(msg);
       }
@@ -83,10 +83,10 @@ describe('ClaudeSDKAdapter', () => {
     });
 
     it('should use default values when options are not provided', async () => {
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -114,20 +114,20 @@ describe('ClaudeSDKAdapter', () => {
   // ============================================================================
   describe('메시지 스트리밍', () => {
     it('should yield all messages from SDK', async () => {
-      const mockMessages: ClaudeMessage[] = [
+      const mockMessages: AgentMessage[] = [
         { type: 'system', subtype: 'init', session_id: 'sess-1', model: 'claude-3' },
         { type: 'assistant', message: { content: [{ type: 'text', text: 'Hello' }] } },
         { type: 'result', total_cost_usd: 0.001, num_turns: 1 },
       ];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
       };
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query(options)) {
         messages.push(msg);
       }
@@ -139,7 +139,7 @@ describe('ClaudeSDKAdapter', () => {
     });
 
     it('should pass through stream_event messages', async () => {
-      const mockMessages: ClaudeMessage[] = [
+      const mockMessages: AgentMessage[] = [
         {
           type: 'stream_event',
           event: {
@@ -157,13 +157,13 @@ describe('ClaudeSDKAdapter', () => {
       ];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
       };
 
-      const messages: ClaudeMessage[] = [];
+      const messages: AgentMessage[] = [];
       for await (const msg of adapter.query(options)) {
         messages.push(msg);
       }
@@ -179,10 +179,10 @@ describe('ClaudeSDKAdapter', () => {
   // ============================================================================
   describe('옵션 전달', () => {
     it('should pass resume option for session continuation', async () => {
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Continue',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -202,14 +202,14 @@ describe('ClaudeSDKAdapter', () => {
     });
 
     it('should pass mcpServers option', async () => {
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
       const mcpServers = {
         'my-server': { command: 'node', args: ['server.js'] },
       };
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -229,12 +229,12 @@ describe('ClaudeSDKAdapter', () => {
     });
 
     it('should wrap and pass canUseTool callback', async () => {
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
       const canUseTool = vi.fn().mockResolvedValue({ behavior: 'allow' });
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -261,10 +261,10 @@ describe('ClaudeSDKAdapter', () => {
   describe('systemPrompt 전달', () => {
     it('should_pass_systemPrompt_string_to_sdk', async () => {
       // Arrange
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -287,7 +287,7 @@ describe('ClaudeSDKAdapter', () => {
 
     it('should_pass_systemPrompt_preset_with_append_to_sdk', async () => {
       // Arrange
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
       const systemPromptPreset = {
@@ -296,7 +296,7 @@ describe('ClaudeSDKAdapter', () => {
         append: '## Custom Instructions\nAlways be helpful.',
       };
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -323,10 +323,10 @@ describe('ClaudeSDKAdapter', () => {
 
     it('should_not_include_systemPrompt_when_undefined', async () => {
       // Arrange
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),
@@ -345,10 +345,10 @@ describe('ClaudeSDKAdapter', () => {
 
     it('should_pass_empty_string_systemPrompt_when_explicitly_set', async () => {
       // Arrange
-      const mockMessages: ClaudeMessage[] = [];
+      const mockMessages: AgentMessage[] = [];
       vi.mocked(mockQuery).mockReturnValue(createMockSDKResponse(mockMessages));
 
-      const options: ClaudeQueryOptions = {
+      const options: AgentQueryOptions = {
         prompt: 'Hello',
         cwd: '/test/dir',
         abortController: new AbortController(),

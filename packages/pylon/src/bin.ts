@@ -19,7 +19,7 @@ import { WorkspaceStore } from './stores/workspace-store.js';
 import { MessageStore } from './stores/message-store.js';
 import { ShareStore } from './stores/share-store.js';
 import { createRelayClient } from './network/relay-client.js';
-import { ClaudeManager } from './agent/claude-manager.js';
+import { AgentManager } from './agent/agent-manager.js';
 import { ClaudeSDKAdapter } from './agent/claude-sdk-adapter.js';
 import { BlobHandler, type FileSystemAdapter } from './handlers/blob-handler.js';
 import { TaskManager, type FileSystem } from './managers/task-manager.js';
@@ -363,13 +363,13 @@ function createDependencies(): PylonDependencies & {
     reconnectInterval: 5000,
   });
 
-  // ClaudeAdapter - SDK 직접 사용
-  logger.log(`[Claude] Using ClaudeSDKAdapter (direct SDK, configDir=${claudeConfigDir})`);
-  const claudeAdapter = new ClaudeSDKAdapter();
+  // AgentAdapter - SDK 직접 사용
+  logger.log(`[Agent] Using ClaudeSDKAdapter (direct SDK, configDir=${claudeConfigDir})`);
+  const agentAdapter = new ClaudeSDKAdapter();
 
-  // ClaudeManager - 지연 바인딩으로 pylon 연결
-  const claudeManager = new ClaudeManager({
-    adapter: claudeAdapter,
+  // AgentManager - 지연 바인딩으로 pylon 연결
+  const agentManager = new AgentManager({
+    adapter: agentAdapter,
     getPermissionMode: (conversationId: number) => {
       const conversation = workspaceStore.getConversation(conversationId as ConversationId);
       return conversation?.permissionMode ?? 'default';
@@ -380,14 +380,14 @@ function createDependencies(): PylonDependencies & {
       if (pylonInstance) {
         pylonInstance.sendClaudeEvent(conversationId, event);
       } else {
-        logger.warn(`[Claude] Event received but pylon not ready: ${event.type}`);
+        logger.warn(`[Agent] Event received but pylon not ready: ${event.type}`);
       }
     },
     onRawMessage: (conversationId, message) => {
       // SDK raw 메시지 로깅
       logSdkRawMessage(String(conversationId), message);
     },
-    claudeConfigDir,
+    agentConfigDir: claudeConfigDir,
   });
 
   // BlobHandler (sendFn은 pylon 생성 후 지연 바인딩)
@@ -438,7 +438,7 @@ function createDependencies(): PylonDependencies & {
     workspaceStore,
     messageStore,
     relayClient,
-    claudeManager,
+    agentManager,
     blobHandler: blobHandlerAdapter,
     // pylonSendFn 바인딩을 위한 setter 추가
     _bindPylonSend: (sendFn: (msg: unknown) => void) => {
@@ -481,7 +481,7 @@ async function main(): Promise<void> {
   const deps = createDependencies();
   const pylon = new Pylon(config, deps);
 
-  // 지연 바인딩: ClaudeManager.onEvent가 pylon을 참조할 수 있도록 설정
+  // 지연 바인딩: AgentManager.onEvent가 pylon을 참조할 수 있도록 설정
   pylonInstance = pylon;
 
   // 지연 바인딩: BlobHandler.sendFn이 relayClient.send를 사용하도록 설정
@@ -493,7 +493,7 @@ async function main(): Promise<void> {
     port: pylonMcpPort,
     onChange: () => pylon.broadcastWorkspaceList(),
     getConversationIdByToolUseId: (toolUseId: string) => {
-      return deps.claudeManager.getSessionIdByToolUseId(toolUseId);
+      return deps.agentManager.getSessionIdByToolUseId(toolUseId);
     },
     onNewSession: (conversationId: number) => {
       pylon.triggerNewSession(conversationId);

@@ -1,34 +1,34 @@
 /**
  * @file claude-manager.test.ts
- * @description ClaudeManager 테스트
+ * @description AgentManager 테스트
  *
- * Claude Agent SDK 연동 핵심 모듈을 테스트합니다.
+ * Agent SDK 연동 핵심 모듈을 테스트합니다.
  * SDK 자체는 모킹하고 로직만 테스트합니다.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  ClaudeManager,
-  type ClaudeManagerOptions,
-  type ClaudeManagerEvent,
-  type ClaudeAdapter,
-  type ClaudeQueryOptions,
-  type ClaudeMessage,
-} from '../../src/claude/claude-manager.js';
+  AgentManager,
+  type AgentManagerOptions,
+  type AgentManagerEvent,
+  type AgentAdapter,
+  type AgentQueryOptions,
+  type AgentMessage,
+} from '../../src/agent/agent-manager.js';
 import { PermissionMode } from '@estelle/core';
 
-describe('ClaudeManager', () => {
-  let manager: ClaudeManager;
-  let events: Array<{ sessionId: string; event: ClaudeManagerEvent }>;
-  let mockAdapter: ClaudeAdapter;
-  let queryMessages: ClaudeMessage[];
+describe('AgentManager', () => {
+  let manager: AgentManager;
+  let events: Array<{ sessionId: string; event: AgentManagerEvent }>;
+  let mockAdapter: AgentAdapter;
+  let queryMessages: AgentMessage[];
 
   /**
    * 모킹된 Claude 어댑터 생성
    */
-  function createMockAdapter(messages: ClaudeMessage[] = []): ClaudeAdapter {
+  function createMockAdapter(messages: AgentMessage[] = []): AgentAdapter {
     return {
-      async *query(_options: ClaudeQueryOptions): AsyncIterable<ClaudeMessage> {
+      async *query(_options: AgentQueryOptions): AsyncIterable<AgentMessage> {
         for (const msg of messages) {
           yield msg;
         }
@@ -37,12 +37,12 @@ describe('ClaudeManager', () => {
   }
 
   /**
-   * 기본 설정으로 ClaudeManager 생성
+   * 기본 설정으로 AgentManager 생성
    */
   function createManager(
-    options: Partial<ClaudeManagerOptions> = {}
-  ): ClaudeManager {
-    return new ClaudeManager({
+    options: Partial<AgentManagerOptions> = {}
+  ): AgentManager {
+    return new AgentManager({
       onEvent: (sessionId, event) => {
         events.push({ sessionId, event });
       },
@@ -65,7 +65,7 @@ describe('ClaudeManager', () => {
     it('should create manager with options', () => {
       manager = createManager();
 
-      expect(manager).toBeInstanceOf(ClaudeManager);
+      expect(manager).toBeInstanceOf(AgentManager);
     });
 
     it('should have no active sessions initially', () => {
@@ -216,7 +216,7 @@ describe('ClaudeManager', () => {
       const thinkingEvents = events.filter(
         (e) =>
           e.event.type === 'stateUpdate' &&
-          (e.event as ClaudeManagerEvent & { state: { type: string } }).state?.type === 'thinking'
+          (e.event as AgentManagerEvent & { state: { type: string } }).state?.type === 'thinking'
       );
       expect(thinkingEvents.length).toBeGreaterThan(0);
     });
@@ -499,12 +499,12 @@ describe('ClaudeManager', () => {
           .find(
             (e) =>
               e.event.type === 'stateUpdate' &&
-              (e.event as ClaudeManagerEvent & { partialText: string }).partialText !== undefined
+              (e.event as AgentManagerEvent & { partialText: string }).partialText !== undefined
           );
 
         if (stateUpdateAfterTextComplete) {
           expect(
-            (stateUpdateAfterTextComplete.event as ClaudeManagerEvent & { partialText: string }).partialText
+            (stateUpdateAfterTextComplete.event as AgentManagerEvent & { partialText: string }).partialText
           ).toBe('');
         }
       });
@@ -654,14 +654,14 @@ describe('ClaudeManager', () => {
   // stop 테스트
   // ============================================================================
   describe('stop', () => {
-    it('should emit claudeAborted event', () => {
+    it('should emit agentAborted event', () => {
       manager = createManager();
 
       manager.stop('session-1');
 
       expect(events).toContainEqual({
         sessionId: 'session-1',
-        event: { type: 'claudeAborted', reason: 'user' },
+        event: { type: 'agentAborted', reason: 'user' },
       });
     });
 
@@ -716,10 +716,10 @@ describe('ClaudeManager', () => {
 
       manager.newSession('session-1');
 
-      // claudeAborted 이벤트 (stop에서)
+      // agentAborted 이벤트 (stop에서)
       expect(events).toContainEqual({
         sessionId: 'session-1',
-        event: { type: 'claudeAborted', reason: 'user' },
+        event: { type: 'agentAborted', reason: 'user' },
       });
 
       // 최종 idle 상태
@@ -1239,7 +1239,7 @@ describe('ClaudeManager', () => {
     });
 
     it('should emit error when adapter is not configured', async () => {
-      manager = new ClaudeManager({
+      manager = new AgentManager({
         onEvent: (sessionId, event) => {
           events.push({ sessionId, event });
         },
@@ -1253,7 +1253,7 @@ describe('ClaudeManager', () => {
 
       expect(events).toContainEqual({
         sessionId: 'session-1',
-        event: { type: 'error', error: 'Claude adapter not configured' },
+        event: { type: 'error', error: 'Agent adapter not configured' },
       });
     });
   });
@@ -1262,8 +1262,8 @@ describe('ClaudeManager', () => {
   // 세션 재개 테스트
   // ============================================================================
   describe('세션 재개', () => {
-    it('should pass claudeSessionId to adapter', async () => {
-      let receivedOptions: ClaudeQueryOptions | null = null;
+    it('should pass agentSessionId to adapter', async () => {
+      let receivedOptions: AgentQueryOptions | null = null;
 
       manager = createManager({
         adapter: {
@@ -1276,7 +1276,7 @@ describe('ClaudeManager', () => {
 
       await manager.sendMessage('session-1', 'Hello', {
         workingDir: '/project',
-        claudeSessionId: 'existing-session-123',
+        agentSessionId: 'existing-session-123',
       });
 
       expect(receivedOptions?.resume).toBe('existing-session-123');
@@ -1289,7 +1289,7 @@ describe('ClaudeManager', () => {
   describe('systemPrompt and systemReminder', () => {
     /**
      * 구현 목표:
-     * - systemPrompt: ClaudeQueryOptions.systemPrompt로 SDK에 전달
+     * - systemPrompt: AgentQueryOptions.systemPrompt로 SDK에 전달
      * - systemReminder: message 앞에 <system-reminder> 태그로 붙임
      * - resume 시: systemPrompt/systemReminder 무시 (이미 세션에 있음)
      */
@@ -1297,7 +1297,7 @@ describe('ClaudeManager', () => {
     describe('systemPrompt 전달', () => {
       it('should_include_systemPrompt_in_query_options_when_provided', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedOptions: AgentQueryOptions | null = null;
         const systemPrompt = '현재 환경: release\n빌드 버전: v0214_1';
 
         manager = createManager({
@@ -1326,7 +1326,7 @@ describe('ClaudeManager', () => {
 
       it('should_not_include_systemPrompt_when_not_provided', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedOptions: AgentQueryOptions | null = null;
 
         manager = createManager({
           adapter: {
@@ -1349,7 +1349,7 @@ describe('ClaudeManager', () => {
 
       it('should_handle_empty_systemPrompt', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedOptions: AgentQueryOptions | null = null;
 
         manager = createManager({
           adapter: {
@@ -1477,7 +1477,7 @@ describe('ClaudeManager', () => {
     });
 
     describe('resume 시 처리', () => {
-      it('should_ignore_systemReminder_when_claudeSessionId_provided', async () => {
+      it('should_ignore_systemReminder_when_agentSessionId_provided', async () => {
         // Arrange
         let receivedPrompt: string | null = null;
         const systemReminder = 'Claude.md 내용';
@@ -1495,7 +1495,7 @@ describe('ClaudeManager', () => {
         // Act: resume 시
         await manager.sendMessage(100, userMessage, {
           workingDir: '/project',
-          claudeSessionId: 'existing-session-123',
+          agentSessionId: 'existing-session-123',
           systemReminder,
         });
 
@@ -1504,9 +1504,9 @@ describe('ClaudeManager', () => {
         expect(receivedPrompt).not.toContain('<system-reminder>');
       });
 
-      it('should_ignore_systemPrompt_when_claudeSessionId_provided', async () => {
+      it('should_ignore_systemPrompt_when_agentSessionId_provided', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedOptions: AgentQueryOptions | null = null;
         const systemPrompt = '환경 정보';
 
         manager = createManager({
@@ -1521,7 +1521,7 @@ describe('ClaudeManager', () => {
         // Act: resume 시
         await manager.sendMessage(100, 'Hello', {
           workingDir: '/project',
-          claudeSessionId: 'existing-session-123',
+          agentSessionId: 'existing-session-123',
           systemPrompt,
         });
 
@@ -1531,8 +1531,8 @@ describe('ClaudeManager', () => {
 
       it('should_still_pass_resume_id_when_ignoring_context', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
-        const claudeSessionId = 'existing-session-123';
+        let receivedOptions: AgentQueryOptions | null = null;
+        const agentSessionId = 'existing-session-123';
 
         manager = createManager({
           adapter: {
@@ -1546,20 +1546,20 @@ describe('ClaudeManager', () => {
         // Act
         await manager.sendMessage(100, 'Hello', {
           workingDir: '/project',
-          claudeSessionId,
+          agentSessionId,
           systemPrompt: '무시됨',
           systemReminder: '무시됨',
         });
 
         // Assert: resume ID는 전달되어야 함
-        expect(receivedOptions?.resume).toBe(claudeSessionId);
+        expect(receivedOptions?.resume).toBe(agentSessionId);
       });
     });
 
     describe('systemPrompt와 systemReminder 함께 사용', () => {
       it('should_pass_both_systemPrompt_and_systemReminder_when_provided', async () => {
         // Arrange
-        let receivedOptions: ClaudeQueryOptions | null = null;
+        let receivedOptions: AgentQueryOptions | null = null;
         let receivedPrompt: string | null = null;
         const systemPrompt = '환경: dev';
         const systemReminder = 'Claude.md 내용';

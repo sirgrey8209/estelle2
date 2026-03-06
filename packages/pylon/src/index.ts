@@ -7,7 +7,7 @@ export {
   type PylonConfig,
   type PylonDependencies,
   type RelayClientAdapter,
-  type ClaudeManagerAdapter,
+  type AgentManagerAdapter,
   type BlobHandlerAdapter,
   type TaskManagerAdapter,
   type WorkerManagerAdapter,
@@ -78,9 +78,9 @@ export {
   type FolderOperationResult,
 } from './managers/index.js';
 
-// claude - Claude Agent SDK 연동 모듈
+// agent - Agent SDK 연동 모듈
 export {
-  ClaudeManager,
+  AgentManager,
   // 권한 규칙 순수 함수
   checkPermission,
   isAutoAllowTool,
@@ -94,23 +94,23 @@ export {
   EDIT_TOOLS,
   AUTO_DENY_PATTERNS,
   // 타입
-  type ClaudeManagerOptions,
-  type ClaudeManagerEvent,
-  type ClaudeManagerEventType,
-  type ClaudeState,
+  type AgentManagerOptions,
+  type AgentManagerEvent,
+  type AgentManagerEventType,
+  type AgentState,
   type TokenUsage,
-  type ClaudeSession,
+  type AgentSession,
   type PendingPermission,
   type PendingQuestion,
   type PendingEvent,
   type PermissionCallbackResult,
   type SendMessageOptions,
-  type ClaudeEventHandler,
+  type AgentEventHandler,
   type GetPermissionModeFn,
   type LoadMcpConfigFn,
-  type ClaudeAdapter,
-  type ClaudeQueryOptions,
-  type ClaudeMessage,
+  type AgentAdapter,
+  type AgentQueryOptions,
+  type AgentMessage,
   type PermissionResult,
   type PermissionAllowResult,
   type PermissionDenyResult,

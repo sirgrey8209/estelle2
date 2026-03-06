@@ -1,9 +1,9 @@
 /**
- * @file claude-manager.ts
- * @description ClaudeManager - Claude Agent SDK 연동 핵심 모듈
+ * @file agent-manager.ts
+ * @description AgentManager - Agent SDK 연동 핵심 모듈
  *
- * Claude Agent SDK(@anthropic-ai/claude-agent-sdk)를 사용하여
- * Claude와 대화하고 도구 실행을 관리하는 모듈입니다.
+ * Agent SDK(@anthropic-ai/claude-agent-sdk)를 사용하여
+ * AI Agent와 대화하고 도구 실행을 관리하는 모듈입니다.
  *
  * 주요 기능:
  * - 세션 관리 (sessionId -> query, abortController, state)
@@ -12,15 +12,15 @@
  * - 이벤트 기반 상태 전달
  *
  * 설계 원칙:
- * - SDK는 외부 의존성이므로 ClaudeAdapter 인터페이스로 추상화
+ * - SDK는 외부 의존성이므로 AgentAdapter 인터페이스로 추상화
  * - 권한 규칙은 permission-rules.ts로 분리
  * - 테스트 가능한 순수 로직과 I/O 분리
  *
  * @example
  * ```typescript
- * import { ClaudeManager } from './agent/index.js';
+ * import { AgentManager } from './agent/index.js';
  *
- * const manager = new ClaudeManager({
+ * const manager = new AgentManager({
  *   onEvent: (sessionId, event) => {
  *     console.log(`[${sessionId}]`, event);
  *   },
@@ -67,11 +67,10 @@ export interface SystemPromptPreset {
 // ============================================================================
 
 /**
- * Claude 이벤트 타입
+ * Agent 이벤트 타입
  *
  * @description
- * ClaudeManager가 외부로 전달하는 이벤트 타입입니다.
- * 원본 claudeManager.js의 이벤트 목록과 동일합니다.
+ * AgentManager가 외부로 전달하는 이벤트 타입입니다.
  *
  * 이벤트 목록:
  * - init: 세션 초기화
@@ -85,9 +84,9 @@ export interface SystemPromptPreset {
  * - result: 처리 완료
  * - error: 에러 발생
  * - state: 상태 변경 (idle, working, waiting)
- * - claudeAborted: 중단됨
+ * - agentAborted: 중단됨
  */
-export type ClaudeManagerEventType =
+export type AgentManagerEventType =
   | 'init'
   | 'stateUpdate'
   | 'text'
@@ -100,21 +99,21 @@ export type ClaudeManagerEventType =
   | 'result'
   | 'error'
   | 'state'
-  | 'claudeAborted'
+  | 'agentAborted'
   | 'usage_update'
   | 'compactStart'
   | 'compactComplete';
 
 /**
- * Claude 상태 정보
+ * Agent 상태 정보
  *
  * @description
- * Claude의 현재 작업 상태를 나타냅니다.
+ * Agent의 현재 작업 상태를 나타냅니다.
  * - thinking: 생각 중 (다음 응답 준비)
  * - responding: 텍스트 응답 중
  * - tool: 도구 실행 중
  */
-export interface ClaudeState {
+export interface AgentState {
   /** 상태 타입 */
   type: 'thinking' | 'responding' | 'tool';
 
@@ -123,7 +122,7 @@ export interface ClaudeState {
 }
 
 /**
- * Claude 토큰 사용량
+ * 토큰 사용량
  *
  * @description
  * API 호출에 사용된 토큰 수를 추적합니다.
@@ -143,20 +142,20 @@ export interface TokenUsage {
 }
 
 /**
- * Claude 세션 정보
+ * Agent 세션 정보
  *
  * @description
  * 활성 세션의 상태를 관리합니다.
  */
-export interface ClaudeSession {
+export interface AgentSession {
   /** AbortController (중지용) */
   abortController: AbortController;
 
-  /** Claude 세션 ID (SDK에서 제공) */
-  claudeSessionId: string | null;
+  /** Agent 세션 ID (SDK에서 제공) */
+  agentSessionId: string | null;
 
   /** 현재 상태 */
-  state: ClaudeState;
+  state: AgentState;
 
   /** 부분 텍스트 (스트리밍 중) */
   partialText: string;
@@ -240,8 +239,8 @@ export interface SendMessageOptions {
   /** 작업 디렉토리 */
   workingDir: string;
 
-  /** Claude 세션 ID (재개용) */
-  claudeSessionId?: string;
+  /** Agent 세션 ID (재개용) */
+  agentSessionId?: string;
 
   /** 시스템 프롬프트 (새 세션용, resume 시 무시됨) */
   systemPrompt?: string | SystemPromptPreset;
@@ -254,11 +253,11 @@ export interface SendMessageOptions {
 }
 
 /**
- * Claude 이벤트 핸들러
+ * Agent 이벤트 핸들러
  */
-export type ClaudeEventHandler = (
+export type AgentEventHandler = (
   sessionId: number,
-  event: ClaudeManagerEvent
+  event: AgentManagerEvent
 ) => void;
 
 /**
@@ -274,37 +273,37 @@ export type LoadMcpConfigFn = (
 ) => Record<string, unknown> | null;
 
 /**
- * Claude 이벤트 (모든 이벤트의 유니온 타입)
+ * Agent 이벤트 (모든 이벤트의 유니온 타입)
  */
-export interface ClaudeManagerEvent {
+export interface AgentManagerEvent {
   /** 이벤트 타입 */
-  type: ClaudeManagerEventType;
+  type: AgentManagerEventType;
 
   /** 추가 데이터 */
   [key: string]: unknown;
 }
 
 /**
- * ClaudeAdapter 인터페이스
+ * AgentAdapter 인터페이스
  *
  * @description
- * Claude SDK를 추상화한 인터페이스입니다.
+ * Agent SDK를 추상화한 인터페이스입니다.
  * 테스트 시 모킹하거나 다른 구현으로 교체할 수 있습니다.
  */
-export interface ClaudeAdapter {
+export interface AgentAdapter {
   /**
-   * Claude에 쿼리 실행
+   * Agent에 쿼리 실행
    *
    * @param options - 쿼리 옵션
    * @returns 메시지 스트림 (AsyncIterable)
    */
-  query(options: ClaudeQueryOptions): AsyncIterable<ClaudeMessage>;
+  query(options: AgentQueryOptions): AsyncIterable<AgentMessage>;
 }
 
 /**
- * Claude 쿼리 옵션
+ * Agent 쿼리 옵션
  */
-export interface ClaudeQueryOptions {
+export interface AgentQueryOptions {
   /** 프롬프트 메시지 */
   prompt: string;
 
@@ -346,13 +345,13 @@ export interface ClaudeQueryOptions {
 }
 
 /**
- * Claude 메시지 (SDK에서 반환되는 메시지)
+ * Agent 메시지 (SDK에서 반환되는 메시지)
  *
  * @description
  * 실제 SDK 메시지 타입을 간소화한 형태입니다.
  * 필요한 필드만 포함합니다.
  */
-export interface ClaudeMessage {
+export interface AgentMessage {
   /** 메시지 타입 */
   type: string;
 
@@ -431,19 +430,19 @@ export interface ClaudeMessage {
 }
 
 /**
- * ClaudeManager 옵션
+ * AgentManager 옵션
  */
 /**
  * SDK raw 메시지 로거
  */
 export type RawMessageLogger = (
   sessionId: number,
-  message: ClaudeMessage
+  message: AgentMessage
 ) => void;
 
-export interface ClaudeManagerOptions {
+export interface AgentManagerOptions {
   /** 이벤트 핸들러 */
-  onEvent: ClaudeEventHandler;
+  onEvent: AgentEventHandler;
 
   /** 권한 모드 조회 함수 */
   getPermissionMode: GetPermissionModeFn;
@@ -451,25 +450,25 @@ export interface ClaudeManagerOptions {
   /** MCP 설정 로드 함수 (선택) */
   loadMcpConfig?: LoadMcpConfigFn;
 
-  /** Claude 어댑터 (테스트용, 미지정 시 기본 SDK 사용) */
-  adapter?: ClaudeAdapter;
+  /** Agent 어댑터 (테스트용, 미지정 시 기본 SDK 사용) */
+  adapter?: AgentAdapter;
 
   /** SDK raw 메시지 로거 (선택) */
   onRawMessage?: RawMessageLogger;
 
-  /** Claude config 디렉토리 (CLAUDE_CONFIG_DIR, 환경별 분리) */
-  claudeConfigDir?: string;
+  /** Agent config 디렉토리 (CLAUDE_CONFIG_DIR, 환경별 분리) */
+  agentConfigDir?: string;
 }
 
 // ============================================================================
-// ClaudeManager 클래스
+// AgentManager 클래스
 // ============================================================================
 
 /**
- * ClaudeManager - Claude Agent SDK 연동 핵심 클래스
+ * AgentManager - Agent SDK 연동 핵심 클래스
  *
  * @description
- * Claude SDK를 사용하여 대화를 관리하고 도구 실행 권한을 처리합니다.
+ * Agent SDK를 사용하여 대화를 관리하고 도구 실행 권한을 처리합니다.
  *
  * 특징:
  * - 세션별 상태 관리 (Map 기반)
@@ -480,7 +479,7 @@ export interface ClaudeManagerOptions {
  *
  * @example
  * ```typescript
- * const manager = new ClaudeManager({
+ * const manager = new AgentManager({
  *   onEvent: (sessionId, event) => {
  *     // 이벤트 처리
  *   },
@@ -494,13 +493,13 @@ export interface ClaudeManagerOptions {
  * });
  * ```
  */
-export class ClaudeManager {
+export class AgentManager {
   // ============================================================================
   // Private 필드
   // ============================================================================
 
   /** 이벤트 핸들러 */
-  private readonly onEvent: ClaudeEventHandler;
+  private readonly onEvent: AgentEventHandler;
 
   /** 권한 모드 조회 함수 */
   private readonly getPermissionMode: GetPermissionModeFn;
@@ -508,14 +507,14 @@ export class ClaudeManager {
   /** MCP 설정 로드 함수 */
   private readonly loadMcpConfig?: LoadMcpConfigFn;
 
-  /** Claude 어댑터 */
-  private readonly adapter?: ClaudeAdapter;
+  /** Agent 어댑터 */
+  private readonly adapter?: AgentAdapter;
 
   /** SDK raw 메시지 로거 */
   private readonly onRawMessage?: RawMessageLogger;
 
-  /** 활성 세션 (sessionId -> ClaudeSession) */
-  private readonly sessions: Map<number, ClaudeSession> = new Map();
+  /** 활성 세션 (sessionId -> AgentSession) */
+  private readonly sessions: Map<number, AgentSession> = new Map();
 
   /** 대기 중인 권한 요청 (toolUseId -> PendingPermission) */
   private readonly pendingPermissions: Map<string, PendingPermission> =
@@ -532,28 +531,28 @@ export class ClaudeManager {
   // ============================================================================
 
   /**
-   * ClaudeManager 생성자
+   * AgentManager 생성자
    *
    * @param options - 설정 옵션
    */
-  constructor(options: ClaudeManagerOptions) {
+  constructor(options: AgentManagerOptions) {
     this.onEvent = options.onEvent;
     this.getPermissionMode = options.getPermissionMode;
     this.loadMcpConfig = options.loadMcpConfig;
     this.adapter = options.adapter;
     this.onRawMessage = options.onRawMessage;
-    this.claudeConfigDir = options.claudeConfigDir;
+    this.agentConfigDir = options.agentConfigDir;
   }
 
-  /** Claude config 디렉토리 */
-  private readonly claudeConfigDir?: string;
+  /** Agent config 디렉토리 */
+  private readonly agentConfigDir?: string;
 
   // ============================================================================
   // Public 메서드 - 메시지 전송
   // ============================================================================
 
   /**
-   * Claude에게 메시지 전송
+   * Agent에게 메시지 전송
    *
    * @description
    * 지정된 세션으로 메시지를 전송하고 응답을 처리합니다.
@@ -567,7 +566,7 @@ export class ClaudeManager {
    * ```typescript
    * await manager.sendMessage('conv-123', 'Hello', {
    *   workingDir: '/project',
-   *   claudeSessionId: 'existing-session', // 재개용
+   *   agentSessionId: 'existing-session', // 재개용
    * });
    * ```
    */
@@ -576,7 +575,7 @@ export class ClaudeManager {
     message: string,
     options: SendMessageOptions
   ): Promise<void> {
-    const { workingDir, claudeSessionId } = options;
+    const { workingDir, agentSessionId } = options;
 
     // 작업 디렉토리 필수
     if (!workingDir) {
@@ -600,7 +599,7 @@ export class ClaudeManager {
         sessionId,
         {
           workingDir,
-          claudeSessionId,
+          agentSessionId,
           systemPrompt: options.systemPrompt,
           systemReminder: options.systemReminder,
           plugins: options.plugins,
@@ -656,7 +655,7 @@ export class ClaudeManager {
     this.pendingEvents.delete(sessionId);
 
     // 4. 중단 메시지 전송
-    this.emitEvent(sessionId, { type: 'claudeAborted', reason: 'user' });
+    this.emitEvent(sessionId, { type: 'agentAborted', reason: 'user' });
 
     // 5. 상태 강제 변경
     this.emitEvent(sessionId, { type: 'state', state: 'idle' });
@@ -855,7 +854,7 @@ export class ClaudeManager {
    *
    * @description
    * MCP 도구가 toolUseId를 통해 해당 도구 호출이 어느 대화에서 발생했는지 조회합니다.
-   * ClaudeManager 내부의 pendingTools를 사용하여 매핑합니다.
+   * AgentManager 내부의 pendingTools를 사용하여 매핑합니다.
    *
    * @param toolUseId - 도구 호출 ID
    * @returns 세션 ID 또는 null
@@ -913,7 +912,7 @@ export class ClaudeManager {
       abortedSessions.push(sessionId);
     }
 
-    console.log(`[ClaudeManager] Aborted ${abortedSessions.length} sessions for account switch`);
+    console.log(`[AgentManager] Aborted ${abortedSessions.length} sessions for account switch`);
     return abortedSessions;
   }
 
@@ -932,7 +931,7 @@ export class ClaudeManager {
     sessionId: number,
     sessionInfo: {
       workingDir: string;
-      claudeSessionId?: string;
+      agentSessionId?: string;
       systemPrompt?: string | SystemPromptPreset;
       systemReminder?: string;
       plugins?: Array<{ type: 'local'; path: string }>;
@@ -942,9 +941,9 @@ export class ClaudeManager {
     const abortController = new AbortController();
 
     // 세션 상태 초기화
-    const session: ClaudeSession = {
+    const session: AgentSession = {
       abortController,
-      claudeSessionId: null,
+      agentSessionId: null,
       state: { type: 'thinking' },
       partialText: '',
       startTime: Date.now(),
@@ -967,7 +966,7 @@ export class ClaudeManager {
     });
 
     // 쿼리 옵션 구성
-    const queryOptions: ClaudeQueryOptions = {
+    const queryOptions: AgentQueryOptions = {
       prompt: message,
       cwd: sessionInfo.workingDir,
       abortController,
@@ -987,11 +986,11 @@ export class ClaudeManager {
       }
     }
 
-    // 환경별 Claude config 디렉토리 전달
-    if (this.claudeConfigDir) {
+    // 환경별 Agent config 디렉토리 전달
+    if (this.agentConfigDir) {
       queryOptions.env = {
         ...process.env as Record<string, string>,
-        CLAUDE_CONFIG_DIR: this.claudeConfigDir,
+        CLAUDE_CONFIG_DIR: this.agentConfigDir,
       };
     }
 
@@ -1001,12 +1000,12 @@ export class ClaudeManager {
     }
 
     // 세션 재개
-    if (sessionInfo.claudeSessionId) {
-      queryOptions.resume = sessionInfo.claudeSessionId;
+    if (sessionInfo.agentSessionId) {
+      queryOptions.resume = sessionInfo.agentSessionId;
     }
 
     // resume가 아닐 때만 context(systemPrompt, systemReminder) 처리
-    if (!sessionInfo.claudeSessionId) {
+    if (!sessionInfo.agentSessionId) {
       // systemPrompt 전달 (undefined가 아닌 경우에만, 빈 문자열도 전달)
       if (sessionInfo.systemPrompt !== undefined) {
         queryOptions.systemPrompt = sessionInfo.systemPrompt;
@@ -1022,7 +1021,7 @@ export class ClaudeManager {
     if (!this.adapter) {
       this.emitEvent(sessionId, {
         type: 'error',
-        error: 'Claude adapter not configured',
+        error: 'Agent adapter not configured',
       });
       return;
     }
@@ -1044,8 +1043,8 @@ export class ClaudeManager {
    */
   private handleMessage(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     // SDK raw 메시지 로깅
     if (this.onRawMessage) {
@@ -1084,11 +1083,11 @@ export class ClaudeManager {
    */
   private handleSystemMessage(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     if (msg.subtype === 'init') {
-      session.claudeSessionId = msg.session_id || null;
+      session.agentSessionId = msg.session_id || null;
 
       // tools 배열을 세션에 저장 (history_result에서 사용)
       if (msg.tools && Array.isArray(msg.tools)) {
@@ -1103,7 +1102,7 @@ export class ClaudeManager {
       });
     } else if (msg.subtype === 'status') {
       // compacting 상태일 때 compactStart 이벤트 emit
-      const status = (msg as ClaudeMessage & { status?: string }).status;
+      const status = (msg as AgentMessage & { status?: string }).status;
       if (status === 'compacting') {
         this.emitEvent(sessionId, {
           type: 'compactStart',
@@ -1111,7 +1110,7 @@ export class ClaudeManager {
       }
     } else if (msg.subtype === 'compact_boundary') {
       // compact_boundary 메시지일 때 compactComplete 이벤트 emit
-      const compactMetadata = (msg as ClaudeMessage & { compact_metadata?: { trigger?: string; pre_tokens?: number } }).compact_metadata;
+      const compactMetadata = (msg as AgentMessage & { compact_metadata?: { trigger?: string; pre_tokens?: number } }).compact_metadata;
       this.emitEvent(sessionId, {
         type: 'compactComplete',
         preTokens: compactMetadata?.pre_tokens,
@@ -1129,8 +1128,8 @@ export class ClaudeManager {
    */
   private handleAssistantMessage(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     const content = msg.message?.content;
     if (!content) return;
@@ -1186,8 +1185,8 @@ export class ClaudeManager {
    */
   private handleUserMessage(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     const content = msg.message?.content;
     if (!Array.isArray(content)) return;
@@ -1228,8 +1227,8 @@ export class ClaudeManager {
    */
   private handleStreamEvent(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     const event = msg.event;
     if (!event) return;
@@ -1308,8 +1307,8 @@ export class ClaudeManager {
    */
   private handleToolProgress(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     if (msg.tool_name) {
       session.state = { type: 'tool', toolName: msg.tool_name };
@@ -1328,8 +1327,8 @@ export class ClaudeManager {
    */
   private handleResult(
     sessionId: number,
-    session: ClaudeSession,
-    msg: ClaudeMessage
+    session: AgentSession,
+    msg: AgentMessage
   ): void {
     const duration = Date.now() - session.startTime;
 
@@ -1427,7 +1426,7 @@ export class ClaudeManager {
   /**
    * 이벤트 발생
    */
-  private emitEvent(sessionId: number, event: ClaudeManagerEvent): void {
+  private emitEvent(sessionId: number, event: AgentManagerEvent): void {
     this.onEvent(sessionId, event);
   }
 
