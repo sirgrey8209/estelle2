@@ -57,6 +57,7 @@ import type {
   ConversationStatusValue,
   PermissionModeValue,
   LinkedDocument,
+  AgentType,
   // 새로운 ID 시스템 타입 (내부용)
   EnvId,
   PylonId,
@@ -117,7 +118,7 @@ export interface Conversation {
   createdAt: number;
 
   /** 에이전트 타입 (claude, codex) */
-  agentType: 'claude' | 'codex';
+  agentType: AgentType;
 
   /** 연결된 문서 목록 */
   linkedDocuments?: LinkedDocument[];

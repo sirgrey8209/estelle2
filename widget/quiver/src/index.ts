@@ -1,4 +1,14 @@
 import * as readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
+import { QuiverAI } from '@quiverai/sdk';
+import { GenerateSVGAcceptEnum } from '@quiverai/sdk/sdk/createsvgs';
+import type { EventStream } from '@quiverai/sdk/lib/event-streams';
+import type { SvgStreamEvent } from '@quiverai/sdk/sdk/models/shared';
+
+const client = new QuiverAI({
+  bearerAuth: process.env.QUIVERAI_API_KEY,
+});
 
 // ============================================================================
 // HTML/JS Templates
@@ -181,8 +191,61 @@ rl.on('line', (line) => {
   }
 });
 
-function handleClientEvent(data: { type: string; [key: string]: unknown }): void {
-  // TODO: Task 4에서 구현
+async function handleClientEvent(data: { type: string; [key: string]: unknown }): Promise<void> {
+  if (data.type === 'prompt') {
+    const prompt = data.text as string;
+    await generateSvg(prompt);
+  }
+}
+
+async function generateSvg(prompt: string): Promise<void> {
+  try {
+    sendEvent({ type: 'status', phase: 'reasoning' });
+
+    const response = await client.createSVGs.generateSVG(
+      {
+        model: 'arrow-preview',
+        prompt,
+        stream: true,
+      },
+      {
+        acceptHeaderOverride: GenerateSVGAcceptEnum.textEventStream,
+      }
+    );
+
+    // EventStream 타입인지 확인
+    const stream = response as EventStream<SvgStreamEvent>;
+
+    let finalSvg = '';
+
+    // SSE 스트림 처리
+    for await (const event of stream) {
+      if (event.event === 'reasoning') {
+        sendEvent({ type: 'status', phase: 'reasoning' });
+      } else if (event.event === 'draft') {
+        const svg = event.data?.svg || '';
+        sendEvent({ type: 'svg', phase: 'draft', data: svg });
+      } else if (event.event === 'content') {
+        finalSvg = event.data?.svg || '';
+        sendEvent({ type: 'svg', phase: 'draft', data: finalSvg });
+      }
+    }
+
+    // 파일 저장
+    const uploadsDir = path.resolve(process.cwd(), '../../uploads/svg');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filename = `quiver-${Date.now()}.svg`;
+    const filepath = path.join(uploadsDir, filename);
+    fs.writeFileSync(filepath, finalSvg);
+
+    sendEvent({ type: 'svg', phase: 'done', data: finalSvg, path: filepath });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    sendEvent({ type: 'error', message });
+  }
 }
 
 // 초기 UI 렌더링
