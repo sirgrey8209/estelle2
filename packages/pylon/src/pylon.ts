@@ -653,6 +653,14 @@ export class Pylon {
       from?: MessageFrom;
     };
 
+    // lastActiveClientId 업데이트
+    if (from?.deviceId !== undefined) {
+      const activeConversationId = this.deps.workspaceStore.getActiveState().activeConversationId;
+      if (activeConversationId) {
+        this.deps.workspaceStore.updateLastActiveClient(activeConversationId, from.deviceId);
+      }
+    }
+
     // 연결 확인
     if (type === 'connected') {
       this.log(`Connected to Relay: ${(payload as { message?: string })?.message || ''}`);
