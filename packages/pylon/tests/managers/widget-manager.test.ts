@@ -650,6 +650,96 @@ describe('WidgetManager', () => {
   });
 
   // ============================================================================
+  // Ownership 테스트
+  // ============================================================================
+  describe('ownership', () => {
+    describe('claimOwnership', () => {
+      it('should reject claim for non-existent session', () => {
+        const result = manager.claimOwnership('non-existent', 1);
+        expect(result).toBe(false);
+      });
+
+      it('should reject claim when session is running', async () => {
+        const sessionId = await manager.startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        // running 상태에서는 claim 불가
+        const result = manager.claimOwnership(sessionId, 1);
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('isOwner', () => {
+      it('should return false for non-existent session', () => {
+        const result = manager.isOwner('non-existent', 1);
+        expect(result).toBe(false);
+      });
+
+      it('should return false when session has no owner', async () => {
+        const sessionId = await manager.startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        const result = manager.isOwner(sessionId, 1);
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('getSessionsByOwner', () => {
+      it('should return empty array when no sessions exist', () => {
+        const result = manager.getSessionsByOwner(1);
+        expect(result).toEqual([]);
+      });
+
+      it('should return empty array when no matching owner', async () => {
+        await manager.startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        const result = manager.getSessionsByOwner(999);
+        expect(result).toEqual([]);
+      });
+
+      it('should not return sessions without owner', async () => {
+        await manager.startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        const result = manager.getSessionsByOwner(1);
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('handleHandshakeAck', () => {
+      it('should emit handshake_ack event', async () => {
+        const ackPromise = new Promise<{ sessionId: string; visible: boolean; clientId: number }>((resolve) => {
+          manager.on('handshake_ack', resolve);
+        });
+
+        manager.handleHandshakeAck('session-1', true, 42);
+
+        const event = await ackPromise;
+        expect(event.sessionId).toBe('session-1');
+        expect(event.visible).toBe(true);
+        expect(event.clientId).toBe(42);
+      });
+    });
+  });
+
+  // ============================================================================
   // 비정상 입력 처리 테스트
   // ============================================================================
   describe('invalid input handling', () => {
