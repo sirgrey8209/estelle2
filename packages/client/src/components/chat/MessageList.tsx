@@ -209,6 +209,30 @@ export function MessageList({
     });
   }, [selectedConversation, openFileViewer]);
 
+  // 파일 경로 클릭 → McpFileInfo로 변환하여 기존 핸들러 재사용
+  const handleFilePathClick = useCallback((filePath: string) => {
+    const filename = filePath.split('/').pop() || filePath;
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+
+    // 확장자로 MIME 타입 추정
+    const mimeMap: Record<string, string> = {
+      png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+      md: 'text/markdown', txt: 'text/plain', json: 'application/json',
+      js: 'text/javascript', ts: 'text/typescript', tsx: 'text/typescript',
+      jsx: 'text/javascript', css: 'text/css', html: 'text/html',
+    };
+    const mimeType = mimeMap[ext] || 'application/octet-stream';
+
+    // McpFileInfo 형태로 변환하여 기존 핸들러 호출
+    handleMcpFileClick({
+      filename,
+      path: filePath,
+      mimeType,
+      size: 0, // 크기는 알 수 없음
+    });
+  }, [handleMcpFileClick]);
+
   // Widget v2 이벤트 핸들러 (Client → Pylon)
   const handleWidgetEvent = useCallback((data: unknown) => {
     const conversationId = selectedConversation?.conversationId;
@@ -419,6 +443,7 @@ export function MessageList({
               if (att) handleAttachmentPress(att);
             }}
             onMcpFileClick={handleMcpFileClick}
+            onFilePathClick={handleFilePathClick}
             widgetSession={widgetSession}
             onWidgetEvent={handleWidgetEvent}
             onWidgetCancel={handleWidgetCancel}

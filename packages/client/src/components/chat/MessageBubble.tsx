@@ -30,6 +30,8 @@ interface MessageBubbleProps {
   onWidgetCancel?: () => void;
   /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
   widgetAssets?: Record<string, string>;
+  /** 파일 경로 클릭 핸들러 */
+  onFilePathClick?: (path: string) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function MessageBubble({
   onWidgetEvent,
   onWidgetCancel,
   widgetAssets,
+  onFilePathClick,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user' && message.type === 'text';
   const isToolStart = message.type === 'tool_start';
@@ -75,6 +78,7 @@ export function MessageBubble({
           elapsedSeconds={elapsedSeconds}
           childTools={toolMsg.toolName === 'Task' ? childTools : undefined}
           onMcpFileClick={onMcpFileClick}
+          onFilePathClick={onFilePathClick}
           toolUseId={toolMsg.id}
           widgetSession={widgetSession}
           onWidgetEvent={onWidgetEvent}
