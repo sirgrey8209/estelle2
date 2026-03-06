@@ -457,7 +457,7 @@ export function ToolCard({
     return (
       <div
         className={cn(
-          'my-0.5 ml-2 rounded border border-l-2 bg-card overflow-hidden',
+          'my-0.5 ml-2 rounded border border-l-2 bg-card overflow-hidden max-w-[400px]',
           borderColor
         )}
         style={{ borderLeftColor: isComplete ? (success ? '#22c55e' : '#ef4444') : '#eab308' }}

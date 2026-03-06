@@ -1,14 +1,22 @@
 import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
-import { QuiverAI } from '@quiverai/sdk';
-import { GenerateSVGAcceptEnum } from '@quiverai/sdk/sdk/createsvgs';
-import type { EventStream } from '@quiverai/sdk/lib/event-streams';
-import type { SvgStreamEvent } from '@quiverai/sdk/sdk/models/shared';
+import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
+import { HfInference } from '@huggingface/inference';
 
-const client = new QuiverAI({
-  bearerAuth: process.env.QUIVERAI_API_KEY,
-});
+// .env 파일 로드 (위젯 디렉토리 기준)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, '../.env');
+console.error('Loading .env from:', envPath);
+console.error('.env exists:', fs.existsSync(envPath));
+config({ path: envPath });
+console.error('HF_TOKEN loaded:', process.env.HF_TOKEN ? 'yes (length: ' + process.env.HF_TOKEN.length + ')' : 'no');
+
+const hfToken = process.env.HF_TOKEN;
+console.error('Creating HfInference client with token:', hfToken ? hfToken.slice(0, 10) + '...' : 'undefined');
+
+const client = new HfInference(hfToken);
 
 let lastSavedPath: string | null = null;
 
@@ -24,21 +32,21 @@ const HTML_TEMPLATE = `
   <div id="input-section">
     <textarea
       id="prompt-input"
-      placeholder="SVG를 설명해주세요... (예: A minimalist logo for a coffee shop)"
+      placeholder="이미지를 설명해주세요... (예: A cute cat sitting on a windowsill)"
       style="width: 100%; height: 80px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-size: 14px;"
     ></textarea>
     <button
       id="generate-btn"
       style="margin-top: 8px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;"
     >
-      Generate SVG
+      Generate Image
     </button>
   </div>
 
   <div id="status" style="margin-top: 12px; font-size: 13px; color: #666; display: none;"></div>
 
-  <div id="svg-container" style="margin-top: 16px; border: 1px solid #eee; border-radius: 8px; min-height: 200px; display: flex; align-items: center; justify-content: center; background: #fafafa;">
-    <span style="color: #999;">SVG will appear here</span>
+  <div id="image-container" style="margin-top: 16px; border: 1px solid #eee; border-radius: 8px; min-height: 200px; display: flex; align-items: center; justify-content: center; background: #fafafa;">
+    <span style="color: #999;">Image will appear here</span>
   </div>
 
   <div id="result-section" style="margin-top: 12px; display: none;">
@@ -57,7 +65,7 @@ const JS_CODE = `
 const promptInput = document.getElementById('prompt-input');
 const generateBtn = document.getElementById('generate-btn');
 const statusEl = document.getElementById('status');
-const svgContainer = document.getElementById('svg-container');
+const imageContainer = document.getElementById('image-container');
 const resultSection = document.getElementById('result-section');
 const filePathEl = document.getElementById('file-path');
 const newBtn = document.getElementById('new-btn');
@@ -74,7 +82,7 @@ generateBtn.onclick = () => {
   promptInput.disabled = true;
   statusEl.style.display = 'block';
   statusEl.textContent = 'Starting...';
-  svgContainer.innerHTML = '<span style="color: #999;">Generating...</span>';
+  imageContainer.innerHTML = '<span style="color: #999;">Generating...</span>';
   resultSection.style.display = 'none';
 
   api.sendEvent({ type: 'prompt', text: prompt });
@@ -83,25 +91,23 @@ generateBtn.onclick = () => {
 newBtn.onclick = () => {
   isGenerating = false;
   generateBtn.disabled = false;
-  generateBtn.textContent = 'Generate SVG';
+  generateBtn.textContent = 'Generate Image';
   promptInput.disabled = false;
   promptInput.value = '';
   statusEl.style.display = 'none';
-  svgContainer.innerHTML = '<span style="color: #999;">SVG will appear here</span>';
+  imageContainer.innerHTML = '<span style="color: #999;">Image will appear here</span>';
   resultSection.style.display = 'none';
 };
 
-api.onEvent = (data) => {
+api.onMessage((data) => {
   if (data.type === 'status') {
-    statusEl.textContent = data.phase === 'reasoning' ? 'Thinking...' : 'Generating...';
-  } else if (data.type === 'svg') {
-    if (data.phase === 'draft' || data.phase === 'done') {
-      svgContainer.innerHTML = data.data;
-    }
+    statusEl.textContent = data.message || 'Generating...';
+  } else if (data.type === 'image') {
     if (data.phase === 'done') {
+      imageContainer.innerHTML = '<img src="' + data.dataUrl + '" style="max-width: 100%; max-height: 400px; border-radius: 4px;" />';
       isGenerating = false;
       generateBtn.disabled = false;
-      generateBtn.textContent = 'Generate SVG';
+      generateBtn.textContent = 'Generate Image';
       promptInput.disabled = false;
       statusEl.style.display = 'none';
       resultSection.style.display = 'block';
@@ -110,12 +116,12 @@ api.onEvent = (data) => {
   } else if (data.type === 'error') {
     isGenerating = false;
     generateBtn.disabled = false;
-    generateBtn.textContent = 'Generate SVG';
+    generateBtn.textContent = 'Generate Image';
     promptInput.disabled = false;
     statusEl.textContent = 'Error: ' + data.message;
     statusEl.style.color = '#ef4444';
   }
-};
+});
 `;
 
 // ============================================================================
@@ -204,58 +210,54 @@ rl.on('line', (line) => {
 async function handleClientEvent(data: { type: string; [key: string]: unknown }): Promise<void> {
   if (data.type === 'prompt') {
     const prompt = data.text as string;
-    await generateSvg(prompt);
+    await generateImage(prompt);
   }
 }
 
-async function generateSvg(prompt: string): Promise<void> {
+async function generateImage(prompt: string): Promise<void> {
   try {
-    sendEvent({ type: 'status', phase: 'reasoning' });
+    sendEvent({ type: 'status', message: 'Generating image...' });
 
-    const response = await client.createSVGs.generateSVG(
-      {
-        model: 'arrow-preview',
-        prompt,
-        stream: true,
-      },
-      {
-        acceptHeaderOverride: GenerateSVGAcceptEnum.textEventStream,
-      }
-    );
+    console.error('Generating image with prompt:', prompt);
 
-    // EventStream 타입인지 확인
-    const stream = response as EventStream<SvgStreamEvent>;
+    // Hugging Face text-to-image API 호출 (dataUrl로 직접 반환)
+    const dataUrl = await client.textToImage({
+      model: 'black-forest-labs/FLUX.1-schnell',  // 빠른 모델 사용
+      inputs: prompt,
+    }, {
+      outputType: 'dataUrl',
+    });
 
-    let finalSvg = '';
+    console.error('Response type:', typeof dataUrl);
+    console.error('Response length:', dataUrl.length);
 
-    // SSE 스트림 처리
-    for await (const event of stream) {
-      if (event.event === 'reasoning') {
-        sendEvent({ type: 'status', phase: 'reasoning' });
-      } else if (event.event === 'draft') {
-        const svg = event.data?.svg || '';
-        sendEvent({ type: 'svg', phase: 'draft', data: svg });
-      } else if (event.event === 'content') {
-        finalSvg = event.data?.svg || '';
-        sendEvent({ type: 'svg', phase: 'draft', data: finalSvg });
-      }
+    // data URL에서 base64 추출하여 파일로 저장
+    const base64Match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+    if (!base64Match) {
+      throw new Error('Invalid data URL format');
     }
+    const base64Data = base64Match[1];
+    const buffer = Buffer.from(base64Data, 'base64');
 
     // 파일 저장
-    const uploadsDir = path.resolve(process.cwd(), '../../uploads/svg');
+    const uploadsDir = path.resolve(process.cwd(), '../../uploads/images');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
-    const filename = `quiver-${Date.now()}.svg`;
+    const filename = `hf-${Date.now()}.png`;
     const filepath = path.join(uploadsDir, filename);
-    fs.writeFileSync(filepath, finalSvg);
+    fs.writeFileSync(filepath, buffer);
 
     // filepath를 lastSavedPath에 저장
     lastSavedPath = filepath;
 
-    sendEvent({ type: 'svg', phase: 'done', data: finalSvg, path: filepath });
+    console.error('Image saved to:', filepath);
+    console.error('Image size:', buffer.length, 'bytes');
+
+    sendEvent({ type: 'image', phase: 'done', dataUrl, path: filepath });
   } catch (err) {
+    console.error('Error generating image:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
     sendEvent({ type: 'error', message });
   }
@@ -265,9 +267,12 @@ async function generateSvg(prompt: string): Promise<void> {
 const initialJs = prompt
   ? `
     ${JS_CODE}
-    // 자동 시작
-    document.getElementById('prompt-input').value = ${JSON.stringify(prompt)};
-    document.getElementById('generate-btn').click();
+    // 자동 시작 (한 번만 실행되도록 플래그 체크)
+    if (!window.__quiverAutoStarted) {
+      window.__quiverAutoStarted = true;
+      document.getElementById('prompt-input').value = ${JSON.stringify(prompt)};
+      document.getElementById('generate-btn').click();
+    }
   `
   : JS_CODE;
 
