@@ -40,7 +40,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
-import { decodeConversationIdFull, isWidgetCheckPayload } from '@estelle/core';
+import { decodeConversationIdFull, isWidgetCheckPayload, isWidgetHandshakeAckPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
@@ -236,6 +236,8 @@ export interface WidgetManagerAdapter {
   sendEvent(sessionId: string, data: unknown): void;
   /** 세션 상태 조회 */
   getSession(sessionId: string): WidgetSessionInfo | undefined;
+  /** 핸드셰이크 응답 처리 */
+  handleHandshakeAck(sessionId: string, visible: boolean, clientId: number): void;
 }
 
 /**
@@ -946,6 +948,12 @@ export class Pylon {
       return;
     }
 
+    // ===== Widget 핸드셰이크 응답 =====
+    if (type === 'widget_handshake_ack') {
+      this.handleWidgetHandshakeAck(payload, from);
+      return;
+    }
+
     // ===== Widget 세션 유효성 확인 =====
     if (type === 'widget_check') {
       this.handleWidgetCheck(payload, from);
@@ -1023,6 +1031,30 @@ export class Pylon {
     }
 
     this.deps.widgetManager.sendEvent(sessionId, data);
+  }
+
+  /**
+   * Widget 핸드셰이크 응답 처리
+   */
+  private handleWidgetHandshakeAck(
+    payload: Record<string, unknown> | undefined,
+    from?: MessageFrom,
+  ): void {
+    if (!isWidgetHandshakeAckPayload(payload)) {
+      this.log('[Widget] Invalid widget_handshake_ack payload');
+      return;
+    }
+
+    const { sessionId, visible } = payload;
+    const clientId = from?.deviceId;
+
+    if (clientId === undefined) {
+      this.log('[Widget] Missing clientId in handshake_ack');
+      return;
+    }
+
+    this.log(`[Widget] Handshake ack: session=${sessionId}, visible=${visible}, client=${clientId}`);
+    this.deps.widgetManager?.handleHandshakeAck(sessionId, visible, clientId);
   }
 
   /**
