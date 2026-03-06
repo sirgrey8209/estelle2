@@ -120,6 +120,8 @@ export interface PylonMcpServerOptions {
   onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
   /** Widget 닫기 시 호출되는 콜백 (Client에 WebSocket으로 전달) */
   onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  /** Widget 완료 시 호출되는 콜백 (모든 Client에 브로드캐스트) */
+  onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
   /** Widget 이벤트 시 호출되는 콜백 (Client에 WebSocket으로 전달, CLI → Client) */
   onWidgetEvent?: (sessionId: string, data: unknown) => void;
 }
@@ -336,6 +338,7 @@ export class PylonMcpServer {
   private _widgetManager?: WidgetManager;
   private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode) => void;
   private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
+  private _onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
   private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
 
   /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
@@ -361,6 +364,7 @@ export class PylonMcpServer {
     this._widgetManager = options?.widgetManager;
     this._onWidgetRender = options?.onWidgetRender;
     this._onWidgetClose = options?.onWidgetClose;
+    this._onWidgetComplete = options?.onWidgetComplete;
     this._onWidgetEvent = options?.onWidgetEvent;
   }
 
@@ -1704,10 +1708,14 @@ export class PylonMcpServer {
       };
       this._pendingWidgets.set(conversationId, pendingWidget);
 
+      // 마지막 렌더링된 view를 추적
+      let lastView: ViewNode | null = null;
+
       // render 이벤트 리스너 등록
       const onRender = (event: WidgetRenderEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Render event received for session ${sessionId}`);
+          lastView = event.view;
           this._onWidgetRender?.(conversationId, toolUseId, sessionId, event.view);
         }
       };
@@ -1716,6 +1724,10 @@ export class PylonMcpServer {
       const onComplete = (event: WidgetCompleteEvent) => {
         if (event.sessionId === sessionId) {
           console.log(`[Widget] Complete event received for session ${sessionId}, result:`, event.result);
+          // 마지막 view가 있으면 widget_complete 브로드캐스트
+          if (lastView) {
+            this._onWidgetComplete?.(conversationId, toolUseId, sessionId, lastView, event.result);
+          }
           this._onWidgetClose?.(conversationId, toolUseId, sessionId);
         }
       };

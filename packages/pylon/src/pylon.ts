@@ -39,7 +39,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType } from '@estelle/core';
+import type { PermissionModeValue, ConversationStatusValue, ConversationId, AccountType, ViewNode } from '@estelle/core';
 import { decodeConversationIdFull, isWidgetCheckPayload, isWidgetHandshakeAckPayload, isWidgetClaimPayload } from '@estelle/core';
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
@@ -1178,6 +1178,38 @@ export class Pylon {
     }
 
     this.send(message);
+  }
+
+  /**
+   * 위젯 완료 브로드캐스트
+   *
+   * @description
+   * 위젯 세션이 완료되면 모든 클라이언트에게 종료 화면과 결과를 브로드캐스트합니다.
+   *
+   * @param conversationId - 대화 ID
+   * @param sessionId - 위젯 세션 ID
+   * @param toolUseId - 도구 사용 ID
+   * @param view - 종료 화면 (ViewNode)
+   * @param result - 위젯 결과
+   */
+  sendWidgetComplete(
+    conversationId: number,
+    sessionId: string,
+    toolUseId: string,
+    view: ViewNode,
+    result: unknown,
+  ): void {
+    this.send({
+      type: 'widget_complete',
+      payload: {
+        conversationId,
+        sessionId,
+        toolUseId,
+        view,
+        result,
+      },
+      broadcast: 'clients',
+    });
   }
 
   /**

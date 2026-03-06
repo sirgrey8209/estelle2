@@ -519,6 +519,9 @@ async function main(): Promise<void> {
         broadcast: 'clients',
       });
     },
+    onWidgetComplete: (conversationId, toolUseId, sessionId, view, result) => {
+      pylon.sendWidgetComplete(conversationId, sessionId, toolUseId, view, result);
+    },
     onWidgetEvent: (sessionId, data) => {
       deps.relayClient.send({
         type: 'widget_event',
