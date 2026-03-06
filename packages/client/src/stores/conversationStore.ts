@@ -168,13 +168,23 @@ export interface ConversationStoreState {
 
   // === Actions: widgetSession ===
 
-  /** Widget 세션 설정 */
+  /** Widget 세션 설정 (running 상태) */
   setWidgetSession: (
     conversationId: number,
     toolUseId: string,
     sessionId: string,
     view: ViewNode
   ) => void;
+
+  /** Widget pending 상태 설정 (시작 버튼 표시용) */
+  setWidgetPending: (
+    conversationId: number,
+    toolUseId: string,
+    sessionId: string
+  ) => void;
+
+  /** Widget claimed 상태 설정 (다른 클라이언트가 소유) */
+  setWidgetClaimed: (conversationId: number, sessionId: string) => void;
 
   /** Widget 세션 초기화 */
   clearWidgetSession: (conversationId: number) => void;
@@ -480,9 +490,34 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
     states.set(conversationId, {
       ...state,
-      widgetSession: { toolUseId, sessionId, view },
+      widgetSession: { toolUseId, sessionId, view, status: 'running' },
     });
     set({ states });
+  },
+
+  setWidgetPending: (conversationId, toolUseId, sessionId) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    states.set(conversationId, {
+      ...state,
+      widgetSession: { toolUseId, sessionId, view: null, status: 'pending' },
+    });
+    set({ states });
+  },
+
+  setWidgetClaimed: (conversationId, sessionId) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    // 현재 세션이 claim된 세션과 같을 때만 상태 변경
+    if (state.widgetSession?.sessionId === sessionId) {
+      states.set(conversationId, {
+        ...state,
+        widgetSession: { ...state.widgetSession, status: 'claimed' },
+      });
+      set({ states });
+    }
   },
 
   clearWidgetSession: (conversationId) => {

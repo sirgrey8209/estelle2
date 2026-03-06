@@ -604,3 +604,26 @@ export function sendWidgetHandshakeAck(
     to: [pylonId],
   });
 }
+
+/**
+ * Widget 소유권 요청 전송
+ *
+ * pending 상태의 위젯에 대해 소유권을 요청합니다.
+ * 성공하면 CLI가 시작되고 widget_claimed 브로드캐스트가 옵니다.
+ *
+ * @param conversationId - 대화 ID
+ * @param sessionId - 위젯 세션 ID
+ */
+export function sendWidgetClaim(
+  conversationId: number,
+  sessionId: string
+): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: 'widget_claim',
+    payload: {
+      sessionId,
+    },
+    to: [pylonId],
+  });
+}

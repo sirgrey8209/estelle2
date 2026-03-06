@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock, Plug } from 'lucide-react';
+import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock, Plug, Play } from 'lucide-react';
 import { parseToolInput, parseMcpToolName } from '../../utils/toolInputParser';
 import { removeSystemReminder, diffLines } from '../../utils/textUtils';
 import { Collapsible } from '../common/Collapsible';
@@ -47,12 +47,15 @@ interface ToolCardProps {
   widgetSession?: {
     toolUseId: string;
     sessionId: string;
-    view: ViewNode;
+    view: ViewNode | null;
+    status: 'pending' | 'running' | 'claimed';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
   /** Widget v2 취소 핸들러 (ScriptViewNode용) */
   onWidgetCancel?: () => void;
+  /** Widget claim 핸들러 (pending 상태에서 시작 버튼 클릭) */
+  onWidgetClaim?: () => void;
   /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
   widgetAssets?: Record<string, string>;
   /** 파일 경로 클릭 핸들러 */
@@ -209,6 +212,7 @@ export function ToolCard({
   widgetSession,
   onWidgetEvent,
   onWidgetCancel,
+  onWidgetClaim,
   widgetAssets,
   onFilePathClick,
 }: ToolCardProps) {
@@ -481,8 +485,22 @@ export function ToolCard({
           {isComplete && <span className={cn('ml-auto', statusColor)}>{statusIcon}</span>}
         </div>
 
-        {/* Widget 렌더링 */}
-        {matchedWidget && onWidgetEvent && onWidgetCancel && (
+        {/* Widget 렌더링: pending 상태면 시작 버튼, running 상태면 WidgetRenderer */}
+        {matchedWidget && matchedWidget.status === 'pending' && onWidgetClaim && (
+          <div className="border-t border-border p-3">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onWidgetClaim();
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm hover:bg-primary/90"
+            >
+              <Play className="h-3.5 w-3.5" />
+              시작
+            </button>
+          </div>
+        )}
+        {matchedWidget && matchedWidget.status === 'running' && matchedWidget.view && onWidgetEvent && onWidgetCancel && (
           <div className="border-t border-border">
             <WidgetRenderer
               sessionId={matchedWidget.sessionId}

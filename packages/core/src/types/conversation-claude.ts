@@ -145,14 +145,21 @@ export interface ConversationClaudeState {
  * @description
  * 현재 활성화된 Widget 세션 정보입니다.
  * Widget Protocol을 통해 렌더링되는 UI를 표시합니다.
+ *
+ * status:
+ * - 'pending': 핸드셰이크 실패, 소유권 대기 중 (시작 버튼 표시)
+ * - 'running': 소유권 확보됨, CLI 실행 중 (view 렌더링)
+ * - 'claimed': 다른 클라이언트가 소유권 획득 (UI 없음)
  */
 export interface WidgetSession {
   /** MCP 도구 호출 ID (ToolCard와 연결) */
   toolUseId: string;
   /** Widget 세션 ID */
   sessionId: string;
-  /** 렌더링할 View 노드 */
-  view: ViewNode;
+  /** 렌더링할 View 노드 (pending 상태에서는 null) */
+  view: ViewNode | null;
+  /** 위젯 상태 */
+  status: 'pending' | 'running' | 'claimed';
 }
 
 // ============================================================================

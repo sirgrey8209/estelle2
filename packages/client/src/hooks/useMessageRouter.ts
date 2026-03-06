@@ -468,24 +468,39 @@ export function routeMessage(message: RelayMessage): void {
     case 'widget_pending': {
       // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId } }
       // 핸드셰이크 실패 시 위젯이 pending 상태가 됨
-      // 현재는 로깅만 (나중에 UI 표시 가능)
-      const { conversationId, sessionId } = payload as {
+      // conversationStore에 pending 상태 저장 → UI에서 "시작" 버튼 표시
+      const { conversationId, sessionId, toolUseId } = payload as {
         conversationId: number;
         sessionId: string;
         toolUseId: string;
       };
+
+      if (!conversationId || !sessionId || !toolUseId) {
+        console.warn('[MessageRouter] widget_pending missing required fields');
+        break;
+      }
+
       console.log(`[MessageRouter] widget_pending: conversation=${conversationId}, session=${sessionId}`);
+      useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
       break;
     }
 
     case 'widget_claimed': {
-      // RelayMessage 형식: { type, payload: { sessionId, ownerClientId } }
+      // RelayMessage 형식: { type, payload: { sessionId, ownerClientId, conversationId? } }
       // 다른 클라이언트가 위젯 소유권을 획득함
-      const { sessionId, ownerClientId } = payload as {
+      // pending 상태였던 위젯을 claimed로 변경 (UI에서 숨김)
+      const { sessionId, ownerClientId, conversationId } = payload as {
         sessionId: string;
         ownerClientId: number;
+        conversationId?: number;
       };
+
       console.log(`[MessageRouter] widget_claimed: session=${sessionId}, owner=${ownerClientId}`);
+
+      // conversationId가 있으면 해당 대화의 위젯 상태 업데이트
+      if (conversationId) {
+        useConversationStore.getState().setWidgetClaimed(conversationId, sessionId);
+      }
       break;
     }
 

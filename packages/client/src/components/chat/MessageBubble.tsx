@@ -22,12 +22,15 @@ interface MessageBubbleProps {
   widgetSession?: {
     toolUseId: string;
     sessionId: string;
-    view: import('@estelle/core').ViewNode;
+    view: import('@estelle/core').ViewNode | null;
+    status: 'pending' | 'running' | 'claimed';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
   /** Widget v2 취소 핸들러 (ScriptViewNode용) */
   onWidgetCancel?: () => void;
+  /** Widget claim 핸들러 (pending 상태에서 시작 버튼 클릭) */
+  onWidgetClaim?: () => void;
   /** Widget v2 에셋 URL 맵 (ScriptViewNode용) */
   widgetAssets?: Record<string, string>;
   /** 파일 경로 클릭 핸들러 */
@@ -45,6 +48,7 @@ export function MessageBubble({
   widgetSession,
   onWidgetEvent,
   onWidgetCancel,
+  onWidgetClaim,
   widgetAssets,
   onFilePathClick,
 }: MessageBubbleProps) {
@@ -83,6 +87,7 @@ export function MessageBubble({
           widgetSession={widgetSession}
           onWidgetEvent={onWidgetEvent}
           onWidgetCancel={onWidgetCancel}
+          onWidgetClaim={onWidgetClaim}
           widgetAssets={widgetAssets}
         />
       </div>

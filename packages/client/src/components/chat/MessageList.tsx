@@ -12,7 +12,7 @@ import { WorkingIndicator } from './WorkingIndicator';
 import { FileViewer } from '../viewers';
 import { WidgetRenderer } from '../widget';
 import { blobService } from '../../services/blobService';
-import { sendWidgetEvent } from '../../services/relaySender';
+import { sendWidgetEvent, sendWidgetClaim } from '../../services/relaySender';
 import type { StoreMessage, ResultMessage, AbortedMessage, FileAttachmentMessage, ToolStartMessage, ToolCompleteMessage, Attachment } from '@estelle/core';
 import type { ChildToolInfo, McpFileInfo } from './ToolCard';
 
@@ -250,6 +250,14 @@ export function MessageList({
     sendWidgetEvent(conversationId, widgetSession.sessionId, { type: 'cancel' });
   }, [selectedConversation?.conversationId, widgetSession]);
 
+  // Widget claim 핸들러 (pending 상태에서 시작 버튼 클릭)
+  const handleWidgetClaim = useCallback(() => {
+    const conversationId = selectedConversation?.conversationId;
+    if (!conversationId || !widgetSession) return;
+
+    sendWidgetClaim(conversationId, widgetSession.sessionId);
+  }, [selectedConversation?.conversationId, widgetSession]);
+
   const buildDisplayItems = useCallback(() => {
     const items: Array<{ type: string; data: unknown; key: string }> = [];
 
@@ -447,6 +455,7 @@ export function MessageList({
             widgetSession={widgetSession}
             onWidgetEvent={handleWidgetEvent}
             onWidgetCancel={handleWidgetCancel}
+            onWidgetClaim={handleWidgetClaim}
           />
         );
       }
