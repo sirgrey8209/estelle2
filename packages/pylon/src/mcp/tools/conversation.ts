@@ -12,6 +12,7 @@
  * - MCP 표준 응답 포맷 반환
  */
 
+import type { AgentType } from '@estelle/core';
 import { PylonClient } from '../pylon-client.js';
 
 // ============================================================================
@@ -88,7 +89,7 @@ function createPylonClient(): PylonClient {
  * @returns MCP 표준 응답
  */
 export async function executeCreateConversation(
-  args: { name?: string; files?: string[] },
+  args: { name?: string; files?: string[]; agent?: string },
   meta: ToolMeta,
 ): Promise<ToolResult> {
   try {
@@ -97,6 +98,7 @@ export async function executeCreateConversation(
       meta.toolUseId,
       args.name,
       args.files,
+      args.agent as AgentType | undefined,
     );
 
     if (!result.success) {
@@ -218,6 +220,11 @@ export function getCreateConversationToolDefinition(): ToolDefinition {
           type: 'array',
           items: { type: 'string' },
           description: '연결할 파일 경로 배열 (선택)',
+        },
+        agent: {
+          type: 'string',
+          enum: ['claude', 'codex'],
+          description: '사용할 에이전트 (선택, 기본값: "claude")',
         },
       },
       required: [],

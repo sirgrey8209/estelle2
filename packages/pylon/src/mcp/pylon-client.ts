@@ -15,7 +15,7 @@
  */
 
 import net from 'net';
-import type { LinkedDocument } from '@estelle/core';
+import type { AgentType, LinkedDocument } from '@estelle/core';
 
 // ============================================================================
 // 상수
@@ -176,6 +176,7 @@ interface PylonRequest {
   html?: string;
   code?: string;
   height?: number;
+  agent?: AgentType;
 }
 
 // ============================================================================
@@ -306,6 +307,7 @@ export class PylonClient {
     toolUseId: string,
     name?: string,
     files?: string[],
+    agent?: AgentType,
   ): Promise<ConversationResult> {
     if (!toolUseId || toolUseId === '') {
       return {
@@ -319,6 +321,7 @@ export class PylonClient {
       toolUseId,
       name,
       files,
+      agent,
     });
   }
 
