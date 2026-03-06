@@ -529,6 +529,12 @@ async function main(): Promise<void> {
         broadcast: 'clients',
       });
     },
+    initiateWidgetHandshake: (sessionId, conversationId, toolUseId) => {
+      return pylon.initiateWidgetHandshake(sessionId, conversationId, toolUseId);
+    },
+    broadcastWidgetPending: (sessionId, conversationId, toolUseId) => {
+      pylon.broadcastWidgetPending(sessionId, conversationId, toolUseId);
+    },
   });
 
   // Pylon에 mcpServer 주입 (지연 바인딩)

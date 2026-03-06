@@ -124,6 +124,20 @@ export interface PylonMcpServerOptions {
   onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
   /** Widget 이벤트 시 호출되는 콜백 (Client에 WebSocket으로 전달, CLI → Client) */
   onWidgetEvent?: (sessionId: string, data: unknown) => void;
+  /**
+   * Widget 핸드셰이크 시작 콜백
+   * Pylon에서 lastActiveClient에게 widget_handshake 메시지를 전송하고,
+   * 응답(widget_handshake_ack)을 기다린 후 결과를 반환.
+   *
+   * @returns 핸드셰이크 성공 시 ownerClientId, 실패/타임아웃 시 null
+   */
+  initiateWidgetHandshake?: (
+    sessionId: string,
+    conversationId: ConversationId,
+    toolUseId: string,
+  ) => Promise<number | null>;
+  /** Widget pending 브로드캐스트 콜백 (핸드셰이크 실패 시) */
+  broadcastWidgetPending?: (sessionId: string, conversationId: ConversationId, toolUseId: string) => void;
 }
 
 /** 요청 타입 */
@@ -340,6 +354,12 @@ export class PylonMcpServer {
   private _onWidgetClose?: (conversationId: number, toolUseId: string, sessionId: string) => void;
   private _onWidgetComplete?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, result: unknown) => void;
   private _onWidgetEvent?: (sessionId: string, data: unknown) => void;
+  private _initiateWidgetHandshake?: (
+    sessionId: string,
+    conversationId: ConversationId,
+    toolUseId: string,
+  ) => Promise<number | null>;
+  private _broadcastWidgetPending?: (sessionId: string, conversationId: ConversationId, toolUseId: string) => void;
 
   /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
   private readonly _pendingWidgets: Map<number, PendingWidget> = new Map();
@@ -366,6 +386,8 @@ export class PylonMcpServer {
     this._onWidgetClose = options?.onWidgetClose;
     this._onWidgetComplete = options?.onWidgetComplete;
     this._onWidgetEvent = options?.onWidgetEvent;
+    this._initiateWidgetHandshake = options?.initiateWidgetHandshake;
+    this._broadcastWidgetPending = options?.broadcastWidgetPending;
   }
 
   // ============================================================================
@@ -1684,11 +1706,11 @@ export class PylonMcpServer {
       };
     }
 
-    console.log('[Widget] Starting widget session...');
+    console.log('[Widget] Preparing widget session...');
 
     try {
-      // Widget 세션 시작
-      const sessionId = await this._widgetManager.startSession({
+      // 1. 세션 준비 (CLI 미시작)
+      const sessionId = this._widgetManager.prepareSession({
         command,
         cwd,
         args,
@@ -1696,9 +1718,9 @@ export class PylonMcpServer {
         toolUseId,
       });
 
-      console.log(`[Widget] Session started: ${sessionId}`);
+      console.log(`[Widget] Session prepared: ${sessionId}, status: handshaking`);
 
-      // pendingWidgets에 등록 (Promise의 resolve/reject는 나중에 설정)
+      // pendingWidgets에 등록
       const pendingWidget: PendingWidget = {
         conversationId,
         toolUseId,
@@ -1707,6 +1729,34 @@ export class PylonMcpServer {
         reject: () => {},
       };
       this._pendingWidgets.set(conversationId, pendingWidget);
+
+      // 2. 핸드셰이크 시작 (Pylon에서 처리)
+      let ownerClientId: number | null = null;
+
+      if (this._initiateWidgetHandshake) {
+        console.log('[Widget] Starting handshake...');
+        ownerClientId = await this._initiateWidgetHandshake(sessionId, conversationId, toolUseId);
+      }
+
+      // 3. 핸드셰이크 결과 처리
+      if (ownerClientId !== null) {
+        // 핸드셰이크 성공: CLI 시작
+        console.log(`[Widget] Handshake success, owner: ${ownerClientId}`);
+        const started = this._widgetManager.startSessionProcess(sessionId, ownerClientId);
+        if (!started) {
+          throw new Error('Failed to start CLI process');
+        }
+        console.log(`[Widget] CLI started for session ${sessionId}`);
+      } else {
+        // 핸드셰이크 실패/타임아웃: pending 상태로 전환
+        console.log('[Widget] Handshake failed or timed out, status: pending');
+        this._widgetManager.setSessionStatus(sessionId, 'pending');
+
+        // widget_pending 브로드캐스트 (다른 클라이언트가 claim 가능)
+        this._broadcastWidgetPending?.(sessionId, conversationId, toolUseId);
+
+        // pending 상태에서 claim을 기다림 (waitForCompletion에서 처리됨)
+      }
 
       // 마지막 렌더링된 view를 추적
       let lastView: ViewNode | null = null;

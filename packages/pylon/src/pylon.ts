@@ -226,6 +226,7 @@ export interface WidgetSessionInfo {
   conversationId: number;
   toolUseId: string;
   status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+  ownerClientId: number | null;
 }
 
 /**
@@ -248,6 +249,12 @@ export interface WidgetManagerAdapter {
   getSessionsByOwner(clientId: number): WidgetSessionInfo[];
   /** 세션 취소 */
   cancelSession(sessionId: string): boolean;
+  /** 이벤트 리스너 등록 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string, handler: (...args: any[]) => void): void;
+  /** 이벤트 리스너 해제 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  off(event: string, handler: (...args: any[]) => void): void;
 }
 
 /**
@@ -1024,10 +1031,33 @@ export class Pylon {
 
     // 소유자 검증 (inline 위젯 제외)
     if (!sessionId.startsWith('inline-') && clientId !== undefined) {
-      const isOwner = this.deps.widgetManager?.isOwner(sessionId, clientId);
-      if (!isOwner) {
-        this.log(`[Widget] Event rejected: client ${clientId} is not owner of ${sessionId}`);
-        return;
+      const session = this.deps.widgetManager?.getSession(sessionId);
+      if (session) {
+        // pending 상태면 첫 이벤트를 보낸 클라이언트가 claim
+        if (session.status === 'pending') {
+          const claimed = this.deps.widgetManager?.claimOwnership(sessionId, clientId);
+          if (claimed) {
+            this.log(`[Widget] Auto-claimed via first event: client ${clientId} for ${sessionId}`);
+            // widget_claimed 브로드캐스트
+            this.send({
+              type: 'widget_claimed',
+              payload: { sessionId, ownerClientId: clientId },
+            });
+          } else {
+            this.log(`[Widget] Auto-claim failed: session=${sessionId}, client=${clientId}`);
+            return;
+          }
+        } else if (session.status === 'running') {
+          // running 상태면 owner 검증
+          if (session.ownerClientId !== clientId) {
+            this.log(`[Widget] Event rejected: client ${clientId} is not owner of ${sessionId}`);
+            return;
+          }
+        } else {
+          // handshaking이나 다른 상태면 이벤트 무시
+          this.log(`[Widget] Event ignored: session ${sessionId} is in ${session.status} state`);
+          return;
+        }
       }
     }
 
@@ -1058,6 +1088,91 @@ export class Pylon {
     }
 
     this.deps.widgetManager.sendEvent(sessionId, data);
+  }
+
+  /**
+   * Widget 핸드셰이크 시작
+   *
+   * lastActiveClient에게 widget_handshake 메시지를 전송하고,
+   * 응답(widget_handshake_ack)을 기다린 후 결과를 반환합니다.
+   *
+   * @returns 핸드셰이크 성공 시 ownerClientId, 실패/타임아웃 시 null
+   */
+  async initiateWidgetHandshake(
+    sessionId: string,
+    conversationId: ConversationId,
+    toolUseId: string,
+  ): Promise<number | null> {
+    const HANDSHAKE_TIMEOUT = 3000; // 3초 타임아웃
+
+    const lastActiveClientId = this.deps.workspaceStore.getLastActiveClient(conversationId);
+
+    if (lastActiveClientId === undefined) {
+      this.log('[Widget] No lastActiveClient, skipping handshake');
+      return null;
+    }
+
+    this.log(`[Widget] Initiating handshake: session=${sessionId}, target=${lastActiveClientId}`);
+
+    // 핸드셰이크 메시지 전송
+    this.send({
+      type: 'widget_handshake',
+      payload: {
+        conversationId,
+        sessionId,
+        toolUseId,
+        timeout: HANDSHAKE_TIMEOUT,
+      },
+      to: [lastActiveClientId],
+    });
+
+    // 응답 대기 (Promise)
+    return new Promise((resolve) => {
+      const session = this.deps.widgetManager?.getSession(sessionId);
+      if (!session) {
+        resolve(null);
+        return;
+      }
+
+      // 타임아웃 핸들러
+      const timeoutId = setTimeout(() => {
+        this.log(`[Widget] Handshake timeout: session=${sessionId}`);
+        this.deps.widgetManager?.off('handshake_ack', handler);
+        resolve(null);
+      }, HANDSHAKE_TIMEOUT);
+
+      // 응답 핸들러
+      const handler = (ack: { sessionId: string; visible: boolean; clientId: number }) => {
+        if (ack.sessionId === sessionId) {
+          clearTimeout(timeoutId);
+          this.deps.widgetManager?.off('handshake_ack', handler);
+
+          if (ack.visible) {
+            this.log(`[Widget] Handshake success: session=${sessionId}, owner=${ack.clientId}`);
+            resolve(ack.clientId);
+          } else {
+            this.log(`[Widget] Handshake rejected (not visible): session=${sessionId}`);
+            resolve(null);
+          }
+        }
+      };
+
+      this.deps.widgetManager?.on('handshake_ack', handler);
+    });
+  }
+
+  /**
+   * Widget pending 브로드캐스트
+   *
+   * 핸드셰이크 실패 시 모든 클라이언트에게 pending 상태를 알립니다.
+   */
+  broadcastWidgetPending(sessionId: string, conversationId: ConversationId, toolUseId: string): void {
+    this.log(`[Widget] Broadcasting pending: session=${sessionId}`);
+
+    this.send({
+      type: 'widget_pending',
+      payload: { conversationId, sessionId, toolUseId },
+    });
   }
 
   /**

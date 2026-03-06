@@ -3,6 +3,18 @@
  * @description Widget 세션 관리자
  *
  * CLI 프로세스를 spawn하고 stdin/stdout으로 Widget Protocol 통신을 관리합니다.
+ *
+ * ## 핸드셰이크 프로토콜
+ *
+ * 1. prepareSession() - 세션 생성 (CLI 미시작, status: 'handshaking')
+ * 2. Pylon이 lastActiveClient에게 widget_handshake 전송
+ * 3. 클라이언트가 widget_handshake_ack 응답
+ * 4. startSessionProcess() - owner 설정 후 CLI 시작 (status: 'running')
+ *
+ * 핸드셰이크 타임아웃/거부 시:
+ * - status: 'pending'으로 전환
+ * - widget_pending 브로드캐스트
+ * - 다른 클라이언트가 widget_claim으로 소유권 요청 가능
  */
 
 import { spawn, ChildProcess } from 'child_process';
@@ -26,12 +38,16 @@ export interface WidgetSession {
   sessionId: string;
   conversationId: number;
   toolUseId: string;
-  process: ChildProcess;
+  process: ChildProcess | null; // 핸드셰이크 완료 전에는 null
   status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
   ownerClientId: number | null;
   result?: unknown;
   error?: string;
   logger?: WidgetLogger;
+  // CLI 시작에 필요한 정보 (prepareSession에서 저장, startSessionProcess에서 사용)
+  command: string;
+  cwd: string;
+  args?: string[];
 }
 
 export interface WidgetStartOptions {
@@ -71,32 +87,56 @@ export class WidgetManager extends EventEmitter {
   private sessionCounter = 0;
 
   /**
-   * 새 Widget 세션 시작
+   * 세션 준비 (CLI 미시작)
+   *
+   * 핸드셰이크 완료 전 단계. 세션 정보만 저장하고 CLI는 시작하지 않음.
+   * 핸드셰이크 성공 후 startSessionProcess()로 CLI 시작.
    */
-  async startSession(options: WidgetStartOptions): Promise<string> {
+  prepareSession(options: WidgetStartOptions): string {
     const sessionId = `widget-${++this.sessionCounter}-${Date.now()}`;
 
-    // 로거 생성 및 세션 시작 로깅
     const logger = new WidgetLogger(options.cwd, sessionId);
     logger.sessionStart();
-
-    const proc = spawn(options.command, options.args ?? [], {
-      cwd: options.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: true,
-    });
 
     const session: WidgetSession = {
       sessionId,
       conversationId: options.conversationId,
       toolUseId: options.toolUseId,
-      process: proc,
-      status: 'running',
+      process: null, // CLI 아직 시작 안 함
+      status: 'handshaking',
       ownerClientId: null,
       logger,
+      // CLI 시작에 필요한 정보 저장
+      command: options.command,
+      cwd: options.cwd,
+      args: options.args,
     };
 
     this.sessions.set(sessionId, session);
+    return sessionId;
+  }
+
+  /**
+   * CLI 프로세스 시작 (owner 설정 후)
+   *
+   * 핸드셰이크 성공 또는 claim 성공 후 호출.
+   * owner를 설정하고 CLI 프로세스를 spawn.
+   */
+  startSessionProcess(sessionId: string, ownerClientId: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    if (session.process) return false; // 이미 시작됨
+
+    session.ownerClientId = ownerClientId;
+    session.status = 'running';
+
+    const proc = spawn(session.command, session.args ?? [], {
+      cwd: session.cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true,
+    });
+
+    session.process = proc;
 
     // stdout 라인 파싱
     const rl = readline.createInterface({
@@ -141,7 +181,17 @@ export class WidgetManager extends EventEmitter {
       }
     });
 
-    return sessionId;
+    return true;
+  }
+
+  /**
+   * 세션 상태 변경
+   */
+  setSessionStatus(sessionId: string, status: WidgetSession['status']): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.status = status;
+    return true;
   }
 
   /**
@@ -196,7 +246,7 @@ export class WidgetManager extends EventEmitter {
    */
   sendInput(sessionId: string, data: Record<string, unknown>): boolean {
     const session = this.sessions.get(sessionId);
-    if (!session || session.status !== 'running') {
+    if (!session || session.status !== 'running' || !session.process) {
       return false;
     }
 
@@ -211,7 +261,7 @@ export class WidgetManager extends EventEmitter {
    */
   sendEvent(sessionId: string, data: unknown): boolean {
     const session = this.sessions.get(sessionId);
-    if (!session || session.status !== 'running') {
+    if (!session || session.status !== 'running' || !session.process) {
       return false;
     }
 
@@ -226,7 +276,16 @@ export class WidgetManager extends EventEmitter {
    */
   cancelSession(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
-    if (!session || session.status !== 'running') {
+    if (!session) return false;
+
+    // handshaking/pending 상태면 CLI 없이 취소
+    if (session.status === 'handshaking' || session.status === 'pending') {
+      session.status = 'cancelled';
+      session.logger?.sessionEnd();
+      return true;
+    }
+
+    if (session.status !== 'running' || !session.process) {
       return false;
     }
 
@@ -301,55 +360,6 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
-   * 핸드셰이크 시작 (소유권 할당 전 단계)
-   */
-  startHandshake(
-    sessionId: string,
-    targetClientId: number,
-    timeout: number,
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      const session = this.sessions.get(sessionId);
-      if (!session) {
-        resolve(false);
-        return;
-      }
-
-      session.status = 'handshaking';
-
-      // handler를 hoisting하기 위해 let으로 선언
-      let handler: (ack: { sessionId: string; visible: boolean; clientId: number }) => void;
-
-      const timeoutId = setTimeout(() => {
-        if (session.status === 'handshaking') {
-          session.status = 'pending';
-          this.off('handshake_ack', handler);  // 타임아웃 시에도 리스너 제거
-          resolve(false);
-        }
-      }, timeout);
-
-      // 핸드셰이크 응답 대기
-      handler = (ack: { sessionId: string; visible: boolean; clientId: number }) => {
-        if (ack.sessionId === sessionId && ack.clientId === targetClientId) {
-          clearTimeout(timeoutId);
-          this.off('handshake_ack', handler);
-
-          if (ack.visible) {
-            session.status = 'running';
-            session.ownerClientId = targetClientId;
-            resolve(true);
-          } else {
-            session.status = 'pending';
-            resolve(false);
-          }
-        }
-      };
-
-      this.on('handshake_ack', handler);
-    });
-  }
-
-  /**
    * 핸드셰이크 응답 처리
    */
   handleHandshakeAck(sessionId: string, visible: boolean, clientId: number): void {
@@ -357,19 +367,15 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
-   * 소유권 요청 처리 (first-come-first-served)
-   * @returns 성공 여부
+   * 소유권 요청 처리 (pending 상태에서만)
    */
   claimOwnership(sessionId: string, clientId: number): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
-
-    // pending 상태일 때만 claim 가능
     if (session.status !== 'pending') return false;
 
-    session.status = 'running';
-    session.ownerClientId = clientId;
-    return true;
+    // startSessionProcess에서 owner 설정과 CLI 시작을 함께 처리
+    return this.startSessionProcess(sessionId, clientId);
   }
 
   /**
@@ -397,11 +403,11 @@ export class WidgetManager extends EventEmitter {
    * 모든 세션 정리
    */
   cleanup(): void {
-    for (const [sessionId, session] of this.sessions) {
-      if (session.status === 'running') {
+    for (const [, session] of this.sessions) {
+      if (session.process && session.status === 'running') {
         session.process.kill('SIGTERM');
-        session.status = 'cancelled';
       }
+      session.status = 'cancelled';
     }
     this.sessions.clear();
   }
