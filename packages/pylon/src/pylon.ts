@@ -1007,6 +1007,13 @@ export class Pylon {
       return;
     }
 
+    // cancel 이벤트면 위젯 종료
+    if (data.type === 'cancel') {
+      const cancelled = this.deps.mcpServer?.cancelWidgetBySessionId(sessionId, 'User cancelled');
+      this.log(`[Widget] CLI widget cancel: ${sessionId}, result=${cancelled}`);
+      return;
+    }
+
     this.deps.widgetManager.sendEvent(sessionId, data);
   }
 

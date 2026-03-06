@@ -12,6 +12,9 @@ const client = new QuiverAI({
 
 let lastSavedPath: string | null = null;
 
+// CLI 인자에서 프롬프트 추출
+const prompt = process.argv.slice(2).join(' ');
+
 // ============================================================================
 // HTML/JS Templates
 // ============================================================================
@@ -258,5 +261,14 @@ async function generateSvg(prompt: string): Promise<void> {
   }
 }
 
-// 초기 UI 렌더링
-render(HTML_TEMPLATE, JS_CODE, 450);
+// 초기 UI 렌더링 (프롬프트가 있으면 자동 시작)
+const initialJs = prompt
+  ? `
+    ${JS_CODE}
+    // 자동 시작
+    document.getElementById('prompt-input').value = ${JSON.stringify(prompt)};
+    document.getElementById('generate-btn').click();
+  `
+  : JS_CODE;
+
+render(HTML_TEMPLATE, initialJs, 450);
