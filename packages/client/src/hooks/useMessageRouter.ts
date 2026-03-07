@@ -465,13 +465,13 @@ export function routeMessage(message: RelayMessage): void {
 
       console.log(`[MessageRouter] widget_ready: session=${sessionId}, preferred=${preferredClientId}, isCurrentConv=${isCurrentConversation}`);
 
-      // 선택된 대화인 경우 자동으로 claim
+      // 먼저 pending 상태로 저장 (UI에 표시)
+      useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
+
+      // 현재 대화인 경우 자동으로 claim (widget_render가 오면 running으로 전환)
       if (isCurrentConversation) {
         console.log(`[MessageRouter] Auto-claiming widget: session=${sessionId}`);
         sendWidgetClaim(conversationId, sessionId);
-      } else {
-        // 다른 대화면 pending 상태로 저장 (나중에 대화 선택 시 시작 버튼 표시)
-        useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
       }
       break;
     }
