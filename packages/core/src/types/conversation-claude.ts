@@ -147,9 +147,8 @@ export interface ConversationClaudeState {
  * Widget Protocol을 통해 렌더링되는 UI를 표시합니다.
  *
  * status:
- * - 'pending': 핸드셰이크 실패, 소유권 대기 중 (시작 버튼 표시)
- * - 'running': 소유권 확보됨, CLI 실행 중 (view 렌더링)
- * - 'claimed': 다른 클라이언트가 소유권 획득 (UI 없음)
+ * - 'pending': widget_ready 수신, 아직 claim 안 함 (시작 버튼 표시)
+ * - 'running': widget_claim 성공, CLI 실행 중 (view 렌더링)
  */
 export interface WidgetSession {
   /** MCP 도구 호출 ID (ToolCard와 연결) */
@@ -159,7 +158,7 @@ export interface WidgetSession {
   /** 렌더링할 View 노드 (pending 상태에서는 null) */
   view: ViewNode | null;
   /** 위젯 상태 */
-  status: 'pending' | 'running' | 'claimed';
+  status: 'pending' | 'running';
 }
 
 // ============================================================================

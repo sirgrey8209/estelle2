@@ -48,7 +48,7 @@ interface ToolCardProps {
     toolUseId: string;
     sessionId: string;
     view: ViewNode | null;
-    status: 'pending' | 'running' | 'claimed';
+    status: 'pending' | 'running';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;

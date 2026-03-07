@@ -206,16 +206,10 @@ export const MessageType = {
   WIDGET_CANCEL: 'widget_cancel',
   /** 위젯 이벤트 */
   WIDGET_EVENT: 'widget_event',
-  /** 위젯 핸드셰이크 요청 (Pylon → Client) */
-  WIDGET_HANDSHAKE: 'widget_handshake',
-  /** 위젯 핸드셰이크 응답 (Client → Pylon) */
-  WIDGET_HANDSHAKE_ACK: 'widget_handshake_ack',
-  /** 위젯 대기 상태 (Pylon → Client) */
-  WIDGET_PENDING: 'widget_pending',
-  /** 위젯 소유권 요청 (Client → Pylon) */
+  /** 위젯 준비됨 (Pylon → 전체 broadcast, preferredClientId 포함) */
+  WIDGET_READY: 'widget_ready',
+  /** 위젯 소유권 요청/종료 (Client → Pylon) */
   WIDGET_CLAIM: 'widget_claim',
-  /** 위젯이 다른 클라이언트에서 실행 중 (Pylon → Client) */
-  WIDGET_CLAIMED: 'widget_claimed',
   /** 위젯 완료 (Pylon → All Clients) */
   WIDGET_COMPLETE: 'widget_complete',
   /** 위젯 에러 (Pylon → All Clients) */

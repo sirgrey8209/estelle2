@@ -532,11 +532,8 @@ async function main(): Promise<void> {
         to: [ownerClientId],
       });
     },
-    initiateWidgetHandshake: (sessionId, conversationId, toolUseId) => {
-      return pylon.initiateWidgetHandshake(sessionId, conversationId, toolUseId);
-    },
-    broadcastWidgetPending: (sessionId, conversationId, toolUseId) => {
-      pylon.broadcastWidgetPending(sessionId, conversationId, toolUseId);
+    broadcastWidgetReady: (sessionId, conversationId, toolUseId) => {
+      pylon.broadcastWidgetReady(sessionId, conversationId, toolUseId);
     },
   });
 

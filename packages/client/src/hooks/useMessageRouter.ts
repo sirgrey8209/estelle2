@@ -15,7 +15,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { sendWidgetCheck, sendWidgetHandshakeAck } from '../services/relaySender';
+import { sendWidgetCheck, sendWidgetClaim } from '../services/relaySender';
 // import { debugLog } from '../stores/debugStore';
 
 /**
@@ -442,68 +442,36 @@ export function routeMessage(message: RelayMessage): void {
       break;
     }
 
-    case 'widget_handshake': {
-      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId, timeout } }
-      // Pylon이 위젯 시작 전 핸드셰이크 요청
-      // 클라이언트는 해당 대화를 보고 있으면 visible=true로 응답
-      const { conversationId, sessionId } = payload as {
+    case 'widget_ready': {
+      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId, preferredClientId } }
+      // Pylon이 위젯 준비 완료를 broadcast
+      // preferredClientId가 나라면 자동으로 widget_claim 전송
+      // 아니면 pending UI 표시 (시작 버튼)
+      const { conversationId, sessionId, toolUseId, preferredClientId } = payload as {
         conversationId: number;
         sessionId: string;
         toolUseId: string;
-        timeout: number;
-      };
-
-      if (!conversationId || !sessionId) {
-        console.warn('[MessageRouter] widget_handshake missing required fields');
-        break;
-      }
-
-      // 현재 선택된 대화와 비교하여 visible 여부 결정
-      const selectedConversation = useWorkspaceStore.getState().selectedConversation;
-      const isVisible = selectedConversation?.conversationId === conversationId;
-
-      console.log(`[MessageRouter] widget_handshake: session=${sessionId}, visible=${isVisible}, selectedConvId=${selectedConversation?.conversationId} (${typeof selectedConversation?.conversationId}), payloadConvId=${conversationId} (${typeof conversationId})`);
-
-      // 핸드셰이크 응답 전송
-      sendWidgetHandshakeAck(conversationId, sessionId, isVisible);
-      break;
-    }
-
-    case 'widget_pending': {
-      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId } }
-      // 핸드셰이크 실패 시 위젯이 pending 상태가 됨
-      // conversationStore에 pending 상태 저장 → UI에서 "시작" 버튼 표시
-      const { conversationId, sessionId, toolUseId } = payload as {
-        conversationId: number;
-        sessionId: string;
-        toolUseId: string;
+        preferredClientId: number | null;
       };
 
       if (!conversationId || !sessionId || !toolUseId) {
-        console.warn('[MessageRouter] widget_pending missing required fields');
+        console.warn('[MessageRouter] widget_ready missing required fields');
         break;
       }
 
-      console.log(`[MessageRouter] widget_pending: conversation=${conversationId}, session=${sessionId}`);
-      useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
-      break;
-    }
+      // 현재 선택된 대화 확인
+      const selectedConversation = useWorkspaceStore.getState().selectedConversation;
+      const isCurrentConversation = selectedConversation?.conversationId === conversationId;
 
-    case 'widget_claimed': {
-      // RelayMessage 형식: { type, payload: { sessionId, ownerClientId, conversationId? } }
-      // 다른 클라이언트가 위젯 소유권을 획득함
-      // pending 상태였던 위젯을 claimed로 변경 (UI에서 숨김)
-      const { sessionId, ownerClientId, conversationId } = payload as {
-        sessionId: string;
-        ownerClientId: number;
-        conversationId?: number;
-      };
+      console.log(`[MessageRouter] widget_ready: session=${sessionId}, preferred=${preferredClientId}, isCurrentConv=${isCurrentConversation}`);
 
-      console.log(`[MessageRouter] widget_claimed: session=${sessionId}, owner=${ownerClientId}`);
-
-      // conversationId가 있으면 해당 대화의 위젯 상태 업데이트
-      if (conversationId) {
-        useConversationStore.getState().setWidgetClaimed(conversationId, sessionId);
+      // 선택된 대화인 경우 자동으로 claim
+      if (isCurrentConversation) {
+        console.log(`[MessageRouter] Auto-claiming widget: session=${sessionId}`);
+        sendWidgetClaim(conversationId, sessionId);
+      } else {
+        // 다른 대화면 pending 상태로 저장 (나중에 대화 선택 시 시작 버튼 표시)
+        useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
       }
       break;
     }

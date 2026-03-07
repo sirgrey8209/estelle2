@@ -4,17 +4,12 @@
  *
  * CLI 프로세스를 spawn하고 stdin/stdout으로 Widget Protocol 통신을 관리합니다.
  *
- * ## 핸드셰이크 프로토콜
+ * ## 단순화된 핸드셰이크 프로토콜
  *
- * 1. prepareSession() - 세션 생성 (CLI 미시작, status: 'handshaking')
- * 2. Pylon이 lastActiveClient에게 widget_handshake 전송
- * 3. 클라이언트가 widget_handshake_ack 응답
- * 4. startSessionProcess() - owner 설정 후 CLI 시작 (status: 'running')
- *
- * 핸드셰이크 타임아웃/거부 시:
- * - status: 'pending'으로 전환
- * - widget_pending 브로드캐스트
- * - 다른 클라이언트가 widget_claim으로 소유권 요청 가능
+ * 1. prepareSession() - 세션 생성 (CLI 미시작, status: 'ready')
+ * 2. Pylon이 전체에 widget_ready broadcast (preferredClientId 포함)
+ * 3. preferredClient가 자동으로 widget_claim 전송 → owner가 됨
+ * 4. 또는 다른 클라이언트가 widget_claim → 기존 owner 종료 후 새 owner
  */
 
 import { spawn, ChildProcess } from 'child_process';
@@ -39,7 +34,7 @@ export interface WidgetSession {
   conversationId: number;
   toolUseId: string;
   process: ChildProcess | null; // 핸드셰이크 완료 전에는 null
-  status: 'handshaking' | 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
+  status: 'ready' | 'running' | 'completed' | 'error' | 'cancelled';
   ownerClientId: number | null;
   result?: unknown;
   error?: string;
@@ -89,8 +84,8 @@ export class WidgetManager extends EventEmitter {
   /**
    * 세션 준비 (CLI 미시작)
    *
-   * 핸드셰이크 완료 전 단계. 세션 정보만 저장하고 CLI는 시작하지 않음.
-   * 핸드셰이크 성공 후 startSessionProcess()로 CLI 시작.
+   * widget_ready broadcast 전 단계. 세션 정보만 저장하고 CLI는 시작하지 않음.
+   * widget_claim 수신 후 startSessionProcess()로 CLI 시작.
    */
   prepareSession(options: WidgetStartOptions): string {
     const sessionId = `widget-${++this.sessionCounter}-${Date.now()}`;
@@ -103,7 +98,7 @@ export class WidgetManager extends EventEmitter {
       conversationId: options.conversationId,
       toolUseId: options.toolUseId,
       process: null, // CLI 아직 시작 안 함
-      status: 'handshaking',
+      status: 'ready',
       ownerClientId: null,
       logger,
       // CLI 시작에 필요한 정보 저장
@@ -280,8 +275,8 @@ export class WidgetManager extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
-    // handshaking/pending 상태면 CLI 없이 취소
-    if (session.status === 'handshaking' || session.status === 'pending') {
+    // ready 상태면 CLI 없이 취소
+    if (session.status === 'ready') {
       session.status = 'cancelled';
       session.logger?.sessionEnd();
       return true;
@@ -362,22 +357,30 @@ export class WidgetManager extends EventEmitter {
   }
 
   /**
-   * 핸드셰이크 응답 처리
+   * 소유권 요청 처리 (ready 또는 running 상태)
+   *
+   * - ready 상태: owner 설정 후 CLI 시작
+   * - running 상태: 기존 owner 종료 후 { cancelled: true } 반환
+   *
+   * @returns { started: true } | { cancelled: true, reason: string } | null (실패)
    */
-  handleHandshakeAck(sessionId: string, visible: boolean, clientId: number): void {
-    this.emit('handshake_ack', { sessionId, visible, clientId });
-  }
-
-  /**
-   * 소유권 요청 처리 (pending 상태에서만)
-   */
-  claimOwnership(sessionId: string, clientId: number): boolean {
+  claimOwnership(sessionId: string, clientId: number): { started: true } | { cancelled: true; reason: string } | null {
     const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    if (session.status !== 'pending') return false;
+    if (!session) return null;
 
-    // startSessionProcess에서 owner 설정과 CLI 시작을 함께 처리
-    return this.startSessionProcess(sessionId, clientId);
+    // ready 상태: 첫 claim → owner가 되어 CLI 시작
+    if (session.status === 'ready') {
+      const started = this.startSessionProcess(sessionId, clientId);
+      return started ? { started: true } : null;
+    }
+
+    // running 상태: 이미 owner가 있음 → 기존 세션 종료
+    if (session.status === 'running') {
+      this.cancelSession(sessionId);
+      return { cancelled: true, reason: 'claimed_by_other' };
+    }
+
+    return null;
   }
 
   /**

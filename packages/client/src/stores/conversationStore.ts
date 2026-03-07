@@ -183,9 +183,6 @@ export interface ConversationStoreState {
     sessionId: string
   ) => void;
 
-  /** Widget claimed 상태 설정 (다른 클라이언트가 소유) */
-  setWidgetClaimed: (conversationId: number, sessionId: string) => void;
-
   /** Widget 세션 초기화 */
   clearWidgetSession: (conversationId: number) => void;
 
@@ -504,20 +501,6 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       widgetSession: { toolUseId, sessionId, view: null, status: 'pending' },
     });
     set({ states });
-  },
-
-  setWidgetClaimed: (conversationId, sessionId) => {
-    const states = new Map(get().states);
-    const state = getOrCreateState(states, conversationId);
-
-    // 현재 세션이 claim된 세션과 같을 때만 상태 변경
-    if (state.widgetSession?.sessionId === sessionId) {
-      states.set(conversationId, {
-        ...state,
-        widgetSession: { ...state.widgetSession, status: 'claimed' },
-      });
-      set({ states });
-    }
   },
 
   clearWidgetSession: (conversationId) => {

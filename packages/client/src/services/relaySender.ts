@@ -579,37 +579,11 @@ export function sendWidgetCheck(
 }
 
 /**
- * Widget 핸드셰이크 응답 전송
- *
- * Pylon이 widget_handshake를 보내면 클라이언트는 visible 여부를 응답합니다.
- * visible=true면 해당 클라이언트가 위젯의 owner가 됩니다.
- *
- * @param conversationId - 대화 ID
- * @param sessionId - 위젯 세션 ID
- * @param visible - 클라이언트가 해당 대화를 보고 있는지 여부
- */
-export function sendWidgetHandshakeAck(
-  conversationId: number,
-  sessionId: string,
-  visible: boolean
-): boolean {
-  const pylonId = getPylonIdFromConversation(conversationId);
-  return sendMessage({
-    type: 'widget_handshake_ack',
-    payload: {
-      conversationId,
-      sessionId,
-      visible,
-    },
-    to: [pylonId],
-  });
-}
-
-/**
  * Widget 소유권 요청 전송
  *
- * pending 상태의 위젯에 대해 소유권을 요청합니다.
- * 성공하면 CLI가 시작되고 widget_claimed 브로드캐스트가 옵니다.
+ * ready 상태의 위젯에 대해 소유권을 요청합니다.
+ * - ready 상태: CLI가 시작되고 widget_render가 전송됨
+ * - running 상태: 기존 세션이 종료되고 widget_close가 기존 owner에게 전송됨
  *
  * @param conversationId - 대화 ID
  * @param sessionId - 위젯 세션 ID
