@@ -1130,19 +1130,32 @@ export class Pylon {
       // widget_render는 CLI 출력에서 발생하므로 여기서는 아무것도 전송하지 않음
     } else if ('cancelled' in result && result.cancelled) {
       this.log(`[Widget] Session cancelled by claim: session=${sessionId}, claimer=${clientId}`);
-      // 기존 owner에게 widget_close 전송
       const session = this.deps.widgetManager?.getSession(sessionId);
+      const conversationId = session?.conversationId;
+
+      // 기존 owner에게 widget_close 전송
       if (session?.ownerClientId !== null && session?.ownerClientId !== undefined) {
         this.send({
           type: 'widget_close',
           payload: {
-            conversationId: session.conversationId,
+            conversationId,
             sessionId,
             reason: 'claimed_by_other',
           },
           to: [session.ownerClientId],
         });
       }
+
+      // claim 요청한 클라이언트(B)에게도 widget_close 전송 (세션 정리용)
+      this.send({
+        type: 'widget_close',
+        payload: {
+          conversationId,
+          sessionId,
+          reason: 'session_cancelled',
+        },
+        to: [clientId],
+      });
     }
   }
 

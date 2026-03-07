@@ -382,14 +382,15 @@ export function routeMessage(message: RelayMessage): void {
     }
 
     case 'widget_close': {
-      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId } }
+      // RelayMessage 형식: { type, payload: { conversationId, toolUseId, sessionId, reason? } }
       // conversationId는 필수 (Pylon에서 세션 관리)
       const closePayload = payload as {
         conversationId: number;
         toolUseId?: string;
         sessionId?: string;
+        reason?: string;
       };
-      const { conversationId } = closePayload;
+      const { conversationId, reason } = closePayload;
 
       // conversationId가 없으면 무시 (필수 필드)
       if (!conversationId) {
@@ -397,6 +398,11 @@ export function routeMessage(message: RelayMessage): void {
         break;
       }
 
+      console.log(`[MessageRouter] widget_close: conversationId=${conversationId}, reason=${reason}`);
+
+      // session_cancelled: B가 claim 시도했지만 세션이 취소됨 → 그냥 정리
+      // claimed_by_other: A가 실행 중이었는데 B가 가져감 → 정리
+      // 둘 다 clearWidgetSession으로 처리 (스피너/pending UI 제거)
       useConversationStore.getState().clearWidgetSession(conversationId);
       break;
     }

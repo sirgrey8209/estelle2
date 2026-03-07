@@ -296,6 +296,9 @@ export class WidgetManager extends EventEmitter {
     session.status = 'cancelled';
     session.logger?.sessionEnd();
 
+    // waitForCompletion이 대기 중일 수 있으므로 error 이벤트 emit
+    this.emit('error', { sessionId, error: 'cancelled by duplication' } as WidgetErrorEvent);
+
     return true;
   }
 
