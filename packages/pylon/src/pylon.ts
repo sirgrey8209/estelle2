@@ -1091,6 +1091,7 @@ export class Pylon {
         toolUseId,
         preferredClientId: preferredClientId ?? null,
       },
+      broadcast: 'clients',
     });
   }
 
