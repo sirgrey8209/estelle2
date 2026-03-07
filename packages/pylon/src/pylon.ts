@@ -1247,6 +1247,7 @@ export class Pylon {
     view: ViewNode,
     result: unknown,
   ): void {
+    console.log(`[Widget] sendWidgetComplete: session=${sessionId}, toolUseId=${toolUseId}`);
     this.send({
       type: 'widget_complete',
       payload: {

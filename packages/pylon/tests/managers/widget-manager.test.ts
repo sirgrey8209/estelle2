@@ -91,10 +91,31 @@ vi.mock('readline', () => {
 describe('WidgetManager', () => {
   let manager: WidgetManager;
 
+  // 테스트 헬퍼: prepareSession + startSessionProcess를 한 번에 호출
+  const startSession = (options: {
+    command: string;
+    cwd: string;
+    args?: string[];
+    conversationId?: number;
+    toolUseId?: string;
+  }): string => {
+    const sessionId = manager.prepareSession({
+      command: options.command,
+      cwd: options.cwd,
+      args: options.args,
+      conversationId: options.conversationId ?? 123,
+      toolUseId: options.toolUseId ?? 'tool-test',
+    });
+    manager.startSessionProcess(sessionId, 1); // ownerClientId = 1
+    return sessionId;
+  };
+
   beforeEach(() => {
     mockProcess = new MockChildProcess();
     spawnMock = vi.fn();
     manager = new WidgetManager();
+    // cancelSession이 error 이벤트를 emit하므로 unhandled error 방지
+    manager.on('error', () => {});
   });
 
   afterEach(() => {
@@ -103,37 +124,77 @@ describe('WidgetManager', () => {
   });
 
   // ============================================================================
-  // startSession 테스트
+  // prepareSession 테스트
   // ============================================================================
-  describe('startSession', () => {
-    it('should return sessionId on start', async () => {
-      const sessionId = await manager.startSession({
+  describe('prepareSession', () => {
+    it('should return sessionId on prepare', () => {
+      const sessionId = manager.prepareSession({
         command: 'node',
         cwd: '/workspace',
         args: ['widget.js'],
+        conversationId: 123,
+        toolUseId: 'tool-1',
       });
 
       expect(sessionId).toMatch(/^widget-\d+-\d+$/);
     });
 
-    it('should create session with running status', async () => {
-      const sessionId = await manager.startSession({
+    it('should create session with ready status', () => {
+      const sessionId = manager.prepareSession({
         command: 'node',
         cwd: '/workspace',
+        conversationId: 123,
+        toolUseId: 'tool-1',
       });
 
       const session = manager.getSession(sessionId);
       expect(session).toBeDefined();
-      expect(session?.status).toBe('running');
+      expect(session?.status).toBe('ready');
       expect(session?.sessionId).toBe(sessionId);
+      expect(session?.process).toBeNull(); // CLI 아직 미시작
     });
 
-    it('should spawn process with correct arguments', async () => {
-      await manager.startSession({
+    it('should increment session counter', () => {
+      const id1 = manager.prepareSession({ command: 'cmd1', cwd: '/', conversationId: 1, toolUseId: 't1' });
+      const id2 = manager.prepareSession({ command: 'cmd2', cwd: '/', conversationId: 2, toolUseId: 't2' });
+
+      const num1 = parseInt(id1.split('-')[1]);
+      const num2 = parseInt(id2.split('-')[1]);
+      expect(num2).toBe(num1 + 1);
+    });
+  });
+
+  // ============================================================================
+  // startSessionProcess 테스트
+  // ============================================================================
+  describe('startSessionProcess', () => {
+    it('should start CLI and set status to running', () => {
+      const sessionId = manager.prepareSession({
+        command: 'node',
+        cwd: '/workspace',
+        conversationId: 123,
+        toolUseId: 'tool-1',
+      });
+
+      const started = manager.startSessionProcess(sessionId, 42);
+
+      expect(started).toBe(true);
+      const session = manager.getSession(sessionId);
+      expect(session?.status).toBe('running');
+      expect(session?.ownerClientId).toBe(42);
+      expect(session?.process).not.toBeNull();
+    });
+
+    it('should spawn process with correct arguments', () => {
+      const sessionId = manager.prepareSession({
         command: 'python',
         cwd: '/project',
         args: ['script.py', '--option'],
+        conversationId: 123,
+        toolUseId: 'tool-1',
       });
+
+      manager.startSessionProcess(sessionId, 1);
 
       expect(spawnMock).toHaveBeenCalledWith(
         'python',
@@ -145,14 +206,23 @@ describe('WidgetManager', () => {
       );
     });
 
-    it('should increment session counter', async () => {
-      const id1 = await manager.startSession({ command: 'cmd1', cwd: '/' });
-      const id2 = await manager.startSession({ command: 'cmd2', cwd: '/' });
+    it('should return false for non-existent session', () => {
+      const result = manager.startSessionProcess('non-existent', 1);
+      expect(result).toBe(false);
+    });
 
-      // 세션 번호가 증가해야 함
-      const num1 = parseInt(id1.split('-')[1]);
-      const num2 = parseInt(id2.split('-')[1]);
-      expect(num2).toBe(num1 + 1);
+    it('should return false if already started', () => {
+      const sessionId = manager.prepareSession({
+        command: 'node',
+        cwd: '/workspace',
+        conversationId: 123,
+        toolUseId: 'tool-1',
+      });
+
+      manager.startSessionProcess(sessionId, 1);
+      const secondStart = manager.startSessionProcess(sessionId, 2);
+
+      expect(secondStart).toBe(false);
     });
   });
 
@@ -161,7 +231,7 @@ describe('WidgetManager', () => {
   // ============================================================================
   describe('render event', () => {
     it('should emit render event when CLI outputs render message', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -183,7 +253,7 @@ describe('WidgetManager', () => {
     });
 
     it('should correctly parse complex view structure', async () => {
-      const sessionId = await manager.startSession({
+      startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -218,7 +288,7 @@ describe('WidgetManager', () => {
     });
 
     it('should emit render event for ScriptViewNode', async () => {
-      await manager.startSession({
+      startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -249,7 +319,7 @@ describe('WidgetManager', () => {
   // ============================================================================
   describe('complete event', () => {
     it('should emit complete event when CLI outputs complete message', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -269,7 +339,7 @@ describe('WidgetManager', () => {
     });
 
     it('should update session status to completed', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -288,7 +358,7 @@ describe('WidgetManager', () => {
     });
 
     it('should handle null result', async () => {
-      const sessionId = await manager.startSession({
+      startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -312,7 +382,7 @@ describe('WidgetManager', () => {
   // ============================================================================
   describe('error event', () => {
     it('should emit error event when CLI outputs error message', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -332,7 +402,7 @@ describe('WidgetManager', () => {
     });
 
     it('should update session status to error', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -350,7 +420,7 @@ describe('WidgetManager', () => {
     });
 
     it('should emit error on process error', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -367,7 +437,7 @@ describe('WidgetManager', () => {
     });
 
     it('should emit error on non-zero exit code', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -388,8 +458,8 @@ describe('WidgetManager', () => {
   // sendInput 테스트
   // ============================================================================
   describe('sendInput', () => {
-    it('should send input to stdin', async () => {
-      const sessionId = await manager.startSession({
+    it('should send input to stdin', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -409,7 +479,7 @@ describe('WidgetManager', () => {
     });
 
     it('should return false for completed session', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -422,8 +492,8 @@ describe('WidgetManager', () => {
       expect(result).toBe(false);
     });
 
-    it('should send complex input data', async () => {
-      const sessionId = await manager.startSession({
+    it('should send complex input data', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -447,8 +517,8 @@ describe('WidgetManager', () => {
   // cancelSession 테스트
   // ============================================================================
   describe('cancelSession', () => {
-    it('should cancel running session', async () => {
-      const sessionId = await manager.startSession({
+    it('should cancel running session', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -458,8 +528,8 @@ describe('WidgetManager', () => {
       expect(result).toBe(true);
     });
 
-    it('should update session status to cancelled', async () => {
-      const sessionId = await manager.startSession({
+    it('should update session status to cancelled', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -470,8 +540,8 @@ describe('WidgetManager', () => {
       expect(session?.status).toBe('cancelled');
     });
 
-    it('should send cancel message to stdin', async () => {
-      const sessionId = await manager.startSession({
+    it('should send cancel message to stdin', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -483,8 +553,8 @@ describe('WidgetManager', () => {
       );
     });
 
-    it('should kill the process', async () => {
-      const sessionId = await manager.startSession({
+    it('should kill the process', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -501,7 +571,7 @@ describe('WidgetManager', () => {
     });
 
     it('should return false for already completed session', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -519,7 +589,7 @@ describe('WidgetManager', () => {
   // ============================================================================
   describe('waitForCompletion', () => {
     it('should resolve with result on completion', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -536,7 +606,7 @@ describe('WidgetManager', () => {
     });
 
     it('should reject with error on error event', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -558,7 +628,7 @@ describe('WidgetManager', () => {
     });
 
     it('should resolve immediately if already completed', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -572,7 +642,7 @@ describe('WidgetManager', () => {
     });
 
     it('should reject immediately if already errored', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -586,7 +656,7 @@ describe('WidgetManager', () => {
     });
 
     it('should reject if cancelled', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -603,8 +673,8 @@ describe('WidgetManager', () => {
   // getSession 테스트
   // ============================================================================
   describe('getSession', () => {
-    it('should return session by id', async () => {
-      const sessionId = await manager.startSession({
+    it('should return session by id', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -626,9 +696,9 @@ describe('WidgetManager', () => {
   // cleanup 테스트
   // ============================================================================
   describe('cleanup', () => {
-    it('should cancel all running sessions', async () => {
-      await manager.startSession({ command: 'cmd1', cwd: '/' });
-      await manager.startSession({ command: 'cmd2', cwd: '/' });
+    it('should cancel all running sessions', () => {
+      startSession({ command: 'cmd1', cwd: '/' });
+      startSession({ command: 'cmd2', cwd: '/' });
 
       manager.cleanup();
 
@@ -636,8 +706,8 @@ describe('WidgetManager', () => {
       expect(mockProcess.killed).toBe(true);
     });
 
-    it('should clear all sessions', async () => {
-      const sessionId = await manager.startSession({
+    it('should clear all sessions', () => {
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -656,20 +726,42 @@ describe('WidgetManager', () => {
     describe('claimOwnership', () => {
       it('should reject claim for non-existent session', () => {
         const result = manager.claimOwnership('non-existent', 1);
-        expect(result).toBe(false);
+        expect(result).toBeNull();
       });
 
-      it('should reject claim when session is running', async () => {
-        const sessionId = await manager.startSession({
+      it('should claim ready session and start it', () => {
+        // prepareSession만 호출 (ready 상태)
+        const sessionId = manager.prepareSession({
           command: 'node',
           cwd: '/workspace',
           conversationId: 123,
           toolUseId: 'tool-1',
         });
 
-        // running 상태에서는 claim 불가
-        const result = manager.claimOwnership(sessionId, 1);
-        expect(result).toBe(false);
+        const result = manager.claimOwnership(sessionId, 42);
+
+        expect(result).toEqual({ started: true });
+        const session = manager.getSession(sessionId);
+        expect(session?.status).toBe('running');
+        expect(session?.ownerClientId).toBe(42);
+      });
+
+      it('should cancel running session when claimed by another', () => {
+        // 먼저 시작 (running 상태)
+        const sessionId = startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        // cancelSession이 error 이벤트를 emit하므로 리스너 등록
+        manager.on('error', () => {});
+
+        // 다른 클라이언트가 claim
+        const result = manager.claimOwnership(sessionId, 999);
+
+        expect(result).toEqual({ cancelled: true, reason: 'claimed_by_other' });
       });
     });
 
@@ -679,15 +771,28 @@ describe('WidgetManager', () => {
         expect(result).toBe(false);
       });
 
-      it('should return false when session has no owner', async () => {
-        const sessionId = await manager.startSession({
+      it('should return true when clientId matches owner', () => {
+        const sessionId = startSession({
           command: 'node',
           cwd: '/workspace',
           conversationId: 123,
           toolUseId: 'tool-1',
         });
 
+        // startSession 헬퍼는 ownerClientId = 1로 설정
         const result = manager.isOwner(sessionId, 1);
+        expect(result).toBe(true);
+      });
+
+      it('should return false when clientId does not match', () => {
+        const sessionId = startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        const result = manager.isOwner(sessionId, 999);
         expect(result).toBe(false);
       });
     });
@@ -698,8 +803,22 @@ describe('WidgetManager', () => {
         expect(result).toEqual([]);
       });
 
-      it('should return empty array when no matching owner', async () => {
-        await manager.startSession({
+      it('should return sessions owned by clientId', () => {
+        const sessionId = startSession({
+          command: 'node',
+          cwd: '/workspace',
+          conversationId: 123,
+          toolUseId: 'tool-1',
+        });
+
+        // startSession 헬퍼는 ownerClientId = 1로 설정
+        const result = manager.getSessionsByOwner(1);
+        expect(result.length).toBe(1);
+        expect(result[0].sessionId).toBe(sessionId);
+      });
+
+      it('should return empty array when no matching owner', () => {
+        startSession({
           command: 'node',
           cwd: '/workspace',
           conversationId: 123,
@@ -709,34 +828,8 @@ describe('WidgetManager', () => {
         const result = manager.getSessionsByOwner(999);
         expect(result).toEqual([]);
       });
-
-      it('should not return sessions without owner', async () => {
-        await manager.startSession({
-          command: 'node',
-          cwd: '/workspace',
-          conversationId: 123,
-          toolUseId: 'tool-1',
-        });
-
-        const result = manager.getSessionsByOwner(1);
-        expect(result).toEqual([]);
-      });
     });
 
-    describe('handleHandshakeAck', () => {
-      it('should emit handshake_ack event', async () => {
-        const ackPromise = new Promise<{ sessionId: string; visible: boolean; clientId: number }>((resolve) => {
-          manager.on('handshake_ack', resolve);
-        });
-
-        manager.handleHandshakeAck('session-1', true, 42);
-
-        const event = await ackPromise;
-        expect(event.sessionId).toBe('session-1');
-        expect(event.visible).toBe(true);
-        expect(event.clientId).toBe(42);
-      });
-    });
   });
 
   // ============================================================================
@@ -744,7 +837,7 @@ describe('WidgetManager', () => {
   // ============================================================================
   describe('invalid input handling', () => {
     it('should ignore non-JSON output', async () => {
-      await manager.startSession({
+      startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -762,7 +855,7 @@ describe('WidgetManager', () => {
     });
 
     it('should ignore unknown message types', async () => {
-      await manager.startSession({
+      startSession({
         command: 'node',
         cwd: '/workspace',
       });
@@ -785,7 +878,7 @@ describe('WidgetManager', () => {
     });
 
     it('should handle malformed JSON gracefully', async () => {
-      const sessionId = await manager.startSession({
+      const sessionId = startSession({
         command: 'node',
         cwd: '/workspace',
       });

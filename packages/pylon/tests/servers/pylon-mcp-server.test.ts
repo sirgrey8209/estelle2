@@ -1515,10 +1515,12 @@ describe('PylonMcpServer', () => {
 
       // Mock WidgetManager 생성
       const mockWidgetManager = {
-        startSession: async () => {
+        prepareSession: () => {
           sessionCount++;
           return `mock-session-id-${sessionCount}`;
         },
+        startSessionProcess: () => true,
+        getSession: () => ({ ownerClientId: null }),
         waitForCompletion: () => new Promise(() => {}), // 완료되지 않는 Promise
         cancelSession: () => {
           cancelSessionCalled = true;
@@ -1583,12 +1585,14 @@ describe('PylonMcpServer', () => {
       await server.close();
       TEST_PORT = getRandomPort();
 
-      // Mock WidgetManager - startSession 후 pending 확인
+      // Mock WidgetManager - prepareSession 후 pending 확인
       const mockWidgetManager = {
-        startSession: async () => {
+        prepareSession: () => {
           sessionStarted = true;
           return 'mock-session-id';
         },
+        startSessionProcess: () => true,
+        getSession: () => ({ ownerClientId: null }),
         waitForCompletion: () => new Promise(() => {}), // 완료되지 않는 Promise
         on: () => {},
         off: () => {},
@@ -1638,7 +1642,9 @@ describe('PylonMcpServer', () => {
 
       // Mock WidgetManager
       const mockWidgetManager = {
-        startSession: async () => MOCK_SESSION_ID,
+        prepareSession: () => MOCK_SESSION_ID,
+        startSessionProcess: () => true,
+        getSession: () => ({ ownerClientId: null }),
         waitForCompletion: () => new Promise(() => {}),
         on: () => {},
         off: () => {},
@@ -1695,9 +1701,12 @@ describe('PylonMcpServer', () => {
         await server.close();
         TEST_PORT = getRandomPort();
 
-        // Mock WidgetManager
+        // Mock WidgetManager - owner를 설정해야 onWidgetClose가 호출됨
+        const MOCK_OWNER_CLIENT_ID = 42;
         const mockWidgetManager = {
-          startSession: async () => MOCK_SESSION_ID,
+          prepareSession: () => MOCK_SESSION_ID,
+          startSessionProcess: () => true,
+          getSession: () => ({ ownerClientId: MOCK_OWNER_CLIENT_ID }),
           waitForCompletion: () => new Promise(() => {}), // 완료되지 않는 Promise
           cancelSession: (sessionId: string) => {
             cancelSessionCalled = true;
@@ -1713,6 +1722,7 @@ describe('PylonMcpServer', () => {
         let closeConversationId: number | null = null;
         let closeToolUseId: string | null = null;
         let closeSessionId: string | null = null;
+        let closeOwnerClientId: number | null = null;
 
         const serverWithWidget = new PylonMcpServer(workspaceStore, {
           port: TEST_PORT,
@@ -1723,11 +1733,12 @@ describe('PylonMcpServer', () => {
             return null;
           },
           widgetManager: mockWidgetManager as any,
-          onWidgetClose: (conversationId, toolUseId, sessionId) => {
+          onWidgetClose: (conversationId, toolUseId, sessionId, ownerClientId) => {
             widgetCloseCalled = true;
             closeConversationId = conversationId;
             closeToolUseId = toolUseId;
             closeSessionId = sessionId;
+            closeOwnerClientId = ownerClientId;
           },
         });
 

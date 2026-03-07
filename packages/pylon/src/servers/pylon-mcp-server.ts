@@ -1763,8 +1763,10 @@ export class PylonMcpServer {
         if (event.sessionId === sessionId) {
           const owner = getOwnerClientId();
           console.log(`[Widget] Complete event received for session ${sessionId}, owner=${owner}, result:`, event.result);
+          console.log(`[Widget] lastView:`, lastView ? 'exists' : 'null');
           // 마지막 view가 있으면 widget_complete 브로드캐스트
           if (lastView) {
+            console.log(`[Widget] Calling onWidgetComplete for session ${sessionId}`);
             this._onWidgetComplete?.(conversationId, toolUseId, sessionId, lastView, event.result);
           }
           if (owner !== null) {

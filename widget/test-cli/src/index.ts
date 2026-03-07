@@ -24,7 +24,8 @@ function complete(result: unknown, reason: string) {
     height: 80
   });
   console.log(JSON.stringify({ type: 'complete', result }));
-  process.exit(0);
+  // stdout 버퍼가 flush될 때까지 대기 후 종료
+  setTimeout(() => process.exit(0), 100);
 }
 
 // CLI → Client 이벤트 전송 (서버에서 클라이언트로)

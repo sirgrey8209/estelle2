@@ -522,6 +522,7 @@ async function main(): Promise<void> {
       });
     },
     onWidgetComplete: (conversationId, toolUseId, sessionId, view, result) => {
+      console.log(`[Pylon] onWidgetComplete: sessionId=${sessionId}, toolUseId=${toolUseId}`);
       pylon.sendWidgetComplete(conversationId, toolUseId, sessionId, view, result);
     },
     onWidgetEvent: (sessionId, data, ownerClientId) => {
