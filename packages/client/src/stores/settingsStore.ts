@@ -24,11 +24,15 @@ export interface SettingsState {
   /** Pylon 버전들 (pylonId -> version) */
   pylonVersions: Record<number, string>;
 
+  /** 채팅 화면이 보이는지 (모바일에서 대화 탭인지) */
+  isChatVisible: boolean;
+
   // Actions
   setAccountStatus: (status: AccountStatusPayload) => void;
   setAccountSwitching: (switching: boolean) => void;
   setRelayVersion: (version: string) => void;
   setPylonVersions: (versions: Record<number, string>) => void;
+  setChatVisible: (visible: boolean) => void;
   reset: () => void;
 }
 
@@ -42,6 +46,7 @@ const initialState = {
   clientVersion: CLIENT_VERSION,
   relayVersion: null as string | null,
   pylonVersions: {} as Record<number, string>,
+  isChatVisible: true,  // 데스크탑에서는 항상 true, 모바일에서만 동기화
 };
 
 /**
@@ -70,6 +75,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   setPylonVersions: (versions) => {
     set({ pylonVersions: versions });
+  },
+
+  setChatVisible: (visible) => {
+    set({ isChatVisible: visible });
   },
 
   reset: () => {

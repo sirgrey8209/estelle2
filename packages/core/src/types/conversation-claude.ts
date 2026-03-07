@@ -148,6 +148,7 @@ export interface ConversationClaudeState {
  *
  * status:
  * - 'pending': widget_ready 수신, 아직 claim 안 함 (시작 버튼 표시)
+ * - 'claiming': widget_claim 전송 완료, CLI 실행 대기 중 (스피너 표시)
  * - 'running': widget_claim 성공, CLI 실행 중 (view 렌더링)
  */
 export interface WidgetSession {
@@ -155,10 +156,10 @@ export interface WidgetSession {
   toolUseId: string;
   /** Widget 세션 ID */
   sessionId: string;
-  /** 렌더링할 View 노드 (pending 상태에서는 null) */
+  /** 렌더링할 View 노드 (pending/claiming 상태에서는 null) */
   view: ViewNode | null;
   /** 위젯 상태 */
-  status: 'pending' | 'running';
+  status: 'pending' | 'claiming' | 'running';
 }
 
 // ============================================================================

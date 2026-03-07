@@ -23,7 +23,7 @@ interface MessageBubbleProps {
     toolUseId: string;
     sessionId: string;
     view: import('@estelle/core').ViewNode | null;
-    status: 'pending' | 'running';
+    status: 'pending' | 'claiming' | 'running';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;

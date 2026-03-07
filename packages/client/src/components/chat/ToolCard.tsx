@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock, Plug, Play } from 'lucide-react';
+import { ChevronRight, ChevronDown, Check, X, MoreHorizontal, CheckSquare, Square, Clock, Plug, Play, Loader2 } from 'lucide-react';
 import { parseToolInput, parseMcpToolName } from '../../utils/toolInputParser';
 import { removeSystemReminder, diffLines } from '../../utils/textUtils';
 import { Collapsible } from '../common/Collapsible';
@@ -48,7 +48,7 @@ interface ToolCardProps {
     toolUseId: string;
     sessionId: string;
     view: ViewNode | null;
-    status: 'pending' | 'running';
+    status: 'pending' | 'claiming' | 'running';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
@@ -485,7 +485,7 @@ export function ToolCard({
           {isComplete && <span className={cn('ml-auto', statusColor)}>{statusIcon}</span>}
         </div>
 
-        {/* Widget 렌더링: pending 상태면 시작 버튼, running 상태면 WidgetRenderer */}
+        {/* Widget 렌더링: pending → 시작 버튼, claiming → 스피너, running → WidgetRenderer */}
         {matchedWidget && matchedWidget.status === 'pending' && onWidgetClaim && (
           <div className="border-t border-border p-3">
             <button
@@ -498,6 +498,12 @@ export function ToolCard({
               <Play className="h-3.5 w-3.5" />
               시작
             </button>
+          </div>
+        )}
+        {matchedWidget && matchedWidget.status === 'claiming' && (
+          <div className="border-t border-border p-3 flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">실행 중...</span>
           </div>
         )}
         {matchedWidget && matchedWidget.status === 'running' && matchedWidget.view && onWidgetEvent && onWidgetCancel && (

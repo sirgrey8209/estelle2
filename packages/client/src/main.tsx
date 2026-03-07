@@ -7,11 +7,12 @@ import './index.css';
 
 // Service Worker 등록 및 자동 업데이트
 // 새 버전이 있으면 즉시 활성화하고 페이지 새로고침
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    // 새 SW가 대기 중일 때 즉시 업데이트
+    // 새 SW가 대기 중일 때 즉시 활성화
     console.log('[SW] New content available, updating...');
+    updateSW(true);
   },
   onOfflineReady() {
     console.log('[SW] App ready for offline use');

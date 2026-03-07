@@ -3,6 +3,7 @@ import { cn } from '../lib/utils';
 import { AppHeader } from './AppHeader';
 import { BugReportDialog } from '../components/common/BugReportDialog';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface MobileLayoutProps {
   sidebar: React.ReactNode;
@@ -37,12 +38,15 @@ export function MobileLayout({ sidebar, main }: MobileLayoutProps) {
     // 대화가 새로 선택된 경우에만 채팅창으로 이동
     if (currentId && currentId !== prevId) {
       setPageIndex(1);
+      useSettingsStore.getState().setChatVisible(true);
     }
     prevConversationIdRef.current = currentId;
   }, [selectedConversation?.conversationId]);
 
   const goToPage = useCallback((index: number) => {
     setPageIndex(index);
+    // 채팅 화면 visibility 동기화 (index 1 = 채팅창)
+    useSettingsStore.getState().setChatVisible(index === 1);
   }, []);
 
   // 트리플 탭 → 버그 리포트

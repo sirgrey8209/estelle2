@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useUploadStore, useWorkspaceStore, useCurrentConversationState } from '../../stores';
+import { useUploadStore, useWorkspaceStore, useConversationStore, useCurrentConversationState } from '../../stores';
 import { MessageBubble } from './MessageBubble';
 import { StreamingBubble } from './StreamingBubble';
 import { UploadingBubble } from './UploadingBubble';
@@ -255,6 +255,8 @@ export function MessageList({
     const conversationId = selectedConversation?.conversationId;
     if (!conversationId || !widgetSession) return;
 
+    // 스피너 표시를 위해 claiming 상태로 전환
+    useConversationStore.getState().setWidgetClaiming(conversationId);
     sendWidgetClaim(conversationId, widgetSession.sessionId);
   }, [selectedConversation?.conversationId, widgetSession]);
 

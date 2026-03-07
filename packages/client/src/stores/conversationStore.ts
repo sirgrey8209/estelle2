@@ -183,6 +183,9 @@ export interface ConversationStoreState {
     sessionId: string
   ) => void;
 
+  /** Widget claiming 상태 설정 (스피너 표시용) */
+  setWidgetClaiming: (conversationId: number) => void;
+
   /** Widget 세션 초기화 */
   clearWidgetSession: (conversationId: number) => void;
 
@@ -501,6 +504,20 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       widgetSession: { toolUseId, sessionId, view: null, status: 'pending' },
     });
     set({ states });
+  },
+
+  setWidgetClaiming: (conversationId) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    // pending 상태의 widgetSession이 있을 때만 claiming으로 전환
+    if (state.widgetSession && state.widgetSession.status === 'pending') {
+      states.set(conversationId, {
+        ...state,
+        widgetSession: { ...state.widgetSession, status: 'claiming' },
+      });
+      set({ states });
+    }
   },
 
   clearWidgetSession: (conversationId) => {

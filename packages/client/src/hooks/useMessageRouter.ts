@@ -11,6 +11,7 @@ import type { WorkspaceWithActive, StoreMessage, ViewNode } from '@estelle/core'
 import type { RelayMessage } from '../services/relayService';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useConversationStore, emitWidgetEvent } from '../stores/conversationStore';
+import { useRelayStore } from '../stores/relayStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
@@ -459,18 +460,28 @@ export function routeMessage(message: RelayMessage): void {
         break;
       }
 
-      // 현재 선택된 대화 확인
+      // 먼저 pending 상태로 저장 (UI에 시작 버튼 표시)
+      useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
+
+      // Auto-claim 조건 체크:
+      // 1. 내가 preferredClient인지
+      const myDeviceId = useRelayStore.getState().deviceId;
+      const isPreferred = myDeviceId !== null && preferredClientId === Number(myDeviceId);
+
+      // 2. 현재 선택된 대화인지
       const selectedConversation = useWorkspaceStore.getState().selectedConversation;
       const isCurrentConversation = selectedConversation?.conversationId === conversationId;
 
-      console.log(`[MessageRouter] widget_ready: session=${sessionId}, preferred=${preferredClientId}, isCurrentConv=${isCurrentConversation}`);
+      // 3. 채팅 화면이 보이는지 (모바일에서 대화 탭인지)
+      const isChatVisible = useSettingsStore.getState().isChatVisible;
 
-      // 먼저 pending 상태로 저장 (UI에 표시)
-      useConversationStore.getState().setWidgetPending(conversationId, toolUseId, sessionId);
+      console.log(`[MessageRouter] widget_ready: session=${sessionId}, preferred=${preferredClientId}, myDeviceId=${myDeviceId}, isPreferred=${isPreferred}, isCurrentConv=${isCurrentConversation}, isChatVisible=${isChatVisible}`);
 
-      // 현재 대화인 경우 자동으로 claim (widget_render가 오면 running으로 전환)
-      if (isCurrentConversation) {
+      // 세 조건 모두 만족할 때만 auto-claim
+      if (isPreferred && isCurrentConversation && isChatVisible) {
         console.log(`[MessageRouter] Auto-claiming widget: session=${sessionId}`);
+        // 스피너 표시를 위해 claiming 상태로 전환
+        useConversationStore.getState().setWidgetClaiming(conversationId);
         sendWidgetClaim(conversationId, sessionId);
       }
       break;
