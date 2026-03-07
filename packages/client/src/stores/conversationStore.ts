@@ -186,6 +186,14 @@ export interface ConversationStoreState {
   /** Widget claiming 상태 설정 (스피너 표시용) */
   setWidgetClaiming: (conversationId: number) => void;
 
+  /** Widget completed 상태 설정 (종료 페이지 브로드캐스트) */
+  setWidgetComplete: (
+    conversationId: number,
+    toolUseId: string,
+    sessionId: string,
+    view: ViewNode
+  ) => void;
+
   /** Widget 세션 초기화 */
   clearWidgetSession: (conversationId: number) => void;
 
@@ -518,6 +526,18 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       });
       set({ states });
     }
+  },
+
+  setWidgetComplete: (conversationId, toolUseId, sessionId, view) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+
+    // 모든 클라이언트에 종료 페이지 표시 (기존 세션 무관하게 덮어씀)
+    states.set(conversationId, {
+      ...state,
+      widgetSession: { toolUseId, sessionId, view, status: 'completed' },
+    });
+    set({ states });
   },
 
   clearWidgetSession: (conversationId) => {

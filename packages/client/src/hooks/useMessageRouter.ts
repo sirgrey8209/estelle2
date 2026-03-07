@@ -493,6 +493,29 @@ export function routeMessage(message: RelayMessage): void {
       break;
     }
 
+    case 'widget_complete': {
+      // RelayMessage 형식: { type, payload: { conversationId, sessionId, toolUseId, view, result } }
+      // Pylon이 위젯 종료 페이지를 모든 클라이언트에 브로드캐스트
+      const { conversationId, sessionId, toolUseId, view } = payload as {
+        conversationId: number;
+        sessionId: string;
+        toolUseId: string;
+        view: import('@estelle/core').ViewNode;
+        result: unknown;
+      };
+
+      if (!conversationId || !sessionId || !toolUseId || !view) {
+        console.warn('[MessageRouter] widget_complete missing required fields');
+        break;
+      }
+
+      console.log(`[MessageRouter] widget_complete: session=${sessionId}, toolUseId=${toolUseId}`);
+
+      // 모든 클라이언트에 종료 페이지 표시
+      useConversationStore.getState().setWidgetComplete(conversationId, toolUseId, sessionId, view);
+      break;
+    }
+
     default:
       // Unknown message type - do nothing
       break;

@@ -150,6 +150,7 @@ export interface ConversationClaudeState {
  * - 'pending': widget_ready 수신, 아직 claim 안 함 (시작 버튼 표시)
  * - 'claiming': widget_claim 전송 완료, CLI 실행 대기 중 (스피너 표시)
  * - 'running': widget_claim 성공, CLI 실행 중 (view 렌더링)
+ * - 'completed': widget_complete 수신, 종료 페이지 표시 (모든 클라이언트 브로드캐스트)
  */
 export interface WidgetSession {
   /** MCP 도구 호출 ID (ToolCard와 연결) */
@@ -159,7 +160,7 @@ export interface WidgetSession {
   /** 렌더링할 View 노드 (pending/claiming 상태에서는 null) */
   view: ViewNode | null;
   /** 위젯 상태 */
-  status: 'pending' | 'claiming' | 'running';
+  status: 'pending' | 'claiming' | 'running' | 'completed';
 }
 
 // ============================================================================

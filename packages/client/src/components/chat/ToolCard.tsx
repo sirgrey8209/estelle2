@@ -48,7 +48,7 @@ interface ToolCardProps {
     toolUseId: string;
     sessionId: string;
     view: ViewNode | null;
-    status: 'pending' | 'claiming' | 'running';
+    status: 'pending' | 'claiming' | 'running' | 'completed';
   } | null;
   /** Widget v2 이벤트 핸들러 (ScriptViewNode용) */
   onWidgetEvent?: (data: unknown) => void;
@@ -513,6 +513,18 @@ export function ToolCard({
               view={matchedWidget.view}
               onEvent={onWidgetEvent}
               onCancel={onWidgetCancel}
+              assets={widgetAssets}
+            />
+          </div>
+        )}
+        {/* completed 상태: 종료 페이지 (모든 클라이언트에 브로드캐스트) */}
+        {matchedWidget && matchedWidget.status === 'completed' && matchedWidget.view && (
+          <div className="border-t border-border">
+            <WidgetRenderer
+              sessionId={matchedWidget.sessionId}
+              view={matchedWidget.view}
+              onEvent={() => {}} // completed 상태에서는 이벤트 무시
+              onCancel={() => {}} // completed 상태에서는 취소 무시
               assets={widgetAssets}
             />
           </div>

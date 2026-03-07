@@ -10,7 +10,19 @@ function render(view: object) {
   console.log(JSON.stringify({ type: 'render', view }));
 }
 
-function complete(result: unknown) {
+function complete(result: unknown, reason: string) {
+  // 종료 페이지 렌더링 (모든 클라이언트에 브로드캐스트됨)
+  render({
+    type: 'script',
+    html: `
+      <div style="padding: 20px; font-family: sans-serif; text-align: center;">
+        <h3 style="margin: 0 0 10px 0; color: #27ae60;">✓ 위젯 종료됨</h3>
+        <p style="margin: 0; color: #666;">종료 사유: ${reason}</p>
+      </div>
+    `,
+    code: '',
+    height: 80
+  });
   console.log(JSON.stringify({ type: 'complete', result }));
   process.exit(0);
 }
@@ -28,11 +40,11 @@ rl.on('line', (line) => {
       const data = msg.data;
       if (data.type === 'close') {
         clearInterval(timer);
-        complete({ closed: true, reason: 'user_close_button' });
+        complete({ closed: true, reason: 'user_close_button' }, '닫기 버튼 클릭');
       }
     } else if (msg.type === 'cancel') {
       clearInterval(timer);
-      complete({ closed: true, reason: 'x_button' });
+      complete({ closed: true, reason: 'x_button' }, '취소 버튼 클릭');
     }
   } catch (e) {
     // ignore

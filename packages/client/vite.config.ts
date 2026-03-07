@@ -56,6 +56,9 @@ export default defineConfig({
       workbox: {
         // 앱 쉘만 최소 캐싱 (WebSocket 앱이라 오프라인 의미 없음)
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // 새 SW 즉시 활성화 (대기 상태 건너뜀)
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],
