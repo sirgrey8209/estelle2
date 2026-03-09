@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Menu, CloudOff, MonitorOff } from 'lucide-react';
+import { Menu, CloudOff, MonitorOff, LayoutGrid } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useRelayStore } from '../stores/relayStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useDeviceConfigStore } from '../stores/deviceConfigStore';
 import { SettingsDialog } from '../components/settings/SettingsDialog';
+import { ProjectsDialog } from '../components/projects';
 import { getDeviceIcon } from '../utils/device-icons';
 import { BuildInfo } from '../utils/buildInfo';
 
@@ -16,6 +17,7 @@ import { BuildInfo } from '../utils/buildInfo';
  */
 export function AppHeader() {
   const [showSettings, setShowSettings] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
   const { isConnected } = useRelayStore();
   const { connectedPylons } = useWorkspaceStore();
   const { getIcon } = useDeviceConfigStore();
@@ -70,12 +72,25 @@ export function AppHeader() {
           <Button
             variant="ghost"
             size="icon"
+            onClick={() => setShowProjects(true)}
+          >
+            <LayoutGrid className="h-5 w-5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setShowSettings(true)}
           >
             <Menu className="h-5 w-5" />
           </Button>
         </div>
       </header>
+
+      <ProjectsDialog
+        open={showProjects}
+        onClose={() => setShowProjects(false)}
+      />
 
       <SettingsDialog
         open={showSettings}
