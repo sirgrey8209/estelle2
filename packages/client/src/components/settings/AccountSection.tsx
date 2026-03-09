@@ -98,28 +98,6 @@ export function AccountSection() {
         <p className="text-xs text-muted-foreground text-center mt-2">
           ⚠️ 계정 변경 시 모든 세션이 재시작됩니다
         </p>
-
-        <div className="mt-3 border-t pt-3">
-          <p className="text-xs text-muted-foreground mb-2">프로젝트</p>
-          <div className="space-y-1">
-            {[
-              { name: 'Neon Grid Defense', path: '/neon-grid-defense/' },
-              { name: 'EB Navigation', path: '/eb-navigation/' },
-              { name: 'Voxel Engine', path: '/voxel-engine/' },
-            ].map((project) => (
-              <a
-                key={project.path}
-                href={`https://estelle-hub.mooo.com${project.path}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-accent text-left"
-              >
-                <span>{project.name}</span>
-                <span className="text-muted-foreground">›</span>
-              </a>
-            ))}
-          </div>
-        </div>
       </CardContent>
     </Card>
   );
