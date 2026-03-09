@@ -339,8 +339,20 @@ export function createStaticHandler(
       return;
     }
 
-    // Hub 대시보드
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+    // API: 프로젝트 목록
+    if (url.pathname === '/api/projects') {
+      const routes = loadHubRoutes();
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(JSON.stringify(routes));
+      return;
+    }
+
+    // Hub 대시보드
     if (url.pathname === '/hub' || url.pathname === '/hub/') {
       return serveHubDashboard(req, res);
     }
