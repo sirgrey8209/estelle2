@@ -85,26 +85,28 @@ export function routeMessage(message: RelayMessage): void {
         });
       }
 
-      // 계정 정보 업데이트
+      // 계정 정보 업데이트 (파일런별 추적)
       if (account) {
-        console.log('[Router] Setting account:', account);
+        console.log('[Router] Setting account:', account, 'for pylon:', pylonId);
 
         const settingsStore = useSettingsStore.getState();
-        const previousAccount = settingsStore.currentAccount;
         const newAccount = account.current as import('@estelle/core').AccountType;
+        const previousPylonAccount = settingsStore.getPylonAccount(pylonId);
 
-        // 계정이 변경된 경우 (Pylon 재시작 등) 스토어 초기화
-        // - 이전 계정이 있고, 새 계정과 다른 경우에만 초기화
-        // - 최초 로드 시 (previousAccount === null)는 초기화하지 않음
-        if (previousAccount !== null && previousAccount !== newAccount) {
-          console.log(`[Router] Account changed on workspace_list: ${previousAccount} → ${newAccount}, resetting stores`);
+        // 같은 파일런의 계정이 변경된 경우에만 리셋 (Pylon 재시작 시 계정 전환 등)
+        // - 다른 파일런의 계정이 달라도 리셋하지 않음
+        // - 최초 로드 시 (previousPylonAccount === null)는 초기화하지 않음
+        if (previousPylonAccount !== null && previousPylonAccount !== newAccount) {
+          console.log(`[Router] Account changed for pylon ${pylonId}: ${previousPylonAccount} → ${newAccount}, resetting stores`);
 
-          // 계정 변경 시 이전 계정의 데이터 정리
           useConversationStore.getState().reset();
-          // workspaceStore는 직후에 setWorkspaces가 호출되므로 reset 불필요
           useSyncStore.getState().resetForReconnect();
         }
 
+        // 파일런별 account 기록
+        settingsStore.setPylonAccount(pylonId, newAccount);
+
+        // 전역 account 업데이트 (UI 표시용)
         settingsStore.setAccountStatus({
           current: newAccount,
           subscriptionType: account.subscriptionType,
@@ -322,29 +324,42 @@ export function routeMessage(message: RelayMessage): void {
       break;
     }
 
-    // === Account 상태 ===
+    // === Account 상태 (명시적 계정 전환 시) ===
     case MessageType.ACCOUNT_STATUS: {
       const { current, subscriptionType } = payload as {
         current: import('@estelle/core').AccountType;
         subscriptionType?: string;
       };
 
+      // 어떤 파일런이 보냈는지 확인 (relay가 from 필드 주입)
+      const fromPylonId = message.from?.deviceId;
       const settingsStore = useSettingsStore.getState();
-      const previousAccount = settingsStore.currentAccount;
 
-      // 계정이 변경된 경우 (전환 완료) 스토어 초기화
-      // - 이전 계정이 있고, 새 계정과 다른 경우에만 초기화
-      // - 최초 로드 시 (previousAccount === null)는 초기화하지 않음
-      if (previousAccount !== null && previousAccount !== current) {
-        console.log(`[Router] Account switched: ${previousAccount} → ${current}, resetting stores`);
+      if (fromPylonId !== undefined) {
+        // 파일런별 account 비교: 해당 파일런의 이전 account와 비교
+        const previousPylonAccount = settingsStore.getPylonAccount(fromPylonId);
 
-        // 계정 전환 시 이전 계정의 데이터 정리
-        useConversationStore.getState().reset();
-        useWorkspaceStore.getState().reset();
-        useSyncStore.getState().resetForReconnect();
+        if (previousPylonAccount !== null && previousPylonAccount !== current) {
+          console.log(`[Router] Account switched on pylon ${fromPylonId}: ${previousPylonAccount} → ${current}, resetting stores`);
 
-        // 워크스페이스 목록 다시 요청
-        syncOrchestrator.startInitialSync();
+          useConversationStore.getState().reset();
+          useWorkspaceStore.getState().reset();
+          useSyncStore.getState().resetForReconnect();
+          syncOrchestrator.startInitialSync();
+        }
+
+        settingsStore.setPylonAccount(fromPylonId, current);
+      } else {
+        // from 정보 없는 경우 (레거시): 기존 동작 유지
+        const previousAccount = settingsStore.currentAccount;
+        if (previousAccount !== null && previousAccount !== current) {
+          console.log(`[Router] Account switched (legacy): ${previousAccount} → ${current}, resetting stores`);
+
+          useConversationStore.getState().reset();
+          useWorkspaceStore.getState().reset();
+          useSyncStore.getState().resetForReconnect();
+          syncOrchestrator.startInitialSync();
+        }
       }
 
       settingsStore.setAccountStatus({

@@ -6,11 +6,14 @@ import { CLIENT_VERSION } from '../version';
  * 설정 상태 인터페이스
  */
 export interface SettingsState {
-  /** 현재 활성 계정 */
+  /** 현재 활성 계정 (UI 표시용, 마지막으로 업데이트된 파일런의 계정) */
   currentAccount: AccountType | null;
 
   /** 계정 구독 타입 (team, max 등) */
   subscriptionType: string | null;
+
+  /** 파일런별 계정 정보 */
+  accountByPylon: Map<number, AccountType>;
 
   /** 계정 전환 중 */
   isAccountSwitching: boolean;
@@ -29,6 +32,10 @@ export interface SettingsState {
 
   // Actions
   setAccountStatus: (status: AccountStatusPayload) => void;
+  /** 파일런별 계정 설정 (account 변경 감지는 호출자가 처리) */
+  setPylonAccount: (pylonId: number, account: AccountType) => void;
+  /** 파일런의 이전 계정 조회 */
+  getPylonAccount: (pylonId: number) => AccountType | null;
   setAccountSwitching: (switching: boolean) => void;
   setRelayVersion: (version: string) => void;
   setPylonVersions: (versions: Record<number, string>) => void;
@@ -42,6 +49,7 @@ export interface SettingsState {
 const initialState = {
   currentAccount: null as AccountType | null,
   subscriptionType: null as string | null,
+  accountByPylon: new Map<number, AccountType>(),
   isAccountSwitching: false,
   clientVersion: CLIENT_VERSION,
   relayVersion: null as string | null,
@@ -54,7 +62,7 @@ const initialState = {
  *
  * 계정 상태를 관리합니다.
  */
-export const useSettingsStore = create<SettingsState>((set) => ({
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...initialState,
 
   setAccountStatus: (status) => {
@@ -63,6 +71,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       subscriptionType: status.subscriptionType || null,
       isAccountSwitching: false,
     });
+  },
+
+  setPylonAccount: (pylonId, account) => {
+    const newMap = new Map(get().accountByPylon);
+    newMap.set(pylonId, account);
+    set({ accountByPylon: newMap });
+  },
+
+  getPylonAccount: (pylonId) => {
+    return get().accountByPylon.get(pylonId) ?? null;
   },
 
   setAccountSwitching: (switching) => {
@@ -82,6 +100,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 
   reset: () => {
-    set({ ...initialState });
+    set({ ...initialState, accountByPylon: new Map() });
   },
 }));

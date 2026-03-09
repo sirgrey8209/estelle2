@@ -32,7 +32,7 @@ export interface RelayConfig {
 export interface RelayMessage {
   type: string;
   payload: Record<string, unknown>;
-  from?: string;
+  from?: { deviceId: number; deviceType: string; name?: string; icon?: string };
   /** 전송 대상 deviceId 배열 (숫자) */
   to?: number[];
   /** 브로드캐스트 옵션 */
