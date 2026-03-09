@@ -4,7 +4,6 @@
  *
  * 웹 클라이언트 배포를 위한 정적 파일 서버입니다.
  * SPA(Single Page Application) 라우팅을 지원합니다.
- * Dev Hub 대시보드도 제공합니다.
  */
 
 import * as fs from 'fs';
@@ -147,7 +146,7 @@ export function send404(res: ServerResponse): void {
 }
 
 // ============================================================================
-// Hub Dashboard
+// Hub Routes API
 // ============================================================================
 
 /**
@@ -189,142 +188,6 @@ function loadHubRoutes(): HubRoutes {
 }
 
 /**
- * Hub 대시보드 HTML을 생성합니다.
- */
-function generateHubDashboard(projects: HubProject[], host: string): string {
-  const projectCards = projects.map(p => {
-    const projectUrl = p.url || `http://${host.split(':')[0]}:${p.port}`;
-    const portDisplay = p.url ? new URL(p.url).pathname : `:${p.port}`;
-    return `
-    <a href="${projectUrl}" class="project-card" target="_blank" rel="noopener noreferrer external">
-      <div class="project-name">${p.name}</div>
-      <div class="project-desc">${p.description || ''}</div>
-      <div class="project-port">${portDisplay}</div>
-    </a>
-  `;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dev Hub</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      color: #fff;
-      padding: 2rem;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 0.5rem;
-      font-size: 2.5rem;
-      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .subtitle {
-      text-align: center;
-      color: #888;
-      margin-bottom: 2rem;
-    }
-    .projects {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1.5rem;
-    }
-    .project-card {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 1.5rem;
-      text-decoration: none;
-      color: #fff;
-      transition: all 0.3s ease;
-      display: block;
-    }
-    .project-card:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: #3a7bd5;
-      transform: translateY(-4px);
-    }
-    .project-name {
-      font-size: 1.25rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-    .project-desc {
-      color: #aaa;
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-    .project-port {
-      font-family: monospace;
-      color: #3a7bd5;
-      font-size: 0.85rem;
-    }
-    .empty {
-      text-align: center;
-      color: #666;
-      padding: 3rem;
-    }
-    .refresh-note {
-      text-align: center;
-      color: #555;
-      font-size: 0.8rem;
-      margin-top: 2rem;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Dev Hub</h1>
-    <p class="subtitle">Development Projects Dashboard</p>
-    <div class="projects">
-      ${projectCards || '<div class="empty">No projects configured.<br>Edit config/hub-routes.json to add projects.</div>'}
-    </div>
-    <p class="refresh-note">Refresh to reload project list</p>
-  </div>
-  <script>
-    // 프로젝트 링크 클릭 시 삼성 인터넷으로 열기
-    document.querySelectorAll('.project-card').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const url = link.href;
-        const intentUrl = 'intent://' + url.replace(/^https?:\\/\\//, '') +
-          '#Intent;scheme=https;package=com.sec.android.app.sbrowser;end';
-        window.location.href = intentUrl;
-      });
-    });
-  </script>
-</body>
-</html>`;
-}
-
-/**
- * Hub 대시보드를 서빙합니다.
- */
-function serveHubDashboard(req: IncomingMessage, res: ServerResponse): void {
-  const routes = loadHubRoutes();
-  const host = req.headers.host || 'localhost';
-  const html = generateHubDashboard(routes.projects, host);
-
-  res.writeHead(200, {
-    'Content-Type': 'text/html; charset=utf-8',
-    'Cache-Control': 'no-cache',
-  });
-  res.end(html);
-}
-
-/**
  * 정적 파일 서버 미들웨어를 생성합니다.
  *
  * @param options - 서버 옵션
@@ -350,11 +213,6 @@ export function createStaticHandler(
       });
       res.end(JSON.stringify(routes));
       return;
-    }
-
-    // Hub 대시보드
-    if (url.pathname === '/hub' || url.pathname === '/hub/') {
-      return serveHubDashboard(req, res);
     }
 
     // 정적 파일 서빙 시도
