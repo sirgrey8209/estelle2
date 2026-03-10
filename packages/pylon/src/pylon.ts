@@ -3463,6 +3463,11 @@ Message: ${message}
       return;
     }
 
+    // 동기적으로 cachedAccount를 즉시 클리어
+    // → async 스위치 중 workspace_list 요청이 오면 stale 계정 정보 방지
+    const previousCachedAccount = this.cachedAccount;
+    this.cachedAccount = null;
+
     // 비동기 처리
     (async () => {
       try {
@@ -3500,10 +3505,16 @@ Message: ${message}
           },
         });
 
+        // 5. 워크스페이스 목록 브로드캐스트 (새 계정 정보 포함)
+        this.broadcastWorkspaceList();
+
         this.log(`[Account] Switched to: ${accountInfo?.account || account} (${accountInfo?.subscriptionType || 'unknown'})`);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         this.deps.logger.error(`[Account] Failed to switch account: ${errorMessage}`);
+
+        // 실패 시 이전 캐시 복원
+        this.cachedAccount = previousCachedAccount;
 
         if (from?.deviceId !== undefined) {
           this.send({

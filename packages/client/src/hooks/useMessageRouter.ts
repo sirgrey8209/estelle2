@@ -326,10 +326,19 @@ export function routeMessage(message: RelayMessage): void {
 
     // === Account 상태 (명시적 계정 전환 시) ===
     case MessageType.ACCOUNT_STATUS: {
-      const { current, subscriptionType } = payload as {
-        current: import('@estelle/core').AccountType;
+      const { current, subscriptionType, error } = payload as {
+        current?: import('@estelle/core').AccountType;
         subscriptionType?: string;
+        error?: string;
       };
+
+      // current가 없는 에러 응답은 무시 (계정 전환 실패 등)
+      if (!current) {
+        if (error) {
+          console.warn(`[Router] Account status error: ${error}`);
+        }
+        break;
+      }
 
       // 어떤 파일런이 보냈는지 확인 (relay가 from 필드 주입)
       const fromPylonId = message.from?.deviceId;
