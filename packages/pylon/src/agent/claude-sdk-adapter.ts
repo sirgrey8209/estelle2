@@ -109,6 +109,9 @@ export class ClaudeSDKAdapter implements AgentAdapter {
       canUseTool: wrapCanUseTool(options.canUseTool),
       env: options.env,
       plugins: options.plugins as SdkPluginConfig[] | undefined,
+      stderr: (data: string) => {
+        console.error(`[ClaudeSDK:stderr] ${data}`);
+      },
     };
 
     // systemPrompt 전달 (undefined가 아닌 경우에만, 빈 문자열도 전달)
