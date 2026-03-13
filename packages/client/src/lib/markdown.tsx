@@ -8,12 +8,31 @@ export type MarkdownElementType =
   | 'list_item'
   | 'ordered_list_item'
   | 'hr'
-  | 'empty';
+  | 'empty'
+  | 'table';
 
 export interface ParsedElement {
   type: MarkdownElementType;
   content: string;
   language?: string;
+  headers?: string[];
+  rows?: string[][];
+}
+
+function isTableLine(line: string): boolean {
+  return line.trim().startsWith('|') && line.trim().endsWith('|');
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\|[\s:|-]+\|$/.test(line.trim());
+}
+
+function parseTableCells(line: string): string[] {
+  return line
+    .trim()
+    .slice(1, -1) // Remove leading/trailing |
+    .split('|')
+    .map(cell => cell.trim());
 }
 
 export function parseMarkdown(content: string): ParsedElement[] {
@@ -47,6 +66,35 @@ export function parseMarkdown(content: string): ParsedElement[] {
     if (inCodeBlock) {
       codeBlockContent += (codeBlockContent ? '\n' : '') + line;
       continue;
+    }
+
+    // 테이블 감지 및 파싱
+    if (isTableLine(line)) {
+      const tableLines: string[] = [line];
+      let j = i + 1;
+
+      // 연속된 테이블 라인 수집
+      while (j < lines.length && isTableLine(lines[j])) {
+        tableLines.push(lines[j]);
+        j++;
+      }
+
+      // 최소 2줄 (헤더 + 구분선) 이상이고 두 번째 줄이 구분선인 경우만 테이블
+      if (tableLines.length >= 2 && isTableSeparator(tableLines[1])) {
+        const headers = parseTableCells(tableLines[0]);
+        const rows = tableLines.slice(2).map(parseTableCells);
+
+        elements.push({
+          type: 'table',
+          content: '',
+          headers,
+          rows,
+        });
+
+        i = j - 1; // 루프 인덱스 조정
+        continue;
+      }
+      // 테이블이 아니면 일반 단락으로 폴백
     }
 
     // 빈 줄

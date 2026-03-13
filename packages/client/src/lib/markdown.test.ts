@@ -50,3 +50,78 @@ describe('renderInlineStyles - links', () => {
     expect(container.querySelector('a')).toBeTruthy();
   });
 });
+
+describe('parseMarkdown - tables', () => {
+  it('should parse simple table', () => {
+    const input = `| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |`;
+
+    const result = parseMarkdown(input);
+
+    expect(result.length).toBe(1);
+    expect(result[0].type).toBe('table');
+    expect(result[0].headers).toEqual(['Header 1', 'Header 2']);
+    expect(result[0].rows).toEqual([['Cell 1', 'Cell 2']]);
+  });
+
+  it('should parse table with multiple rows', () => {
+    const input = `| A | B |
+|---|---|
+| 1 | 2 |
+| 3 | 4 |`;
+
+    const result = parseMarkdown(input);
+
+    expect(result[0].rows?.length).toBe(2);
+    expect(result[0].rows?.[0]).toEqual(['1', '2']);
+    expect(result[0].rows?.[1]).toEqual(['3', '4']);
+  });
+
+  it('should handle table with alignment markers', () => {
+    const input = `| Left | Center | Right |
+|:-----|:------:|------:|
+| L    | C      | R     |`;
+
+    const result = parseMarkdown(input);
+
+    expect(result[0].type).toBe('table');
+    expect(result[0].headers).toEqual(['Left', 'Center', 'Right']);
+  });
+
+  it('should handle empty cells', () => {
+    const input = `| A | B |
+|---|---|
+|   | X |`;
+
+    const result = parseMarkdown(input);
+
+    expect(result[0].rows?.[0]).toEqual(['', 'X']);
+  });
+
+  it('should not parse incomplete table (no separator)', () => {
+    const input = `| Not | A | Table |
+| Just | Pipes |`;
+
+    const result = parseMarkdown(input);
+
+    // Should be paragraphs, not a table
+    expect(result.every(e => e.type === 'paragraph')).toBe(true);
+  });
+
+  it('should parse table surrounded by other content', () => {
+    const input = `Some text
+
+| H1 | H2 |
+|----|---|
+| A  | B |
+
+More text`;
+
+    const result = parseMarkdown(input);
+
+    expect(result[0].type).toBe('paragraph');
+    expect(result[2].type).toBe('table');
+    expect(result[4].type).toBe('paragraph');
+  });
+});
