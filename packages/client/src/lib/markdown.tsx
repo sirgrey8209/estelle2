@@ -120,10 +120,11 @@ export function parseMarkdown(content: string): ParsedElement[] {
   return elements;
 }
 
-export function renderInlineStyles(text: string): ReactNode {
+// 내부 함수: bold, italic, code 처리 (링크 제외)
+function renderInlineStylesInternal(text: string, keyOffset: number = 0): { nodes: ReactNode[]; keyCount: number } {
   const parts: ReactNode[] = [];
   let remaining = text;
-  let key = 0;
+  let key = keyOffset;
 
   // **bold** 처리
   while (remaining.includes('**')) {
@@ -213,7 +214,83 @@ export function renderInlineStyles(text: string): ReactNode {
     }
   }
 
-  return finalParts.length > 0 ? finalParts : text;
+  return { nodes: finalParts.length > 0 ? finalParts : [text], keyCount: key };
+}
+
+export function renderInlineStyles(
+  text: string,
+  onFilePathClick?: (path: string) => void
+): ReactNode {
+  // 1. 먼저 링크를 파싱: [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const segments: { type: 'text' | 'link'; content: string; url?: string }[] = [];
+
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // 링크 앞의 텍스트
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+    }
+    // 링크
+    segments.push({ type: 'link', content: match[1], url: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  // 마지막 남은 텍스트
+  if (lastIndex < text.length) {
+    segments.push({ type: 'text', content: text.slice(lastIndex) });
+  }
+
+  // 링크가 없으면 기존 로직 사용
+  if (segments.length === 0) {
+    const { nodes } = renderInlineStylesInternal(text);
+    return nodes;
+  }
+
+  // 2. 각 세그먼트 처리
+  const result: ReactNode[] = [];
+  let keyCounter = 0;
+
+  for (const segment of segments) {
+    if (segment.type === 'link') {
+      const url = segment.url!;
+      const isWebUrl = url.startsWith('http://') || url.startsWith('https://');
+
+      if (isWebUrl) {
+        result.push(
+          <a
+            key={keyCounter++}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:opacity-80"
+          >
+            {segment.content}
+          </a>
+        );
+      } else {
+        result.push(
+          <button
+            key={keyCounter++}
+            onClick={() => onFilePathClick?.(url)}
+            className="text-primary underline hover:opacity-80 cursor-pointer"
+            title={url}
+          >
+            {segment.content}
+          </button>
+        );
+      }
+    } else {
+      // 텍스트 세그먼트: bold/italic/code 처리
+      const { nodes, keyCount } = renderInlineStylesInternal(segment.content, keyCounter);
+      keyCounter = keyCount;
+      result.push(...nodes);
+    }
+  }
+
+  return result;
 }
 
 export function MarkdownElement({ element }: { element: ParsedElement }) {
