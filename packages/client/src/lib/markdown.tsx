@@ -341,36 +341,41 @@ export function renderInlineStyles(
   return result;
 }
 
-export function MarkdownElement({ element }: { element: ParsedElement }) {
+interface MarkdownElementProps {
+  element: ParsedElement;
+  onFilePathClick?: (path: string) => void;
+}
+
+export function MarkdownElement({ element, onFilePathClick }: MarkdownElementProps) {
   switch (element.type) {
     case 'h1':
       return (
         <h1 className="text-base font-bold mt-3 mb-1">
-          {renderInlineStyles(element.content)}
+          {renderInlineStyles(element.content, onFilePathClick)}
         </h1>
       );
     case 'h2':
       return (
         <h2 className="text-sm font-semibold mt-2 mb-1">
-          {renderInlineStyles(element.content)}
+          {renderInlineStyles(element.content, onFilePathClick)}
         </h2>
       );
     case 'h3':
       return (
         <h3 className="text-sm font-semibold mt-2 mb-0.5">
-          {renderInlineStyles(element.content)}
+          {renderInlineStyles(element.content, onFilePathClick)}
         </h3>
       );
     case 'h4':
       return (
         <h4 className="text-sm font-medium mt-1 mb-0.5">
-          {renderInlineStyles(element.content)}
+          {renderInlineStyles(element.content, onFilePathClick)}
         </h4>
       );
     case 'paragraph':
       return (
         <p className="text-sm leading-relaxed mb-1 opacity-85 select-text">
-          {renderInlineStyles(element.content)}
+          {renderInlineStyles(element.content, onFilePathClick)}
         </p>
       );
     case 'code_block':
@@ -390,7 +395,7 @@ export function MarkdownElement({ element }: { element: ParsedElement }) {
       return (
         <div className="border-l-2 border-primary pl-2 my-1">
           <p className="text-sm italic opacity-80 select-text">
-            {renderInlineStyles(element.content)}
+            {renderInlineStyles(element.content, onFilePathClick)}
           </p>
         </div>
       );
@@ -399,7 +404,7 @@ export function MarkdownElement({ element }: { element: ParsedElement }) {
         <div className="flex ml-1 mb-0.5">
           <span className="text-primary mr-1.5 text-sm">•</span>
           <p className="flex-1 text-sm opacity-85 select-text">
-            {renderInlineStyles(element.content)}
+            {renderInlineStyles(element.content, onFilePathClick)}
           </p>
         </div>
       );
@@ -408,8 +413,35 @@ export function MarkdownElement({ element }: { element: ParsedElement }) {
         <div className="flex ml-1 mb-0.5">
           <span className="text-primary mr-1.5 text-sm">-</span>
           <p className="flex-1 text-sm opacity-85 select-text">
-            {renderInlineStyles(element.content)}
+            {renderInlineStyles(element.content, onFilePathClick)}
           </p>
+        </div>
+      );
+    case 'table':
+      return (
+        <div className="my-2 overflow-x-auto">
+          <table className="min-w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                {element.headers?.map((header, i) => (
+                  <th key={i} className="px-2 py-1 text-left font-semibold select-text">
+                    {renderInlineStyles(header, onFilePathClick)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {element.rows?.map((row, i) => (
+                <tr key={i} className="border-b border-border/50">
+                  {row.map((cell, j) => (
+                    <td key={j} className="px-2 py-1 select-text">
+                      {renderInlineStyles(cell, onFilePathClick)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       );
     case 'hr':

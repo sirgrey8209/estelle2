@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseMarkdown, renderInlineStyles } from './markdown';
+import { parseMarkdown, renderInlineStyles, MarkdownElement, MarkdownContent } from './markdown';
 import { render } from '@testing-library/react';
 import { createElement } from 'react';
 
@@ -123,5 +123,60 @@ More text`;
     expect(result[0].type).toBe('paragraph');
     expect(result[2].type).toBe('table');
     expect(result[4].type).toBe('paragraph');
+  });
+});
+
+describe('MarkdownElement - table rendering', () => {
+  it('should render table with headers and rows', () => {
+    const element = {
+      type: 'table' as const,
+      content: '',
+      headers: ['Name', 'Value'],
+      rows: [['A', '1'], ['B', '2']],
+    };
+
+    const { container } = render(createElement(MarkdownElement, { element }));
+
+    const table = container.querySelector('table');
+    expect(table).toBeTruthy();
+
+    const ths = container.querySelectorAll('th');
+    expect(ths.length).toBe(2);
+    expect(ths[0].textContent).toBe('Name');
+    expect(ths[1].textContent).toBe('Value');
+
+    const tds = container.querySelectorAll('td');
+    expect(tds.length).toBe(4);
+  });
+
+  it('should apply select-text class to cells', () => {
+    const element = {
+      type: 'table' as const,
+      content: '',
+      headers: ['H'],
+      rows: [['C']],
+    };
+
+    const { container } = render(createElement(MarkdownElement, { element }));
+
+    const th = container.querySelector('th');
+    const td = container.querySelector('td');
+
+    expect(th?.className).toContain('select-text');
+    expect(td?.className).toContain('select-text');
+  });
+
+  it('should render inline styles in table cells', () => {
+    const element = {
+      type: 'table' as const,
+      content: '',
+      headers: ['**Bold Header**'],
+      rows: [['`code`']],
+    };
+
+    const { container } = render(createElement(MarkdownElement, { element }));
+
+    expect(container.querySelector('th strong')).toBeTruthy();
+    expect(container.querySelector('td code')).toBeTruthy();
   });
 });
