@@ -180,3 +180,42 @@ describe('MarkdownElement - table rendering', () => {
     expect(container.querySelector('td code')).toBeTruthy();
   });
 });
+
+describe('MarkdownContent - integration', () => {
+  it('should render mixed content with table and links', () => {
+    const content = `# Title
+
+Check [docs](https://docs.com) for info.
+
+| Feature | Status |
+|---------|--------|
+| Tables  | Done   |
+| Links   | Done   |
+
+Open [config](/etc/config.ts) to edit.`;
+
+    const onFilePathClick = vi.fn();
+    const { container } = render(
+      createElement(MarkdownContent, { content, onFilePathClick })
+    );
+
+    expect(container.querySelector('h1')).toBeTruthy();
+    expect(container.querySelector('table')).toBeTruthy();
+    expect(container.querySelectorAll('a').length).toBe(1);
+    expect(container.querySelectorAll('button').length).toBe(1); // file link
+  });
+
+  it('should call onFilePathClick when file link clicked', () => {
+    const content = 'Open [file](/path/to/file.ts)';
+    const onFilePathClick = vi.fn();
+
+    const { container } = render(
+      createElement(MarkdownContent, { content, onFilePathClick })
+    );
+
+    const button = container.querySelector('button');
+    button?.click();
+
+    expect(onFilePathClick).toHaveBeenCalledWith('/path/to/file.ts');
+  });
+});

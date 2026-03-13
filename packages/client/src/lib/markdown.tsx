@@ -456,15 +456,20 @@ export function MarkdownElement({ element, onFilePathClick }: MarkdownElementPro
 interface MarkdownContentProps {
   content: string;
   showCursor?: boolean;
+  onFilePathClick?: (path: string) => void;
 }
 
-export function MarkdownContent({ content, showCursor }: MarkdownContentProps) {
+export function MarkdownContent({ content, showCursor, onFilePathClick }: MarkdownContentProps) {
   const elements = useMemo(() => parseMarkdown(content), [content]);
 
   return (
     <div className="break-words">
       {elements.map((element, index) => (
-        <MarkdownElement key={index} element={element} />
+        <MarkdownElement
+          key={index}
+          element={element}
+          onFilePathClick={onFilePathClick}
+        />
       ))}
       {showCursor && (
         <span className="text-primary animate-pulse">▋</span>
