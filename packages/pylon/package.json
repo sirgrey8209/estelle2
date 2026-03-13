@@ -16,7 +16,7 @@
     "dev": "cross-env RELAY_URL=ws://localhost:3000 DEVICE_ID=1 node dist/bin.js"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.74",
     "@estelle/core": "workspace:*",
     "@estelle/updater": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
