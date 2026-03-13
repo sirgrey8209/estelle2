@@ -28,11 +28,26 @@ function isTableSeparator(line: string): boolean {
 }
 
 function parseTableCells(line: string): string[] {
-  return line
-    .trim()
-    .slice(1, -1) // Remove leading/trailing |
-    .split('|')
-    .map(cell => cell.trim());
+  const inner = line.trim().slice(1, -1); // Remove leading/trailing |
+  const cells: string[] = [];
+  let current = '';
+  let inCode = false;
+
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if (char === '`') {
+      inCode = !inCode;
+      current += char;
+    } else if (char === '|' && !inCode) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+
+  return cells;
 }
 
 export function parseMarkdown(content: string): ParsedElement[] {
@@ -168,13 +183,13 @@ export function parseMarkdown(content: string): ParsedElement[] {
   return elements;
 }
 
-// 내부 함수: bold, italic, code 처리 (링크 제외)
-function renderInlineStylesInternal(text: string, keyOffset: number = 0): { nodes: ReactNode[]; keyCount: number } {
+// 내부 함수: bold, italic 처리 (코드/링크は上位で処理済み)
+function renderBoldItalic(text: string, keyOffset: number = 0): { nodes: ReactNode[]; keyCount: number } {
   const parts: ReactNode[] = [];
   let remaining = text;
   let key = keyOffset;
 
-  // **bold** 처리
+  // **bold** 처理
   while (remaining.includes('**')) {
     const start = remaining.indexOf('**');
     const end = remaining.indexOf('**', start + 2);
@@ -224,121 +239,111 @@ function renderInlineStylesInternal(text: string, keyOffset: number = 0): { node
     parts.push(remaining);
   }
 
-  // `code` 처리
-  const finalParts: ReactNode[] = [];
-  for (const part of parts) {
-    if (typeof part === 'string' && part.includes('`')) {
-      let codePart = part;
-      while (codePart.includes('`')) {
-        const start = codePart.indexOf('`');
-        const end = codePart.indexOf('`', start + 1);
-
-        if (end === -1) {
-          finalParts.push(codePart);
-          codePart = '';
-          break;
-        }
-
-        if (start > 0) {
-          finalParts.push(codePart.slice(0, start));
-        }
-
-        finalParts.push(
-          <code
-            key={key++}
-            className="bg-muted px-1 rounded text-primary font-mono text-[0.9em]"
-          >
-            {codePart.slice(start + 1, end)}
-          </code>
-        );
-
-        codePart = codePart.slice(end + 1);
-      }
-      if (codePart) {
-        finalParts.push(codePart);
-      }
-    } else {
-      finalParts.push(part);
-    }
-  }
-
-  return { nodes: finalParts.length > 0 ? finalParts : [text], keyCount: key };
+  return { nodes: parts.length > 0 ? parts : [text], keyCount: key };
 }
 
 export function renderInlineStyles(
   text: string,
   onFilePathClick?: (path: string) => void
 ): ReactNode {
-  // 1. 먼저 링크를 파싱: [text](url)
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-  const segments: { type: 'text' | 'link'; content: string; url?: string }[] = [];
+  // Phase 1: 코드 스팬을 먼저 분리 (코드 안은 어떤 마크다운도 처리하지 않음)
+  const codeSpanRegex = /`([^`]+)`/g;
+  const topSegments: { type: 'text' | 'code'; content: string }[] = [];
 
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
+  let lastIdx = 0;
+  let codeMatch: RegExpExecArray | null;
 
-  while ((match = linkRegex.exec(text)) !== null) {
-    // 링크 앞의 텍스트
-    if (match.index > lastIndex) {
-      segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+  while ((codeMatch = codeSpanRegex.exec(text)) !== null) {
+    if (codeMatch.index > lastIdx) {
+      topSegments.push({ type: 'text', content: text.slice(lastIdx, codeMatch.index) });
     }
-    // 링크
-    segments.push({ type: 'link', content: match[1], url: match[2] });
-    lastIndex = match.index + match[0].length;
+    topSegments.push({ type: 'code', content: codeMatch[1] });
+    lastIdx = codeMatch.index + codeMatch[0].length;
+  }
+  if (lastIdx < text.length) {
+    topSegments.push({ type: 'text', content: text.slice(lastIdx) });
+  }
+  if (topSegments.length === 0) {
+    topSegments.push({ type: 'text', content: text });
   }
 
-  // 마지막 남은 텍스트
-  if (lastIndex < text.length) {
-    segments.push({ type: 'text', content: text.slice(lastIndex) });
-  }
-
-  // 링크가 없으면 기존 로직 사용
-  if (segments.length === 0) {
-    const { nodes } = renderInlineStylesInternal(text);
-    return nodes;
-  }
-
-  // 2. 각 세그먼트 처리
+  // Phase 2: 각 세그먼트 처리
   const result: ReactNode[] = [];
-  let keyCounter = 0;
+  let key = 0;
 
-  for (const segment of segments) {
-    if (segment.type === 'link') {
-      const url = segment.url!;
-      const isWebUrl = url.startsWith('http://') || url.startsWith('https://');
+  for (const seg of topSegments) {
+    if (seg.type === 'code') {
+      result.push(
+        <code
+          key={key++}
+          className="bg-muted px-1 rounded text-primary font-mono text-[0.9em]"
+        >
+          {seg.content}
+        </code>
+      );
+      continue;
+    }
 
-      if (isWebUrl) {
-        result.push(
-          <a
-            key={keyCounter++}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline hover:opacity-80"
-          >
-            {segment.content}
-          </a>
-        );
-      } else {
-        result.push(
-          <button
-            key={keyCounter++}
-            onClick={() => onFilePathClick?.(url)}
-            className="text-primary underline hover:opacity-80 cursor-pointer"
-            title={url}
-          >
-            {segment.content}
-          </button>
-        );
+    // 코드가 아닌 텍스트: 링크 파싱
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const linkSegments: { type: 'text' | 'link'; content: string; url?: string }[] = [];
+
+    let linkLastIdx = 0;
+    let linkMatch: RegExpExecArray | null;
+
+    while ((linkMatch = linkRegex.exec(seg.content)) !== null) {
+      if (linkMatch.index > linkLastIdx) {
+        linkSegments.push({ type: 'text', content: seg.content.slice(linkLastIdx, linkMatch.index) });
       }
-    } else {
-      // 텍스트 세그먼트: bold/italic/code 처리
-      const { nodes, keyCount } = renderInlineStylesInternal(segment.content, keyCounter);
-      keyCounter = keyCount;
-      result.push(...nodes);
+      linkSegments.push({ type: 'link', content: linkMatch[1], url: linkMatch[2] });
+      linkLastIdx = linkMatch.index + linkMatch[0].length;
+    }
+    if (linkLastIdx < seg.content.length) {
+      linkSegments.push({ type: 'text', content: seg.content.slice(linkLastIdx) });
+    }
+    if (linkSegments.length === 0) {
+      linkSegments.push({ type: 'text', content: seg.content });
+    }
+
+    for (const linkSeg of linkSegments) {
+      if (linkSeg.type === 'link') {
+        const url = linkSeg.url!;
+        const isWebUrl = url.startsWith('http://') || url.startsWith('https://');
+
+        if (isWebUrl) {
+          result.push(
+            <a
+              key={key++}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline hover:opacity-80"
+            >
+              {linkSeg.content}
+            </a>
+          );
+        } else {
+          result.push(
+            <button
+              key={key++}
+              onClick={() => onFilePathClick?.(url)}
+              className="text-primary underline hover:opacity-80 cursor-pointer"
+              title={url}
+            >
+              {linkSeg.content}
+            </button>
+          );
+        }
+      } else {
+        // 일반 텍스트: bold/italic 처리 (코드 스팬은 이미 분리됨)
+        const { nodes, keyCount } = renderBoldItalic(linkSeg.content, key);
+        key = keyCount;
+        result.push(...nodes);
+      }
     }
   }
 
-  return result;
+  return result.length === 1 ? result[0] : result;
 }
 
 interface MarkdownElementProps {

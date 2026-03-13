@@ -49,6 +49,17 @@ describe('renderInlineStyles - links', () => {
     expect(container.querySelector('strong')).toBeTruthy();
     expect(container.querySelector('a')).toBeTruthy();
   });
+
+  it('should NOT parse links inside backticks as links', () => {
+    const result = renderInlineStyles('Use `[text](url)` syntax');
+    const { container } = render(createElement('div', null, result));
+
+    // Should render as code, not as a link
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.querySelector('code')).toBeTruthy();
+    expect(container.querySelector('code')?.textContent).toBe('[text](url)');
+  });
 });
 
 describe('parseMarkdown - tables', () => {
@@ -97,6 +108,19 @@ describe('parseMarkdown - tables', () => {
     const result = parseMarkdown(input);
 
     expect(result[0].rows?.[0]).toEqual(['', 'X']);
+  });
+
+  it('should handle pipe characters inside backticks in cells', () => {
+    const input = `| Feature | Syntax |
+|---------|--------|
+| Table | \`| col | col |\` |`;
+
+    const result = parseMarkdown(input);
+
+    expect(result[0].type).toBe('table');
+    expect(result[0].headers).toEqual(['Feature', 'Syntax']);
+    expect(result[0].rows?.length).toBe(1);
+    expect(result[0].rows?.[0]).toEqual(['Table', '`| col | col |`']);
   });
 
   it('should not parse incomplete table (no separator)', () => {
