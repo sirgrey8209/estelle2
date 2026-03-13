@@ -99,6 +99,10 @@ export class ClaudeSDKAdapter implements AgentAdapter {
    * @returns SDK 메시지 스트림
    */
   async *query(options: AgentQueryOptions): AsyncIterable<AgentMessage> {
+    // SDK가 CLAUDECODE=1을 감지하면 중첩 세션으로 판단하여 spawn을 거부하므로 제거
+    const baseEnv = options.env ?? (process.env as Record<string, string>);
+    const { CLAUDECODE, CLAUDE_CODE_ENTRYPOINT, CLAUDE_AGENT_SDK_VERSION, ...cleanEnv } = baseEnv;
+
     const sdkOptions: Record<string, unknown> = {
       cwd: options.cwd,
       abortController: options.abortController,
@@ -107,7 +111,7 @@ export class ClaudeSDKAdapter implements AgentAdapter {
       resume: options.resume,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
-      env: options.env,
+      env: cleanEnv,
       plugins: options.plugins as SdkPluginConfig[] | undefined,
       stderr: (data: string) => {
         console.error(`[ClaudeSDK:stderr] ${data}`);
