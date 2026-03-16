@@ -24,10 +24,10 @@ description: |
 
 ```
 packages/
-├── core/    → 공유 타입, 메시지 스키마 (601 tests)
-├── relay/   → 순수 라우터, 정적 파일 서빙 (165 tests)
-├── pylon/   → 상태 관리, Claude SDK, MCP 서버 (748 tests)
-└── client/  → React + Vite + shadcn/ui (335 tests)
+├── core/    → 공유 타입, 메시지 스키마, ID 시스템
+├── relay/   → 순수 라우터, 정적 파일 서빙
+├── pylon/   → 상태 관리, Agent SDK (Claude/Codex), MCP 서버
+└── client/  → React + Vite + shadcn/ui
 ```
 
 ### 핵심 설계 원칙
@@ -59,37 +59,49 @@ ConversationId = envId(2) + deviceType(1) + deviceIndex(4) + workspaceIndex(7) +
 | stage | 9877 |
 | dev | 9878 |
 
+### Agent 타입
+
+| 타입 | SDK | 설명 |
+|------|-----|------|
+| `claude` (기본) | `@anthropic-ai/claude-agent-sdk` | Claude Agent SDK |
+| `codex` | `@openai/codex-sdk` | OpenAI Codex SDK |
+
 ---
 
 ## 상세 레퍼런스
 
 ### [메시지 타입](reference/message-types.md)
 
-- 전체 메시지 타입 목록 (Auth, Workspace, Conversation, Claude, Blob 등)
+- 전체 메시지 타입 목록 (Auth, Workspace, Conversation, Claude, Blob, Widget 등)
 - 방향, Payload 구조, 용도
 - Claude Event 서브타입 (text, tool_start, tool_complete, permission_request 등)
+- Widget 메시지 (WIDGET_READY, WIDGET_CLAIM, WIDGET_RENDER, WIDGET_COMPLETE 등)
 
 ### [데이터 흐름](reference/data-flow.md)
 
 - Pylon 메시지 처리 흐름 (handleMessage 라우팅)
 - Client 메시지 라우팅 (routeMessage → Store 업데이트)
 - 초기화 시퀀스
-- 세션 뷰어 관리
+- 세션 뷰어 관리 (appUnreadSent 중복 방지)
 - 페이징, TextBuffer, Tool 생명주기
+- Widget 전체 생명주기 (Ready → Claim → Render → Complete)
+- 계정 변경 처리 (pylonAccounts 추적)
 
 ### [MCP 도구](reference/mcp-tools.md)
 
-- 10개 MCP 도구 상세 스펙
+- 12개 MCP 도구 상세 스펙 (run_widget, run_widget_inline 추가)
 - 파라미터, 반환값, 처리 흐름
-- PylonClient 통신 방식
+- PylonClient 통신 방식, toolUseId 라우팅
+- create_conversation에 agent 파라미터 추가
 
 ### [테스트 패턴](reference/test-patterns.md)
 
 - AAA 패턴, 네이밍 컨벤션
-- 모킹 전략 (팩토리 함수, Spy)
+- 모킹 전략 (팩토리 함수, Spy, vi.mock)
 - 픽스처, 헬퍼 함수
 - 비동기 테스트 패턴
-- Client 테스트 (jsdom)
+- Client 테스트 (jsdom, setupTests.ts)
+- 패키지별 vitest 설정
 
 ---
 
@@ -102,7 +114,9 @@ ConversationId = envId(2) + deviceType(1) + deviceIndex(4) + workspaceIndex(7) +
 | `pylon/src/pylon.ts` | 메인 오케스트레이터, handleMessage |
 | `pylon/src/stores/workspace-store.ts` | 워크스페이스/대화 관리 |
 | `pylon/src/stores/message-store.ts` | 메시지 히스토리 (SQLite) |
-| `pylon/src/claude/claude-manager.ts` | Claude SDK 세션 관리 |
+| `pylon/src/agent/agent-manager.ts` | 에이전트 선택 및 관리 |
+| `pylon/src/agent/claude-sdk-adapter.ts` | Claude SDK 어댑터 |
+| `pylon/src/agent/codex-sdk-adapter.ts` | Codex SDK 어댑터 |
 | `pylon/src/mcp/server.ts` | MCP stdio 서버 |
 | `pylon/src/mcp/pylon-client.ts` | MCP ↔ Pylon 통신 |
 
@@ -116,6 +130,9 @@ ConversationId = envId(2) + deviceType(1) + deviceIndex(4) + workspaceIndex(7) +
 | `client/src/stores/syncStore.ts` | 동기화 상태 |
 | `client/src/services/relaySender.ts` | 메시지 전송 |
 | `client/src/services/syncOrchestrator.ts` | 동기화 조율 |
+| `client/src/lib/markdown.tsx` | 마크다운 렌더링 (테이블, 링크) |
+| `client/src/components/chat/FilePathLink.tsx` | 파일 경로 링크 컴포넌트 |
+| `client/src/components/projects/ProjectsDialog.tsx` | 프로젝트 관리 UI |
 
 ### Core
 
@@ -125,6 +142,7 @@ ConversationId = envId(2) + deviceType(1) + deviceIndex(4) + workspaceIndex(7) +
 | `core/src/types/message.ts` | Message<T> 인터페이스 |
 | `core/src/types/workspace.ts` | Workspace, Conversation |
 | `core/src/types/claude-event.ts` | ClaudeEventPayload |
+| `core/src/types/agent.ts` | AgentType ('claude' \| 'codex') |
 | `core/src/utils/id-system.ts` | 24비트 ID 인코딩/디코딩 |
 
 ---
@@ -166,4 +184,4 @@ pnpm typecheck
     └── test-patterns.md  ← 테스트 패턴
 ```
 
-**최종 업데이트**: 2026-03-03
+**최종 업데이트**: 2026-03-16
