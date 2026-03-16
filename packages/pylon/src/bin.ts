@@ -270,6 +270,7 @@ function loadMcpConfig(workingDir: string): Record<string, unknown> | null {
       ESTELLE_WORKING_DIR: workingDir,
       ESTELLE_MCP_PORT: String(mcpPort),
       MCP_TIMEOUT: '180000', // 3분 타임아웃
+      DATA_DIR: dataDir, // 중앙 데이터 디렉토리 전달 (로그 등)
     },
   };
 

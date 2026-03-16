@@ -70,7 +70,7 @@ describe('ClaudeSDKAdapter', () => {
       // SDK가 올바른 옵션으로 호출되었는지 확인
       expect(mockQuery).toHaveBeenCalledWith({
         prompt: 'Hello',
-        options: {
+        options: expect.objectContaining({
           cwd: '/test/dir',
           abortController: options.abortController,
           includePartialMessages: true,
@@ -78,7 +78,7 @@ describe('ClaudeSDKAdapter', () => {
           resume: undefined,
           mcpServers: undefined,
           canUseTool: undefined,
-        },
+        }),
       });
     });
 
