@@ -79,9 +79,13 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     });
   }, []);
 
+  const handleVoiceError = useCallback((error: string) => {
+    console.warn('[VoiceInput]', error);
+  }, []);
+
   const { isListening, isSupported, start: startListening, stop: stopListening } = useSpeechRecognition({
     onResult: handleVoiceResult,
-    onError: (error) => console.warn('[VoiceInput]', error),
+    onError: handleVoiceError,
   });
 
   const conversationId = selectedConversation?.conversationId || null;
@@ -370,6 +374,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
             onTouchEnd={() => stopListening()}
             onMouseDown={() => startListening()}
             onMouseUp={() => stopListening()}
+            onMouseLeave={() => { if (isListening) stopListening(); }}
             disabled={isWorking}
             className={cn(
               'h-10 w-10 shrink-0',
