@@ -55,6 +55,8 @@ interface UseSpeechRecognitionReturn {
   isListening: boolean;
   /** 브라우저 지원 여부 */
   isSupported: boolean;
+  /** 녹음 중 실시간 중간 결과 */
+  interimTranscript: string;
   /** 녹음 시작 */
   start: () => void;
   /** 녹음 중지 */
@@ -75,6 +77,7 @@ export function useSpeechRecognition(
   const { lang = 'ko-KR', onResult, onError } = options;
 
   const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isSupported = typeof window !== 'undefined' && getSpeechRecognitionCtor() !== null;
 
@@ -93,21 +96,27 @@ export function useSpeechRecognition(
     const recognition = new Ctor();
     recognition.lang = lang;
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
 
     recognition.onstart = () => {
       setIsListening(true);
+      setInterimTranscript('');
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let transcript = '';
+      let finalTranscript = '';
+      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          transcript += event.results[i][0].transcript;
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
         }
       }
-      if (transcript) {
-        onResult?.(transcript);
+      setInterimTranscript(interim);
+      if (finalTranscript) {
+        onResult?.(finalTranscript);
+        setInterimTranscript('');
       }
     };
 
@@ -121,6 +130,7 @@ export function useSpeechRecognition(
 
     recognition.onend = () => {
       setIsListening(false);
+      setInterimTranscript('');
       recognitionRef.current = null;
     };
 
@@ -150,5 +160,5 @@ export function useSpeechRecognition(
     };
   }, []);
 
-  return { isListening, isSupported, start, stop };
+  return { isListening, isSupported, interimTranscript, start, stop };
 }

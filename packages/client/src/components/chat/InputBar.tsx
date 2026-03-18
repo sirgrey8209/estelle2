@@ -83,7 +83,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     console.warn('[VoiceInput]', error);
   }, []);
 
-  const { isListening, isSupported, start: startListening, stop: stopListening } = useSpeechRecognition({
+  const { isListening, isSupported, interimTranscript, start: startListening, stop: stopListening } = useSpeechRecognition({
     onResult: handleVoiceResult,
     onError: handleVoiceError,
   });
@@ -397,8 +397,8 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
 
         {/* 텍스트 입력 */}
         <AutoResizeTextInput
-          placeholder={disabled ? '대기 중...' : '메시지를 입력하세요...'}
-          value={text}
+          placeholder={disabled ? '대기 중...' : isListening ? '듣고 있어요...' : '메시지를 입력하세요...'}
+          value={isListening && interimTranscript ? (text ? text + ' ' + interimTranscript : interimTranscript) : text}
           onChange={setText}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}

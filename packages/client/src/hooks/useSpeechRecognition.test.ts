@@ -164,6 +164,68 @@ describe('useSpeechRecognition', () => {
     });
   });
 
+  describe('interimTranscript', () => {
+    it('비최종 결과가 오면 interimTranscript 업데이트', async () => {
+      const { result } = renderHook(() => useSpeechRecognition());
+
+      await act(async () => {
+        result.current.start();
+        await Promise.resolve();
+      });
+
+      act(() => {
+        lastMockInstance?.simulateResult('안녕하', false);
+      });
+
+      expect(result.current.interimTranscript).toBe('안녕하');
+    });
+
+    it('최종 결과가 오면 interimTranscript 비워짐', async () => {
+      const onResult = vi.fn();
+      const { result } = renderHook(() =>
+        useSpeechRecognition({ onResult })
+      );
+
+      await act(async () => {
+        result.current.start();
+        await Promise.resolve();
+      });
+
+      // 먼저 중간 결과
+      act(() => {
+        lastMockInstance?.simulateResult('안녕하', false);
+      });
+      expect(result.current.interimTranscript).toBe('안녕하');
+
+      // 최종 결과
+      act(() => {
+        lastMockInstance?.simulateResult('안녕하세요');
+      });
+      expect(result.current.interimTranscript).toBe('');
+      expect(onResult).toHaveBeenCalledWith('안녕하세요');
+    });
+
+    it('stop 후 interimTranscript 비워짐', async () => {
+      const { result } = renderHook(() => useSpeechRecognition());
+
+      await act(async () => {
+        result.current.start();
+        await Promise.resolve();
+      });
+
+      act(() => {
+        lastMockInstance?.simulateResult('테스트', false);
+      });
+      expect(result.current.interimTranscript).toBe('테스트');
+
+      await act(async () => {
+        result.current.stop();
+        await Promise.resolve();
+      });
+      expect(result.current.interimTranscript).toBe('');
+    });
+  });
+
   describe('onError', () => {
     it('인식 에러 시 onError 호출', async () => {
       const onError = vi.fn();
