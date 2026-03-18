@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, ChangeEvent, useMemo } from 'react';
-import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon } from 'lucide-react';
+import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon, Mic } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -12,6 +12,8 @@ import { useConversationStore, EMPTY_SLASH_COMMANDS } from '../../stores/convers
 import { useImageUploadStore, AttachedImage } from '../../stores/imageUploadStore';
 import { AutoResizeTextInput } from '../common/AutoResizeTextInput';
 import { useResponsive } from '../../hooks/useResponsive';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
+import { cn } from '../../lib/utils';
 import { processFiles } from '../../utils/fileUtils';
 import {
   parseSlashCommand,
@@ -53,6 +55,34 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   const status = currentState?.status ?? 'idle';
   const { attachedImages, addAttachedImage, removeAttachedImage, clearAttachedImages, hasActiveUpload } = useImageUploadStore();
   const { isDesktop, isTablet } = useResponsive();
+
+  // 음성 입력
+  const [voiceMode, setVoiceMode] = useState(() => {
+    return localStorage.getItem('estelle:voiceInputEnabled') === 'true';
+  });
+
+  const toggleVoiceMode = useCallback(() => {
+    setVoiceMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('estelle:voiceInputEnabled', String(next));
+      return next;
+    });
+    setShowAttachMenu(false);
+  }, []);
+
+  const handleVoiceResult = useCallback((transcript: string) => {
+    setText((prev) => {
+      if (prev && !prev.endsWith(' ')) {
+        return prev + ' ' + transcript;
+      }
+      return prev + transcript;
+    });
+  }, []);
+
+  const { isListening, isSupported, start: startListening, stop: stopListening } = useSpeechRecognition({
+    onResult: handleVoiceResult,
+    onError: (error) => console.warn('[VoiceInput]', error),
+  });
 
   const conversationId = selectedConversation?.conversationId || null;
 
@@ -328,6 +358,27 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
           onSelect={handleSelectCommand}
           visible={showAutocomplete}
         />
+        {/* 음성 입력 버튼 (토글 ON 시) */}
+        {voiceMode && isSupported && (
+          <Button
+            variant={isListening ? 'default' : 'ghost'}
+            size="icon"
+            onTouchStart={(e) => {
+              e.preventDefault();
+              startListening();
+            }}
+            onTouchEnd={() => stopListening()}
+            onMouseDown={() => startListening()}
+            onMouseUp={() => stopListening()}
+            disabled={isWorking}
+            className={cn(
+              'h-10 w-10 shrink-0',
+              isListening && 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+            )}
+          >
+            <Mic className="h-5 w-5" />
+          </Button>
+        )}
         {/* 첨부 버튼 */}
         <Button
           variant="ghost"
@@ -416,6 +467,27 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
               <FileIcon className="h-5 w-5" />
               <span>파일 선택</span>
             </button>
+            {/* 음성 입력 토글 */}
+            {isSupported && (
+              <>
+                <div className="border-t my-1" />
+                <button
+                  onClick={toggleVoiceMode}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+                >
+                  <Mic className="h-5 w-5" />
+                  <span>음성 입력</span>
+                  <span className={cn(
+                    'ml-auto text-xs px-2 py-0.5 rounded-full',
+                    voiceMode
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground'
+                  )}>
+                    {voiceMode ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
           <div className="flex justify-end mt-4">
             <Button variant="ghost" onClick={() => setShowAttachMenu(false)}>
