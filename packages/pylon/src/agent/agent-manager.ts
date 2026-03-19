@@ -102,7 +102,8 @@ export type AgentManagerEventType =
   | 'agentAborted'
   | 'usage_update'
   | 'compactStart'
-  | 'compactComplete';
+  | 'compactComplete'
+  | 'suggestion';
 
 /**
  * Agent 상태 정보
