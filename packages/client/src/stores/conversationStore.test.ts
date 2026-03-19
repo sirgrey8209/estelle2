@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import type { StoreMessage, PendingRequest } from '@estelle/core';
+import type { StoreMessage, PendingRequest, SuggestionState } from '@estelle/core';
 import {
   useConversationStore,
   getInitialClaudeState,
@@ -879,6 +879,79 @@ describe('conversationStore - slashCommands 관리', () => {
       // Assert
       expect(store.getSlashCommands(1001)).toEqual(commands);
     });
+  });
+});
+
+// ============================================================================
+// Suggestions 상태 관리 테스트 (Task 8)
+// ============================================================================
+
+describe('conversationStore - suggestions', () => {
+  beforeEach(() => {
+    useConversationStore.getState().reset();
+  });
+
+  it('setSuggestions with loading status', () => {
+    const store = useConversationStore.getState();
+    store.setCurrentConversation(1001);
+
+    const suggestions: SuggestionState = { status: 'loading', items: [] };
+    store.setSuggestions(1001, suggestions);
+
+    const state = store.getState(1001);
+    expect(state?.suggestions.status).toBe('loading');
+    expect(state?.suggestions.items).toEqual([]);
+  });
+
+  it('setSuggestions with ready status and items', () => {
+    const store = useConversationStore.getState();
+    store.setCurrentConversation(1001);
+
+    const suggestions: SuggestionState = {
+      status: 'ready',
+      items: ['안녕하세요', '도움이 필요해요', '감사합니다'],
+    };
+    store.setSuggestions(1001, suggestions);
+
+    const state = store.getState(1001);
+    expect(state?.suggestions.status).toBe('ready');
+    expect(state?.suggestions.items).toEqual(['안녕하세요', '도움이 필요해요', '감사합니다']);
+  });
+
+  it('clearSuggestions resets to idle', () => {
+    const store = useConversationStore.getState();
+    store.setCurrentConversation(1001);
+
+    // 먼저 suggestions를 ready 상태로 설정
+    store.setSuggestions(1001, {
+      status: 'ready',
+      items: ['제안1', '제안2'],
+    });
+
+    // clearSuggestions 호출
+    store.clearSuggestions(1001);
+
+    const state = store.getState(1001);
+    expect(state?.suggestions.status).toBe('idle');
+    expect(state?.suggestions.items).toEqual([]);
+  });
+
+  it('setStatus working clears suggestions', () => {
+    const store = useConversationStore.getState();
+    store.setCurrentConversation(1001);
+
+    // suggestions를 ready 상태로 설정
+    store.setSuggestions(1001, {
+      status: 'ready',
+      items: ['제안1', '제안2', '제안3'],
+    });
+
+    // working 상태로 변경하면 suggestions가 초기화되어야 함
+    store.setStatus(1001, 'working');
+
+    const state = store.getState(1001);
+    expect(state?.suggestions.status).toBe('idle');
+    expect(state?.suggestions.items).toEqual([]);
   });
 });
 

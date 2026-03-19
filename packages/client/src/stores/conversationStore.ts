@@ -17,6 +17,7 @@ import type {
   RealtimeUsage,
   AssistantTextMessage,
   ViewNode,
+  SuggestionState,
 } from '@estelle/core';
 import { createInitialClaudeState } from '@estelle/core';
 
@@ -200,6 +201,14 @@ export interface ConversationStoreState {
   /** Widget 이벤트 리스너 제거 */
   removeWidgetEventListener: (sessionId: string) => void;
 
+  // === Actions: suggestions ===
+
+  /** 제안 상태 설정 */
+  setSuggestions: (conversationId: number, suggestions: SuggestionState) => void;
+
+  /** 제안 상태 초기화 */
+  clearSuggestions: (conversationId: number) => void;
+
   // === Actions: 대화 관리 ===
 
   /** 대화 상태 삭제 */
@@ -309,6 +318,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
         cacheCreationInputTokens: 0,
         lastUpdateType: 'input',
       };
+      updates.suggestions = { status: 'idle', items: [] };
     } else if (status === 'idle') {
       updates.workStartTime = null;
       updates.realtimeUsage = null;
@@ -559,6 +569,25 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   removeWidgetEventListener: (sessionId) => {
     widgetEventListeners.delete(sessionId);
+  },
+
+  // === Actions: suggestions ===
+
+  setSuggestions: (conversationId, suggestions) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+    states.set(conversationId, { ...state, suggestions });
+    set({ states });
+  },
+
+  clearSuggestions: (conversationId) => {
+    const states = new Map(get().states);
+    const state = getOrCreateState(states, conversationId);
+    states.set(conversationId, {
+      ...state,
+      suggestions: { status: 'idle', items: [] },
+    });
+    set({ states });
   },
 
   // === Actions: 대화 관리 ===
