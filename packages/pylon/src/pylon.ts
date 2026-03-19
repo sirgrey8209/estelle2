@@ -128,6 +128,7 @@ export interface AgentManagerAdapter {
   getSessionIdByToolUseId(toolUseId: string): number | null;
   getSessionTools(conversationId: number): string[];
   setAutoSuggest(conversationId: number, enabled: boolean): void;
+  triggerSuggestion(conversationId: number, agentSessionId: string, workingDir: string): void;
 }
 
 /**
@@ -856,6 +857,19 @@ export class Pylon {
         enabled: boolean;
       };
       this.deps.agentManager.setAutoSuggest(conversationId, enabled);
+
+      // 모드 ON 시 즉시 제안 생성 트리거
+      if (enabled) {
+        const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
+        const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
+        if (conversation?.claudeSessionId && workingDir) {
+          this.deps.agentManager.triggerSuggestion(
+            conversationId,
+            conversation.claudeSessionId,
+            workingDir
+          );
+        }
+      }
       return;
     }
 

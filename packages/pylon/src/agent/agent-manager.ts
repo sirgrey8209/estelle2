@@ -678,6 +678,15 @@ export class AgentManager {
     }
   }
 
+  /**
+   * 제안 생성 트리거 (모드 ON 시 즉시 호출용)
+   */
+  triggerSuggestion(sessionId: number, agentSessionId: string, workingDir: string): void {
+    if (!this.autoSuggestEnabled.get(sessionId)) return;
+    this.suggestionManager.generate(sessionId, agentSessionId, workingDir)
+      .catch(() => { /* 제안 생성 실패는 무시 */ });
+  }
+
   // ============================================================================
   // Public 메서드 - 세션 제어
   // ============================================================================
