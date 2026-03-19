@@ -136,6 +136,9 @@ export interface ConversationClaudeState {
   /** Widget 세션 상태 */
   widgetSession: WidgetSession | null;
 
+  /** 자동 입력 제안 상태 */
+  suggestions: SuggestionState;
+
   // 히스토리 페이징 상태는 syncStore에서 관리
 }
 
@@ -163,6 +166,20 @@ export interface WidgetSession {
   status: 'pending' | 'claiming' | 'running' | 'completed';
 }
 
+/**
+ * 제안 상태
+ *
+ * @description
+ * 자동 입력 제안 기능의 현재 상태입니다.
+ * Claude 응답 완료 후 fork 세션으로 생성된 제안을 관리합니다.
+ */
+export interface SuggestionState {
+  /** 제안 상태 */
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  /** 제안 텍스트 목록 (최대 3개) */
+  items: string[];
+}
+
 // ============================================================================
 // Factory Functions
 // ============================================================================
@@ -184,6 +201,7 @@ export function createInitialClaudeState(): ConversationClaudeState {
     workStartTime: null,
     realtimeUsage: null,
     widgetSession: null,
+    suggestions: { status: 'idle', items: [] },
   };
 }
 
