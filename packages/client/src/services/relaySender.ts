@@ -484,6 +484,23 @@ export function requestSlashCommands(conversationId: number): boolean {
 }
 
 // ============================================================================
+// 자동 제안 관련
+// ============================================================================
+
+/**
+ * 자동 제안 활성화/비활성화 설정
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ */
+export function sendAutoSuggestSet(conversationId: number, enabled: boolean): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: MessageType.AUTO_SUGGEST_SET,
+    payload: { conversationId, enabled },
+    to: [pylonId],
+  });
+}
+
+// ============================================================================
 // 버전 정보 관련
 // ============================================================================
 

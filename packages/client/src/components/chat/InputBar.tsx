@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, ChangeEvent, useMemo } from 'react';
-import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon, Mic } from 'lucide-react';
+import { Plus, Send, Square, Loader2, X, Image as ImageIcon, Camera, File as FileIcon, Mic, Sparkles } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -21,7 +21,8 @@ import {
   useSlashAutocomplete,
   SlashAutocompletePopup,
 } from './SlashAutocomplete';
-import { requestSlashCommands } from '../../services/relaySender';
+import { requestSlashCommands, sendAutoSuggestSet } from '../../services/relaySender';
+import { SuggestionChips } from './SuggestionChips';
 
 // 대화별 입력 텍스트 저장소 (conversationId → draft text)
 const draftTexts = new Map<number, string>();
@@ -70,6 +71,20 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     setShowAttachMenu(false);
   }, []);
 
+  // 자동 제안
+  const [autoSuggest, setAutoSuggest] = useState(() => {
+    return localStorage.getItem('estelle:autoSuggestEnabled') === 'true';
+  });
+
+  const toggleAutoSuggest = useCallback(() => {
+    setAutoSuggest((prev) => {
+      const next = !prev;
+      localStorage.setItem('estelle:autoSuggestEnabled', String(next));
+      return next;
+    });
+    setShowAttachMenu(false);
+  }, []);
+
   const handleVoiceResult = useCallback((transcript: string) => {
     setText((prev) => {
       if (prev && !prev.endsWith(' ')) {
@@ -89,6 +104,13 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
   });
 
   const conversationId = selectedConversation?.conversationId || null;
+
+  // 자동 제안 설정을 Pylon에 전송
+  useEffect(() => {
+    if (conversationId != null) {
+      sendAutoSuggestSet(conversationId, autoSuggest);
+    }
+  }, [autoSuggest, conversationId]);
 
   // 슬래시 자동완성
   const slashCommands = useConversationStore((state) =>
@@ -193,6 +215,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
     // 전송 후 draft 삭제
     if (conversationId) {
       draftTexts.delete(conversationId);
+      useConversationStore.getState().clearSuggestions(conversationId);
     }
   }, [canSend, selectedConversation, hasActiveUpload, attachedImages, text, onSend, clearAttachedImages, conversationId]);
 
@@ -353,6 +376,9 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
         </div>
       )}
 
+      {/* 자동 제안 칩 */}
+      <SuggestionChips onSelect={(text) => setText(text)} />
+
       {/* 입력 영역 */}
       <div className="relative flex items-end px-2 py-1.5 gap-1">
         {/* 슬래시 자동완성 팝업 */}
@@ -493,6 +519,23 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
                 </button>
               </>
             )}
+            {/* 자동 제안 토글 */}
+            <div className="border-t my-1" />
+            <button
+              onClick={toggleAutoSuggest}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+            >
+              <Sparkles className="h-5 w-5" />
+              <span>자동 입력</span>
+              <span className={cn(
+                'ml-auto text-xs px-2 py-0.5 rounded-full',
+                autoSuggest
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              )}>
+                {autoSuggest ? 'ON' : 'OFF'}
+              </span>
+            </button>
           </div>
           <div className="flex justify-end mt-4">
             <Button variant="ghost" onClick={() => setShowAttachMenu(false)}>
