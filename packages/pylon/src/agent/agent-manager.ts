@@ -45,6 +45,7 @@ import {
   isPermissionDeny,
 } from './permission-rules.js';
 import type { PermissionResult } from './permission-rules.js';
+import { SuggestionManager } from './suggestion-manager.js';
 
 // ============================================================================
 // 타입 정의
@@ -532,6 +533,12 @@ export class AgentManager {
   /** SDK raw 메시지 로거 */
   private readonly onRawMessage?: RawMessageLogger;
 
+  /** 제안 생성 매니저 */
+  private readonly suggestionManager: SuggestionManager;
+
+  /** 대화별 자동 제안 활성화 상태 */
+  private readonly autoSuggestEnabled = new Map<number, boolean>();
+
   /** 활성 세션 (sessionId -> AgentSession) */
   private readonly sessions: Map<number, AgentSession> = new Map();
 
@@ -563,6 +570,10 @@ export class AgentManager {
     this.codexAdapter = options.codexAdapter;
     this.onRawMessage = options.onRawMessage;
     this.agentConfigDir = options.agentConfigDir;
+    this.suggestionManager = new SuggestionManager(
+      this.claudeAdapter || this.adapter!,
+      this.onEvent,
+    );
   }
 
   /** Agent config 디렉토리 */
@@ -614,6 +625,7 @@ export class AgentManager {
     }
 
     this.emitEvent(sessionId, { type: 'state', state: 'working' });
+    this.suggestionManager.cancel(sessionId);
 
     try {
       await this.runQuery(
@@ -633,9 +645,36 @@ export class AgentManager {
         err instanceof Error ? err.message : String(err);
       this.emitEvent(sessionId, { type: 'error', error: errorMessage });
     } finally {
+      const completedSession = this.sessions.get(sessionId);
+      const agentSessionId = completedSession?.agentSessionId;
+
       this.sessions.delete(sessionId);
       this.pendingEvents.delete(sessionId);
       this.emitEvent(sessionId, { type: 'state', state: 'idle' });
+
+      // 자동 제안 생성 (비동기, fire-and-forget)
+      if (
+        this.autoSuggestEnabled.get(sessionId) &&
+        agentSessionId &&
+        options.workingDir
+      ) {
+        this.suggestionManager.generate(sessionId, agentSessionId, options.workingDir)
+          .catch(() => { /* 제안 생성 실패는 무시 */ });
+      }
+    }
+  }
+
+  // ============================================================================
+  // Public 메서드 - 자동 제안
+  // ============================================================================
+
+  /**
+   * 자동 제안 활성화/비활성화
+   */
+  setAutoSuggest(sessionId: number, enabled: boolean): void {
+    this.autoSuggestEnabled.set(sessionId, enabled);
+    if (!enabled) {
+      this.suggestionManager.cancel(sessionId);
     }
   }
 
