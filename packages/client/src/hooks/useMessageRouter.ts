@@ -857,6 +857,19 @@ function handleClaudeEventForConversation(
       break;
     }
 
+    case 'suggestion': {
+      const status = event.status as string;
+      const items = (event.items as string[]) ?? [];
+      if (status === 'loading') {
+        store.setSuggestions(conversationId, { status: 'loading', items: [] });
+      } else if (status === 'ready') {
+        store.setSuggestions(conversationId, { status: 'ready', items });
+      } else if (status === 'error') {
+        store.setSuggestions(conversationId, { status: 'idle', items: [] });
+      }
+      break;
+    }
+
     default:
       break;
   }
