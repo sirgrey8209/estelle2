@@ -106,8 +106,8 @@ export const MessageType = {
   CLAUDE_CONTROL: 'claude_control',
   /** Claude 권한 모드 설정 */
   CLAUDE_SET_PERMISSION_MODE: 'claude_set_permission_mode',
-  /** 자동 제안 모드 설정 */
-  AUTO_SUGGEST_SET: 'auto_suggest_set',
+  /** 제안 요청 (클라이언트 → Pylon) */
+  SUGGESTION_REQUEST: 'suggestion_request',
   /** Pylon 상태 (Claude 사용량 등) */
   PYLON_STATUS: 'pylon_status',
 

@@ -537,7 +537,7 @@ export class AgentManager {
   private readonly suggestionManager: SuggestionManager;
 
   /** 대화별 자동 제안 활성화 상태 */
-  private readonly autoSuggestEnabled = new Map<number, boolean>();
+  // autoSuggestEnabled 제거: 자동 제안은 클라이언트 옵션, Pylon은 캐시 역할만
 
   /** 활성 세션 (sessionId -> AgentSession) */
   private readonly sessions: Map<number, AgentSession> = new Map();
@@ -652,15 +652,8 @@ export class AgentManager {
       this.pendingEvents.delete(sessionId);
       this.emitEvent(sessionId, { type: 'state', state: 'idle' });
 
-      // 자동 제안 생성 (비동기, fire-and-forget)
-      if (
-        this.autoSuggestEnabled.get(sessionId) &&
-        agentSessionId &&
-        options.workingDir
-      ) {
-        this.suggestionManager.generate(sessionId, agentSessionId, options.workingDir)
-          .catch(() => { /* 제안 생성 실패는 무시 */ });
-      }
+      // 응답 완료 시 제안 캐시 무효화 (클라이언트가 요청하면 새로 생성)
+      this.suggestionManager.clearCache(sessionId);
     }
   }
 
@@ -669,23 +662,16 @@ export class AgentManager {
   // ============================================================================
 
   /**
-   * 자동 제안 활성화/비활성화
+   * 제안 요청 (클라이언트 pull 모델)
+   *
+   * @description
+   * 클라이언트가 제안을 요청하면 캐시에 있으면 즉시 반환하고,
+   * 없으면 새로 생성합니다.
    */
-  setAutoSuggest(sessionId: number, enabled: boolean): void {
-    this.autoSuggestEnabled.set(sessionId, enabled);
-    if (!enabled) {
-      this.suggestionManager.cancel(sessionId);
-    }
-  }
-
-  /**
-   * 제안 생성 트리거 (모드 ON 시 즉시 호출용)
-   */
-  triggerSuggestion(sessionId: number, agentSessionId: string, workingDir: string): void {
-    console.log(`[Suggestion] triggerSuggestion: session=${sessionId}, enabled=${this.autoSuggestEnabled.get(sessionId)}`);
-    if (!this.autoSuggestEnabled.get(sessionId)) return;
+  requestSuggestion(sessionId: number, agentSessionId: string, workingDir: string): void {
+    console.log(`[Suggestion] requestSuggestion: session=${sessionId}`);
     this.suggestionManager.generate(sessionId, agentSessionId, workingDir)
-      .catch((err) => { console.error(`[Suggestion] triggerSuggestion failed:`, err); });
+      .catch((err) => { console.error(`[Suggestion] requestSuggestion failed:`, err); });
   }
 
   // ============================================================================

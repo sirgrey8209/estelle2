@@ -302,7 +302,81 @@ describe('SuggestionManager', () => {
   });
 
   // --------------------------------------------------------------------------
-  // 6. Query options: forkSession, resume 등이 올바르게 전달되는지 확인
+  // 6. Cache: 생성 완료 후 재호출 시 캐시에서 즉시 반환
+  // --------------------------------------------------------------------------
+  describe('cache', () => {
+    it('should return cached suggestions on second generate call', async () => {
+      const suggestions = ['첫 번째', '두 번째', '세 번째'];
+      let queryCount = 0;
+      const countingAdapter: AgentAdapter = {
+        async *query(_options: AgentQueryOptions): AsyncIterable<AgentMessage> {
+          queryCount++;
+          yield createAssistantMessage(JSON.stringify(suggestions));
+        },
+      };
+
+      const manager = new SuggestionManager(countingAdapter, onEvent);
+
+      // 첫 번째 호출: 생성
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(1);
+      expect(events.filter(e => e.event.status === 'ready')).toHaveLength(1);
+
+      // 두 번째 호출: 캐시 히트 (adapter 호출 없음)
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(1); // adapter가 다시 호출되지 않음
+      expect(events.filter(e => e.event.status === 'ready')).toHaveLength(2); // ready 이벤트는 다시 emit
+    });
+
+    it('should regenerate after clearCache', async () => {
+      const suggestions = ['a', 'b', 'c'];
+      let queryCount = 0;
+      const countingAdapter: AgentAdapter = {
+        async *query(_options: AgentQueryOptions): AsyncIterable<AgentMessage> {
+          queryCount++;
+          yield createAssistantMessage(JSON.stringify(suggestions));
+        },
+      };
+
+      const manager = new SuggestionManager(countingAdapter, onEvent);
+
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(1);
+
+      // 캐시 클리어
+      manager.clearCache(1);
+
+      // 다시 생성해야 함
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(2);
+    });
+
+    it('should clear cache on cancel', async () => {
+      const suggestions = ['a', 'b', 'c'];
+      let queryCount = 0;
+      const countingAdapter: AgentAdapter = {
+        async *query(_options: AgentQueryOptions): AsyncIterable<AgentMessage> {
+          queryCount++;
+          yield createAssistantMessage(JSON.stringify(suggestions));
+        },
+      };
+
+      const manager = new SuggestionManager(countingAdapter, onEvent);
+
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(1);
+
+      // cancel → 캐시도 삭제
+      manager.cancel(1);
+
+      // 다시 생성해야 함
+      await manager.generate(1, 'agent-session-1', '/test/dir');
+      expect(queryCount).toBe(2);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // 7. Query options: forkSession, resume 등이 올바르게 전달되는지 확인
   // --------------------------------------------------------------------------
   describe('query options', () => {
     it('should pass forkSession: true and resume with agentSessionId', async () => {

@@ -488,14 +488,15 @@ export function requestSlashCommands(conversationId: number): boolean {
 // ============================================================================
 
 /**
- * 자동 제안 활성화/비활성화 설정
+ * 제안 요청 (pull 모델)
  * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ * - Pylon은 캐시가 있으면 즉시 반환, 없으면 새로 생성
  */
-export function sendAutoSuggestSet(conversationId: number, enabled: boolean): boolean {
+export function requestSuggestions(conversationId: number): boolean {
   const pylonId = getPylonIdFromConversation(conversationId);
   return sendMessage({
-    type: MessageType.AUTO_SUGGEST_SET,
-    payload: { conversationId, enabled },
+    type: MessageType.SUGGESTION_REQUEST,
+    payload: { conversationId },
     to: [pylonId],
   });
 }

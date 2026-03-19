@@ -127,8 +127,7 @@ export interface AgentManagerAdapter {
   getPendingEvent(conversationId: number): unknown;
   getSessionIdByToolUseId(toolUseId: string): number | null;
   getSessionTools(conversationId: number): string[];
-  setAutoSuggest(conversationId: number, enabled: boolean): void;
-  triggerSuggestion(conversationId: number, agentSessionId: string, workingDir: string): void;
+  requestSuggestion(conversationId: number, agentSessionId: string, workingDir: string): void;
 }
 
 /**
@@ -851,26 +850,20 @@ export class Pylon {
       return;
     }
 
-    if (type === 'auto_suggest_set') {
-      const { conversationId, enabled } = payload as {
-        conversationId: number;
-        enabled: boolean;
-      };
-      this.log(`[AutoSuggest] auto_suggest_set: convId=${conversationId}, enabled=${enabled}`);
-      this.deps.agentManager.setAutoSuggest(conversationId, enabled);
+    if (type === 'suggestion_request') {
+      const { conversationId } = payload as { conversationId: number };
+      this.log(`[Suggestion] suggestion_request: convId=${conversationId}`);
 
-      // 모드 ON 시 즉시 제안 생성 트리거
-      if (enabled) {
-        const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
-        const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
-        this.log(`[AutoSuggest] trigger check: claudeSessionId=${conversation?.claudeSessionId ?? 'null'}, workingDir=${workingDir ?? 'null'}`);
-        if (conversation?.claudeSessionId && workingDir) {
-          this.deps.agentManager.triggerSuggestion(
-            conversationId,
-            conversation.claudeSessionId,
-            workingDir
-          );
-        }
+      const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
+      const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
+      this.log(`[Suggestion] check: claudeSessionId=${conversation?.claudeSessionId ?? 'null'}, workingDir=${workingDir ?? 'null'}`);
+
+      if (conversation?.claudeSessionId && workingDir) {
+        this.deps.agentManager.requestSuggestion(
+          conversationId,
+          conversation.claudeSessionId,
+          workingDir
+        );
       }
       return;
     }

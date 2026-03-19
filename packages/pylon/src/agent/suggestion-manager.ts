@@ -67,8 +67,8 @@ export class SuggestionManager {
   /** 진행 중인 생성 작업의 AbortController (sessionId -> AbortController) */
   private readonly controllers: Map<number, AbortController> = new Map();
 
-  /** 제안 생성이 완료된 세션 (대화 전환 시 재생성 방지) */
-  private readonly completedSessions: Set<number> = new Set();
+  /** 생성된 제안 캐시 (sessionId -> suggestions) */
+  private readonly cache: Map<number, string[]> = new Map();
 
   /**
    * SuggestionManager 생성자
@@ -97,9 +97,11 @@ export class SuggestionManager {
     agentSessionId: string,
     workingDir: string
   ): Promise<void> {
-    // 이미 완료된 제안이 있으면 재생성하지 않음
-    if (this.completedSessions.has(sessionId)) {
-      console.log(`[Suggestion] Skip generate for ${sessionId} (already completed)`);
+    // 캐시에 있으면 즉시 반환
+    const cached = this.cache.get(sessionId);
+    if (cached) {
+      console.log(`[Suggestion] Cache hit for session=${sessionId}`);
+      this.onEvent(sessionId, { type: 'suggestion', status: 'ready', items: cached });
       return;
     }
 
@@ -162,7 +164,7 @@ export class SuggestionManager {
 
       // ready 이벤트 전달
       console.log(`[Suggestion] Ready for session=${sessionId}: ${JSON.stringify(parsed)}`);
-      this.completedSessions.add(sessionId);
+      this.cache.set(sessionId, parsed);
       this.onEvent(sessionId, {
         type: 'suggestion',
         status: 'ready',
@@ -195,7 +197,16 @@ export class SuggestionManager {
       controller.abort();
       this.controllers.delete(sessionId);
     }
-    this.completedSessions.delete(sessionId);
+    this.cache.delete(sessionId);
+  }
+
+  /**
+   * 캐시 삭제 (새 메시지 전송 시 기존 제안 무효화)
+   *
+   * @param sessionId - 캐시를 삭제할 세션 ID
+   */
+  clearCache(sessionId: number): void {
+    this.cache.delete(sessionId);
   }
 
   /**

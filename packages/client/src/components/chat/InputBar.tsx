@@ -21,7 +21,7 @@ import {
   useSlashAutocomplete,
   SlashAutocompletePopup,
 } from './SlashAutocomplete';
-import { requestSlashCommands, sendAutoSuggestSet } from '../../services/relaySender';
+import { requestSlashCommands, requestSuggestions } from '../../services/relaySender';
 import { SuggestionChips } from './SuggestionChips';
 
 // 대화별 입력 텍스트 저장소 (conversationId → draft text)
@@ -105,12 +105,24 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
 
   const conversationId = selectedConversation?.conversationId || null;
 
-  // 자동 제안 설정을 Pylon에 전송
+  // 자동 제안 요청 (pull 모델)
+  // - 토글 ON 시 현재 대화에 요청
+  // - 대화 전환 시 (토글 ON이면) 요청
+  const prevStatusRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (conversationId != null) {
-      sendAutoSuggestSet(conversationId, autoSuggest);
+    if (autoSuggest && conversationId != null && status === 'idle') {
+      requestSuggestions(conversationId);
     }
   }, [autoSuggest, conversationId]);
+
+  // 응답 완료 감지: status가 working → idle로 변하면 제안 요청
+  useEffect(() => {
+    if (prevStatusRef.current === 'working' && status === 'idle' && autoSuggest && conversationId != null) {
+      requestSuggestions(conversationId);
+    }
+    prevStatusRef.current = status;
+  }, [status, autoSuggest, conversationId]);
 
   // 슬래시 자동완성
   const slashCommands = useConversationStore((state) =>
