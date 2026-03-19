@@ -127,6 +127,7 @@ export interface AgentManagerAdapter {
   getPendingEvent(conversationId: number): unknown;
   getSessionIdByToolUseId(toolUseId: string): number | null;
   getSessionTools(conversationId: number): string[];
+  setAutoSuggest(conversationId: number, enabled: boolean): void;
 }
 
 /**
@@ -846,6 +847,15 @@ export class Pylon {
 
     if (type === 'claude_set_permission_mode') {
       this.handleClaudeSetPermissionMode(payload);
+      return;
+    }
+
+    if (type === 'auto_suggest_set') {
+      const { conversationId, enabled } = payload as {
+        conversationId: number;
+        enabled: boolean;
+      };
+      this.deps.agentManager.setAutoSuggest(conversationId, enabled);
       return;
     }
 
