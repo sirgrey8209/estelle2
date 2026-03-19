@@ -329,6 +329,9 @@ export interface AgentQueryOptions {
   /** 재개할 세션 ID */
   resume?: string;
 
+  /** 세션 분기 여부 (resume 시 새 세션 ID로 분기) */
+  forkSession?: boolean;
+
   /** MCP 서버 설정 */
   mcpServers?: Record<string, unknown>;
 

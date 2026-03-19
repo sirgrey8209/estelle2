@@ -109,6 +109,7 @@ export class ClaudeSDKAdapter implements AgentAdapter {
       includePartialMessages: options.includePartialMessages ?? true,
       settingSources: (options.settingSources ?? ['user', 'project', 'local']) as SettingSource[],
       resume: options.resume,
+      forkSession: options.forkSession,
       mcpServers: options.mcpServers as Record<string, McpServerConfig> | undefined,
       canUseTool: wrapCanUseTool(options.canUseTool),
       env: cleanEnv,
