@@ -682,9 +682,10 @@ export class AgentManager {
    * 제안 생성 트리거 (모드 ON 시 즉시 호출용)
    */
   triggerSuggestion(sessionId: number, agentSessionId: string, workingDir: string): void {
+    console.log(`[Suggestion] triggerSuggestion: session=${sessionId}, enabled=${this.autoSuggestEnabled.get(sessionId)}`);
     if (!this.autoSuggestEnabled.get(sessionId)) return;
     this.suggestionManager.generate(sessionId, agentSessionId, workingDir)
-      .catch(() => { /* 제안 생성 실패는 무시 */ });
+      .catch((err) => { console.error(`[Suggestion] triggerSuggestion failed:`, err); });
   }
 
   // ============================================================================

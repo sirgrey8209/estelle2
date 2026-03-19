@@ -67,6 +67,9 @@ export class SuggestionManager {
   /** 진행 중인 생성 작업의 AbortController (sessionId -> AbortController) */
   private readonly controllers: Map<number, AbortController> = new Map();
 
+  /** 제안 생성이 완료된 세션 (대화 전환 시 재생성 방지) */
+  private readonly completedSessions: Set<number> = new Set();
+
   /**
    * SuggestionManager 생성자
    *
@@ -94,6 +97,14 @@ export class SuggestionManager {
     agentSessionId: string,
     workingDir: string
   ): Promise<void> {
+    // 이미 완료된 제안이 있으면 재생성하지 않음
+    if (this.completedSessions.has(sessionId)) {
+      console.log(`[Suggestion] Skip generate for ${sessionId} (already completed)`);
+      return;
+    }
+
+    console.log(`[Suggestion] Generate for session=${sessionId}, agentSession=${agentSessionId}, cwd=${workingDir}`);
+
     // 기존 생성 취소
     this.cancel(sessionId);
 
@@ -120,6 +131,7 @@ export class SuggestionManager {
       };
 
       // 쿼리 실행 및 텍스트 수집
+      console.log(`[Suggestion] Starting fork query for session=${sessionId}`);
       let responseText = '';
       const query = this.adapter.query(queryOptions);
 
@@ -145,9 +157,12 @@ export class SuggestionManager {
       }
 
       // JSON 파싱
+      console.log(`[Suggestion] Response received for session=${sessionId}: ${responseText.substring(0, 200)}`);
       const parsed = this.parseResponse(responseText);
 
       // ready 이벤트 전달
+      console.log(`[Suggestion] Ready for session=${sessionId}: ${JSON.stringify(parsed)}`);
+      this.completedSessions.add(sessionId);
       this.onEvent(sessionId, {
         type: 'suggestion',
         status: 'ready',
@@ -156,10 +171,12 @@ export class SuggestionManager {
     } catch (err) {
       // abort에 의한 에러는 무시 (이벤트 전달 안 함)
       if (abortController.signal.aborted) {
+        console.log(`[Suggestion] Aborted for session=${sessionId}`);
         return;
       }
 
       // 기타 에러
+      console.error(`[Suggestion] Error for session=${sessionId}:`, err);
       this.onEvent(sessionId, { type: 'suggestion', status: 'error' });
     } finally {
       clearTimeout(timeoutId);
@@ -178,6 +195,7 @@ export class SuggestionManager {
       controller.abort();
       this.controllers.delete(sessionId);
     }
+    this.completedSessions.delete(sessionId);
   }
 
   /**

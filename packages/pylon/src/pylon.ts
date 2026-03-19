@@ -856,12 +856,14 @@ export class Pylon {
         conversationId: number;
         enabled: boolean;
       };
+      this.log(`[AutoSuggest] auto_suggest_set: convId=${conversationId}, enabled=${enabled}`);
       this.deps.agentManager.setAutoSuggest(conversationId, enabled);
 
       // 모드 ON 시 즉시 제안 생성 트리거
       if (enabled) {
         const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
         const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
+        this.log(`[AutoSuggest] trigger check: claudeSessionId=${conversation?.claudeSessionId ?? 'null'}, workingDir=${workingDir ?? 'null'}`);
         if (conversation?.claudeSessionId && workingDir) {
           this.deps.agentManager.triggerSuggestion(
             conversationId,
