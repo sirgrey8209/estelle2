@@ -114,7 +114,6 @@ export class ClaudeSDKAdapter implements AgentAdapter {
       canUseTool: wrapCanUseTool(options.canUseTool),
       env: cleanEnv,
       plugins: options.plugins as SdkPluginConfig[] | undefined,
-      betas: ['context-1m-2025-08-07'],
       stderr: (data: string) => {
         console.error(`[ClaudeSDK:stderr] ${data}`);
       },
