@@ -389,7 +389,7 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
       )}
 
       {/* 자동 제안 칩 */}
-      <SuggestionChips onSelect={(text) => setText(text)} />
+      <SuggestionChips onSelect={(text) => setText(text)} enabled={autoSuggest} />
 
       {/* 입력 영역 */}
       <div className="relative flex items-end px-2 py-1.5 gap-1">

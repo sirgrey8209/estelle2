@@ -3,12 +3,14 @@ import { useCurrentConversationState } from '../../stores/conversationStore';
 
 interface SuggestionChipsProps {
   onSelect: (text: string) => void;
+  enabled: boolean;
 }
 
-export function SuggestionChips({ onSelect }: SuggestionChipsProps) {
+export function SuggestionChips({ onSelect, enabled }: SuggestionChipsProps) {
   const state = useCurrentConversationState();
   const suggestions = state?.suggestions;
 
+  if (!enabled) return null;
   if (!suggestions || suggestions.status === 'idle') return null;
 
   if (suggestions.status === 'loading') {
