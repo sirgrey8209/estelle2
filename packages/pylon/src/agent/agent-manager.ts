@@ -652,8 +652,12 @@ export class AgentManager {
       this.pendingEvents.delete(sessionId);
       this.emitEvent(sessionId, { type: 'state', state: 'idle' });
 
-      // 응답 완료 시 제안 캐시 무효화 (클라이언트가 요청하면 새로 생성)
+      // 응답 완료 시 캐시 무효화 후 즉시 프리캐싱 (클라이언트 요청 시 캐시 히트)
       this.suggestionManager.clearCache(sessionId);
+      if (agentSessionId && options.workingDir) {
+        this.suggestionManager.generate(sessionId, agentSessionId, options.workingDir)
+          .catch(() => { /* 프리캐싱 실패는 무시 — 클라이언트 요청 시 재생성 */ });
+      }
     }
   }
 
