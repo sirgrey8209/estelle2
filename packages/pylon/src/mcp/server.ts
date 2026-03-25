@@ -9,6 +9,7 @@
  * - send_file: 사용자에게 파일 전송
  * - link_doc / unlink_doc / list_docs: 문서 연결 관리
  * - get_status: 현재 대화/Pylon 상태 조회
+ * - create_command / update_command / delete_command / list_commands / assign_command: 커맨드 관리
  */
 
 import fs from 'fs';
@@ -53,6 +54,18 @@ import {
   executeRunWidgetInline,
   getRunWidgetInlineToolDefinition,
 } from './tools/run-widget-inline.js';
+import {
+  executeCreateCommand,
+  executeUpdateCommand,
+  executeDeleteCommand,
+  executeListCommands,
+  executeAssignCommand,
+  getCreateCommandToolDefinition,
+  getUpdateCommandToolDefinition,
+  getDeleteCommandToolDefinition,
+  getListCommandsToolDefinition,
+  getAssignCommandToolDefinition,
+} from './tools/command.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
 
@@ -119,6 +132,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getContinueTaskToolDefinition(),
     getRunWidgetToolDefinition(),
     getRunWidgetInlineToolDefinition(),
+    getCreateCommandToolDefinition(),
+    getUpdateCommandToolDefinition(),
+    getDeleteCommandToolDefinition(),
+    getListCommandsToolDefinition(),
+    getAssignCommandToolDefinition(),
   ],
 }));
 
@@ -183,6 +201,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = await executeRunWidgetInline(
         args as { html: string; code?: string; height?: number },
         { toolUseId }
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'create_command': {
+      const result = await executeCreateCommand(
+        args as { name?: string; icon?: string; color?: string; content?: string; workspaceIds?: (number | null)[] },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'update_command': {
+      const result = await executeUpdateCommand(
+        args as { commandId?: number; name?: string; icon?: string; color?: string; content?: string },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'delete_command': {
+      const result = await executeDeleteCommand(
+        args as { commandId?: number },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'list_commands': {
+      const result = await executeListCommands(
+        args as { workspaceId?: number },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'assign_command': {
+      const result = await executeAssignCommand(
+        args as { commandId?: number; workspaceIds?: (number | null)[] },
       );
       return result as unknown as Record<string, unknown>;
     }
