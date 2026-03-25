@@ -55,6 +55,9 @@ export class CommandStore {
         workspace_id INTEGER,
         UNIQUE(command_id, workspace_id)
       );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ca_unique
+      ON command_assignments (command_id, COALESCE(workspace_id, -1));
     `);
   }
 

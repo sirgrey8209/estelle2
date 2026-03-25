@@ -141,5 +141,14 @@ describe('CommandStore', () => {
 
       expect(store.getCommands(42)).toHaveLength(1);
     });
+
+    it('should not duplicate global (null) assignments', () => {
+      const id = store.createCommand('Cmd', null, null, 'c');
+      store.assignCommand(id, null);
+      store.assignCommand(id, null); // duplicate
+
+      const commands = store.getCommands(42);
+      expect(commands).toHaveLength(1);
+    });
   });
 });
