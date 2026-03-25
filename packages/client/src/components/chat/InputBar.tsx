@@ -23,6 +23,7 @@ import {
 } from './SlashAutocomplete';
 import { requestSlashCommands, requestSuggestions } from '../../services/relaySender';
 import { SuggestionChips } from './SuggestionChips';
+import { CommandToolbar } from './CommandToolbar';
 
 // 대화별 입력 텍스트 저장소 (conversationId → draft text)
 const draftTexts = new Map<number, string>();
@@ -387,6 +388,9 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
           ))}
         </div>
       )}
+
+      {/* 커맨드 툴바 */}
+      <CommandToolbar conversationId={conversationId} />
 
       {/* 자동 제안 칩 */}
       <SuggestionChips onSelect={(text) => setText(text)} enabled={autoSuggest} />
