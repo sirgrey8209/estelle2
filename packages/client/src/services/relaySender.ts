@@ -596,6 +596,81 @@ export function sendWidgetCheck(
   });
 }
 
+// ============================================================================
+// 커맨드 관련
+// ============================================================================
+
+/**
+ * 커맨드 목록 요청
+ * - workspaceId에서 pylonId 추출하여 해당 Pylon에만 전송
+ */
+export function requestCommandList(workspaceId: number): boolean {
+  const pylonId = getPylonIdFromWorkspace(workspaceId);
+  return sendMessage({
+    type: MessageType.COMMAND_LIST_REQUEST,
+    payload: { workspaceId },
+    to: [pylonId],
+  });
+}
+
+/**
+ * 커맨드 실행
+ * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
+ */
+export function executeCommand(commandId: number, conversationId: number): boolean {
+  const pylonId = getPylonIdFromConversation(conversationId);
+  return sendMessage({
+    type: MessageType.COMMAND_EXECUTE,
+    payload: { commandId, conversationId },
+    to: [pylonId],
+  });
+}
+
+/**
+ * 커맨드 생성
+ * - 모든 Pylon에게 전송
+ */
+export function createCommand(
+  name: string,
+  icon: string | null,
+  color: string | null,
+  content: string,
+  workspaceIds?: (number | null)[]
+): boolean {
+  return sendMessage({
+    type: MessageType.COMMAND_CREATE,
+    payload: { name, icon, color, content, workspaceIds },
+    broadcast: 'pylons',
+  });
+}
+
+/**
+ * 커맨드 수정
+ * - 모든 Pylon에게 전송
+ */
+export function updateCommand(
+  commandId: number,
+  fields: { name?: string; icon?: string; color?: string; content?: string }
+): boolean {
+  return sendMessage({
+    type: MessageType.COMMAND_UPDATE,
+    payload: { commandId, ...fields },
+    broadcast: 'pylons',
+  });
+}
+
+/**
+ * 커맨드 삭제
+ * - 모든 Pylon에게 전송
+ */
+export function deleteCommand(commandId: number): boolean {
+  return sendMessage({
+    type: MessageType.COMMAND_DELETE,
+    payload: { commandId },
+    broadcast: 'pylons',
+  });
+}
+
 /**
  * Widget 소유권 요청 전송
  *
