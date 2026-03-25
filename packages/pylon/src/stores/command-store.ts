@@ -21,6 +21,7 @@ export interface CommandListItem {
   name: string;
   icon: string | null;
   color: string | null;
+  content: string;
 }
 
 export class CommandStore {
@@ -68,7 +69,7 @@ export class CommandStore {
     this.stmtDeleteCommand = this.db.prepare('DELETE FROM commands WHERE id = ?');
     this.stmtGetContent = this.db.prepare('SELECT content FROM commands WHERE id = ?');
     this.stmtGetCommands = this.db.prepare(
-      'SELECT c.id, c.name, c.icon, c.color FROM commands c INNER JOIN command_assignments ca ON c.id = ca.command_id WHERE ca.workspace_id IS NULL OR ca.workspace_id = ?'
+      'SELECT c.id, c.name, c.icon, c.color, c.content FROM commands c INNER JOIN command_assignments ca ON c.id = ca.command_id WHERE ca.workspace_id IS NULL OR ca.workspace_id = ?'
     );
     this.stmtAssign = this.db.prepare(
       'INSERT OR IGNORE INTO command_assignments (command_id, workspace_id) VALUES (?, ?)'

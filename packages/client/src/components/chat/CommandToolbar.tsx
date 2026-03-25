@@ -26,7 +26,7 @@ function getLucideIcon(name: string): LucideIcons.LucideIcon | null {
  * 문자열이 이모지로 시작하는지 판별
  */
 function isEmoji(str: string): boolean {
-  return /^\p{Emoji}/u.test(str);
+  return /^\p{Emoji_Presentation}/u.test(str);
 }
 
 /**
@@ -286,7 +286,7 @@ export function CommandToolbar({ conversationId }: CommandToolbarProps) {
 
   return (
     <div className="relative px-3 py-1.5">
-      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+      <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
         {/* 커맨드 버튼들 */}
         {commands.map((cmd) => (
           <button
@@ -326,7 +326,7 @@ export function CommandToolbar({ conversationId }: CommandToolbarProps) {
             name: editingCommand.name,
             icon: editingCommand.icon ?? '',
             color: editingCommand.color ?? '',
-            content: '',
+            content: editingCommand.content,
           }}
           onSubmit={handleUpdate}
           onCancel={handleCancelForm}

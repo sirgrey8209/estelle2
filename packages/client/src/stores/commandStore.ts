@@ -5,6 +5,7 @@ export interface CommandItem {
   name: string;
   icon: string | null;
   color: string | null;
+  content: string;
 }
 
 interface CommandState {

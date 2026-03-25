@@ -32,7 +32,7 @@ describe('CommandStore', () => {
       const commands = store.getCommands(999);
       expect(commands).toHaveLength(1);
       expect(commands[0]).toEqual({
-        id, name: 'Global Cmd', icon: 'star', color: null,
+        id, name: 'Global Cmd', icon: 'star', color: null, content: 'global content',
       });
     });
 
@@ -63,12 +63,12 @@ describe('CommandStore', () => {
       expect(commands).toHaveLength(0);
     });
 
-    it('should not include content in list response', () => {
+    it('should include content in list response', () => {
       const id = store.createCommand('Cmd', null, null, 'secret content');
       store.assignCommand(id, null);
 
       const commands = store.getCommands(1);
-      expect(commands[0]).not.toHaveProperty('content');
+      expect(commands[0]).toHaveProperty('content', 'secret content');
     });
   });
 

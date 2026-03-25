@@ -13,14 +13,14 @@ describe('commandStore', () => {
   it('setCommands로 커맨드 목록 설정', () => {
     const { setCommands } = useCommandStore.getState();
     setCommands([
-      { id: 1, name: 'Review', icon: 'search', color: '#ff0000' },
+      { id: 1, name: 'Review', icon: 'search', color: '#ff0000', content: 'Review this code' },
     ]);
     expect(useCommandStore.getState().commands).toHaveLength(1);
   });
 
   it('reset으로 초기화', () => {
     const { setCommands, reset } = useCommandStore.getState();
-    setCommands([{ id: 1, name: 'Cmd', icon: null, color: null }]);
+    setCommands([{ id: 1, name: 'Cmd', icon: null, color: null, content: 'test' }]);
     reset();
     expect(useCommandStore.getState().commands).toEqual([]);
   });
