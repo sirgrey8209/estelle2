@@ -10,12 +10,14 @@
  * - assign_command: 워크스페이스 할당 변경
  *
  * 커맨드는 특정 대화와 무관한 글로벌 데이터이므로,
- * PylonClient/PylonMcpServer TCP 라우팅 없이
- * CommandStore에 직접 접근합니다.
+ * CommandStore에 직접 접근하여 CRUD를 수행합니다.
+ * 변경 후에는 PylonClient를 통해 notify_command_changed를 보내
+ * 클라이언트에 command_changed 브로드캐스트가 전달되도록 합니다.
  */
 
 import path from 'path';
 import { CommandStore } from '../../stores/command-store.js';
+import { PylonClient } from '../pylon-client.js';
 
 // ============================================================================
 // 타입
@@ -57,6 +59,31 @@ function getCommandStore(): CommandStore {
     _commandStore = new CommandStore(COMMANDS_DB_PATH);
   }
   return _commandStore;
+}
+
+// ============================================================================
+// PylonClient (커맨드 변경 알림용)
+// ============================================================================
+
+function createPylonClient(): PylonClient {
+  const mcpPort = parseInt(process.env.ESTELLE_MCP_PORT || '9880', 10);
+  return new PylonClient({
+    host: '127.0.0.1',
+    port: mcpPort,
+  });
+}
+
+/**
+ * 커맨드 변경 알림 (실패해도 무시)
+ * CRUD 자체는 성공했으므로, 알림 실패가 전체 작업을 실패시키면 안 됨.
+ */
+async function notifyCommandChangedSafe(): Promise<void> {
+  try {
+    const client = createPylonClient();
+    await client.notifyCommandChanged();
+  } catch {
+    // 알림 실패는 무시 (CRUD 자체는 성공)
+  }
 }
 
 // ============================================================================
@@ -129,6 +156,8 @@ export async function executeCreateCommand(
       store.assignCommand(commandId, null);
     }
 
+    await notifyCommandChangedSafe();
+
     return createSuccessResponse({
       success: true,
       command: {
@@ -187,6 +216,8 @@ export async function executeUpdateCommand(
       return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
     }
 
+    await notifyCommandChangedSafe();
+
     return createSuccessResponse({
       success: true,
       commandId: args.commandId,
@@ -223,6 +254,8 @@ export async function executeDeleteCommand(
     if (!deleted) {
       return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
     }
+
+    await notifyCommandChangedSafe();
 
     return createSuccessResponse({
       success: true,
@@ -305,6 +338,8 @@ export async function executeAssignCommand(
     for (const wsId of args.workspaceIds) {
       store.assignCommand(args.commandId, wsId);
     }
+
+    await notifyCommandChangedSafe();
 
     return createSuccessResponse({
       success: true,

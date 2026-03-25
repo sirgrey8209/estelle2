@@ -133,6 +133,8 @@ export interface PylonMcpServerOptions {
     conversationId: ConversationId,
     toolUseId: string,
   ) => void;
+  /** 커맨드 변경 시 호출되는 콜백 (MCP 도구에서 커맨드 CRUD 후) */
+  onCommandChanged?: () => void;
 }
 
 /** 요청 타입 */
@@ -294,6 +296,11 @@ interface McpClearDocsSuccessResponse {
   cleared: number;
 }
 
+/** 성공 응답 타입 (notify_command_changed) */
+interface McpNotifyCommandChangedSuccessResponse {
+  success: true;
+}
+
 /** 성공 응답 타입 (run_widget) */
 interface McpRunWidgetSuccessResponse {
   success: true;
@@ -314,6 +321,7 @@ type McpResponse =
   | McpSetSystemPromptSuccessResponse
   | McpContinueTaskSuccessResponse
   | McpClearDocsSuccessResponse
+  | McpNotifyCommandChangedSuccessResponse
   | McpRunWidgetSuccessResponse
   | McpErrorResponse;
 
@@ -354,6 +362,7 @@ export class PylonMcpServer {
     conversationId: ConversationId,
     toolUseId: string,
   ) => void;
+  private _onCommandChanged?: () => void;
 
   /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
   private readonly _pendingWidgets: Map<number, PendingWidget> = new Map();
@@ -381,6 +390,7 @@ export class PylonMcpServer {
     this._onWidgetComplete = options?.onWidgetComplete;
     this._onWidgetEvent = options?.onWidgetEvent;
     this._broadcastWidgetReady = options?.broadcastWidgetReady;
+    this._onCommandChanged = options?.onCommandChanged;
   }
 
   // ============================================================================
@@ -652,6 +662,12 @@ export class PylonMcpServer {
     // share_* 액션 처리 (conversationId 불필요, shareId 사용)
     if (request.action.startsWith('share_')) {
       return this._handleShareAction(request);
+    }
+
+    // notify_command_changed 액션 처리 (conversationId 불필요)
+    if (request.action === 'notify_command_changed') {
+      this._onCommandChanged?.();
+      return { success: true } as McpResponse;
     }
 
     // conversationId 검사

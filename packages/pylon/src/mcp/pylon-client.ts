@@ -117,6 +117,12 @@ export interface SetSystemPromptResult {
   error?: string;
 }
 
+/** NotifyCommandChanged 결과 타입 */
+export interface NotifyCommandChangedResult {
+  success: boolean;
+  error?: string;
+}
+
 /** ContinueTask 결과 타입 */
 export interface ContinueTaskResult {
   success: boolean;
@@ -159,7 +165,7 @@ export interface RunWidgetInlineResult {
 
 /** 요청 타입 */
 interface PylonRequest {
-  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task' | 'lookup_and_run_widget' | 'lookup_and_run_widget_inline';
+  action: 'link' | 'unlink' | 'list' | 'send_file' | 'get_status' | 'notify_command_changed' | 'lookup_and_link' | 'lookup_and_unlink' | 'lookup_and_list' | 'lookup_and_send_file' | 'lookup_and_get_status' | 'lookup_and_create_conversation' | 'lookup_and_delete_conversation' | 'lookup_and_rename_conversation' | 'lookup_and_set_system_prompt' | 'lookup_and_continue_task' | 'lookup_and_run_widget' | 'lookup_and_run_widget_inline';
   conversationId?: number;
   toolUseId?: string;
   path?: string;
@@ -573,6 +579,21 @@ export class PylonClient {
     return this._sendRequest<GetStatusResult>({
       action: 'get_status',
       conversationId,
+    });
+  }
+
+  // ============================================================================
+  // 공개 메서드 - 글로벌 알림 (conversationId 불필요)
+  // ============================================================================
+
+  /**
+   * 커맨드 변경 알림
+   * MCP 도구에서 커맨드를 생성/수정/삭제/할당한 후 호출하여
+   * PylonMcpServer를 통해 모든 클라이언트에 command_changed를 브로드캐스트합니다.
+   */
+  async notifyCommandChanged(): Promise<NotifyCommandChangedResult> {
+    return this._sendRequest<NotifyCommandChangedResult>({
+      action: 'notify_command_changed',
     });
   }
 
