@@ -44,6 +44,7 @@ import { decodeConversationIdFull, isWidgetCheckPayload, isWidgetClaimPayload } 
 import type { WorkspaceStore, Workspace, Conversation } from './stores/workspace-store.js';
 import type { MessageStore, StoreMessage } from './stores/message-store.js';
 import type { ShareStore } from './stores/share-store.js';
+import type { CommandStore } from './stores/command-store.js';
 import type { AgentManagerEvent } from './agent/agent-manager.js';
 import type { PersistenceAdapter, PersistedAccount } from './persistence/types.js';
 import { generateThumbnail } from './utils/thumbnail.js';
@@ -309,6 +310,9 @@ export interface PylonDependencies {
 
   /** MCP 서버 (선택, widget_check 핸들러에 필요) */
   mcpServer?: PylonMcpServerAdapter;
+
+  /** 커맨드 저장소 (선택, 커맨드 툴바 기능에 필요) */
+  commandStore?: CommandStore;
 }
 
 /**
@@ -588,6 +592,9 @@ export class Pylon {
       });
       this.assetServer = null;
     }
+
+    // CommandStore 종료
+    this.deps.commandStore?.close();
 
     // Relay 연결 종료
     this.deps.relayClient.disconnect();
@@ -986,6 +993,32 @@ export class Pylon {
     // ===== Widget 소유권 요청 =====
     if (type === 'widget_claim') {
       this.handleWidgetClaim(payload, from);
+      return;
+    }
+
+    // ===== Command =====
+    if (type === 'command_list_request') {
+      this.handleCommandListRequest(payload, from);
+      return;
+    }
+    if (type === 'command_execute') {
+      this.handleCommandExecute(payload, from);
+      return;
+    }
+    if (type === 'command_create') {
+      this.handleCommandCreate(payload, from);
+      return;
+    }
+    if (type === 'command_update') {
+      this.handleCommandUpdate(payload, from);
+      return;
+    }
+    if (type === 'command_delete') {
+      this.handleCommandDelete(payload, from);
+      return;
+    }
+    if (type === 'command_assign') {
+      this.handleCommandAssign(payload, from);
       return;
     }
 
@@ -3677,5 +3710,172 @@ Message: ${message}
     } catch (err) {
       this.deps.logger.error(`[Account] Failed to get account status: ${err}`);
     }
+  }
+
+  // ==========================================================================
+  // Private 메서드 - Command
+  // ==========================================================================
+
+  /**
+   * command_list_request 처리
+   *
+   * @description
+   * 워크스페이스에 할당된 커맨드 목록을 조회하여 요청한 클라이언트에게 응답합니다.
+   */
+  private handleCommandListRequest(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const workspaceId = payload?.workspaceId as number;
+    if (!workspaceId || !from?.deviceId) return;
+
+    const commands = this.deps.commandStore.getCommands(workspaceId);
+    this.send({
+      type: 'command_list',
+      payload: { commands },
+      to: [from.deviceId],
+    });
+  }
+
+  /**
+   * command_execute 처리
+   *
+   * @description
+   * 커맨드 ID로 저장된 content를 조회하고 claude_send와 동일하게 처리합니다.
+   */
+  private handleCommandExecute(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const commandId = payload?.commandId as number;
+    const conversationId = payload?.conversationId as number;
+    if (!commandId || !conversationId) return;
+
+    const content = this.deps.commandStore.getContent(commandId);
+    if (!content) {
+      if (from?.deviceId) {
+        this.send({
+          type: 'error',
+          payload: { message: `Command not found: ${commandId}` },
+          to: [from.deviceId],
+        });
+      }
+      return;
+    }
+
+    // 기존 claude_send 처리와 동일하게 처리
+    this.handleClaudeSend(
+      { conversationId, message: content },
+      from
+    );
+  }
+
+  /**
+   * command_create 처리
+   *
+   * @description
+   * 새 커맨드를 생성하고 워크스페이스에 할당합니다.
+   */
+  private handleCommandCreate(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const name = payload?.name as string;
+    const icon = (payload?.icon as string) ?? null;
+    const color = (payload?.color as string) ?? null;
+    const content = payload?.content as string;
+    const workspaceIds = (payload?.workspaceIds as (number | null)[]) ?? [null];
+    if (!name || !content) return;
+
+    const commandId = this.deps.commandStore.createCommand(name, icon, color, content);
+
+    for (const wsId of workspaceIds) {
+      this.deps.commandStore.assignCommand(commandId, wsId);
+    }
+
+    if (from?.deviceId) {
+      this.send({
+        type: 'command_create_result',
+        payload: { commandId },
+        to: [from.deviceId],
+      });
+    }
+
+    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+  }
+
+  /**
+   * command_update 처리
+   *
+   * @description
+   * 기존 커맨드의 필드를 업데이트합니다.
+   */
+  private handleCommandUpdate(
+    payload: Record<string, unknown> | undefined,
+    _from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const commandId = payload?.commandId as number;
+    if (!commandId) return;
+
+    const fields: { name?: string; icon?: string; color?: string; content?: string } = {};
+    if (payload?.name !== undefined) fields.name = payload.name as string;
+    if (payload?.icon !== undefined) fields.icon = payload.icon as string;
+    if (payload?.color !== undefined) fields.color = payload.color as string;
+    if (payload?.content !== undefined) fields.content = payload.content as string;
+
+    this.deps.commandStore.updateCommand(commandId, fields);
+    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+  }
+
+  /**
+   * command_delete 처리
+   *
+   * @description
+   * 커맨드를 삭제합니다.
+   */
+  private handleCommandDelete(
+    payload: Record<string, unknown> | undefined,
+    _from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const commandId = payload?.commandId as number;
+    if (!commandId) return;
+
+    this.deps.commandStore.deleteCommand(commandId);
+    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+  }
+
+  /**
+   * command_assign 처리
+   *
+   * @description
+   * 커맨드의 워크스페이스 할당/해제를 처리합니다.
+   */
+  private handleCommandAssign(
+    payload: Record<string, unknown> | undefined,
+    _from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const commandId = payload?.commandId as number;
+    const workspaceId = payload?.workspaceId as number | null;
+    const assign = payload?.assign as boolean;
+    if (!commandId || assign === undefined) return;
+
+    if (assign) {
+      this.deps.commandStore.assignCommand(commandId, workspaceId ?? null);
+    } else {
+      this.deps.commandStore.unassignCommand(commandId, workspaceId ?? null);
+    }
+    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
   }
 }

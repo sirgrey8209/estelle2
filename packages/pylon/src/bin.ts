@@ -17,6 +17,7 @@ import { decodeConversationIdFull, type ConversationId, type EnvId } from '@este
 import { Pylon, type PylonConfig, type PylonDependencies } from './pylon.js';
 import { WorkspaceStore } from './stores/workspace-store.js';
 import { MessageStore } from './stores/message-store.js';
+import { CommandStore } from './stores/command-store.js';
 import { ShareStore } from './stores/share-store.js';
 import { createRelayClient } from './network/relay-client.js';
 import { AgentManager } from './agent/agent-manager.js';
@@ -347,6 +348,11 @@ function createDependencies(): PylonDependencies & {
   const messageStore = new MessageStore(messagesDbPath, messagesMigrationDir);
   logger.log(`[MessageStore] Using SQLite database: ${messagesDbPath}`);
 
+  // CommandStore (SQLite)
+  const commandsDbPath = path.join(dataDir, 'commands.db');
+  const commandStore = new CommandStore(commandsDbPath);
+  logger.log(`[CommandStore] Using SQLite database: ${commandsDbPath}`);
+
   // ShareStore 로드 또는 새로 생성
   const shareData = persistence.loadShareStore();
   const shareStore = shareData
@@ -458,6 +464,7 @@ function createDependencies(): PylonDependencies & {
     credentialManager,
     shareStore,
     widgetManager,
+    commandStore,
   };
 }
 
