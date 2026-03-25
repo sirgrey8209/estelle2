@@ -20,6 +20,9 @@ import { routeMessage } from '../hooks/useMessageRouter';
 
 vi.mock('../services/relaySender', () => ({
   selectConversation: vi.fn(),
+  requestCommandList: vi.fn(),
+  sendWidgetCheck: vi.fn(),
+  sendWidgetClaim: vi.fn(),
 }));
 
 vi.mock('../stores/relayStore', () => ({

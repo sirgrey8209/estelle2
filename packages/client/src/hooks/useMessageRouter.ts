@@ -16,7 +16,9 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { sendWidgetCheck, sendWidgetClaim } from '../services/relaySender';
+import { sendWidgetCheck, sendWidgetClaim, requestCommandList } from '../services/relaySender';
+import { useCommandStore } from '../stores/commandStore';
+import type { CommandItem } from '../stores/commandStore';
 // import { debugLog } from '../stores/debugStore';
 
 /**
@@ -136,6 +138,11 @@ export function routeMessage(message: RelayMessage): void {
       console.log('[Router] Before onWorkspaceListReceived, workspaceSync:', currentSync);
       syncOrchestrator.onWorkspaceListReceived(selectedConversation?.conversationId ?? null);
       console.log('[Router] After onWorkspaceListReceived, workspaceSync:', useSyncStore.getState().workspaceSync);
+
+      // 커맨드 목록 요청 (워크스페이스가 선택되어 있으면)
+      if (selectedConversation?.workspaceId) {
+        requestCommandList(parseInt(selectedConversation.workspaceId, 10));
+      }
 
       break;
     }
@@ -537,6 +544,24 @@ export function routeMessage(message: RelayMessage): void {
 
       // 모든 클라이언트에 종료 페이지 표시
       useConversationStore.getState().setWidgetComplete(conversationId, toolUseId, sessionId, view);
+      break;
+    }
+
+    // === 커맨드 목록 응답 ===
+    case MessageType.COMMAND_LIST: {
+      const { commands } = payload as { commands: CommandItem[] };
+      if (commands) {
+        useCommandStore.getState().setCommands(commands);
+      }
+      break;
+    }
+
+    // === 커맨드 변경 알림 → 목록 재요청 ===
+    case MessageType.COMMAND_CHANGED: {
+      const selectedConversation = useWorkspaceStore.getState().selectedConversation;
+      if (selectedConversation?.workspaceId) {
+        requestCommandList(parseInt(selectedConversation.workspaceId, 10));
+      }
       break;
     }
 
