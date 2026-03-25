@@ -217,6 +217,26 @@ export const MessageType = {
   /** 위젯 에러 (Pylon → All Clients) */
   WIDGET_ERROR: 'widget_error',
 
+  // === Command ===
+  /** 커맨드 목록 요청 (Client → Pylon) */
+  COMMAND_LIST_REQUEST: 'command_list_request',
+  /** 커맨드 목록 응답 (Pylon → Client) */
+  COMMAND_LIST: 'command_list',
+  /** 커맨드 실행 (Client → Pylon) */
+  COMMAND_EXECUTE: 'command_execute',
+  /** 커맨드 생성 (Client → Pylon) */
+  COMMAND_CREATE: 'command_create',
+  /** 커맨드 생성 응답 (Pylon → Client) */
+  COMMAND_CREATE_RESULT: 'command_create_result',
+  /** 커맨드 수정 (Client → Pylon) */
+  COMMAND_UPDATE: 'command_update',
+  /** 커맨드 삭제 (Client → Pylon) */
+  COMMAND_DELETE: 'command_delete',
+  /** 커맨드 할당 변경 (Client → Pylon) */
+  COMMAND_ASSIGN: 'command_assign',
+  /** 커맨드 변경 알림 (Pylon → Client) */
+  COMMAND_CHANGED: 'command_changed',
+
   // === Utility ===
   /** 연결 유지 확인 요청 */
   PING: 'ping',
