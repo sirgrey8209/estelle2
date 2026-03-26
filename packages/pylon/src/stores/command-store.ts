@@ -123,6 +123,28 @@ export class CommandStore {
     this.stmtUnassign.run(commandId, workspaceId);
   }
 
+  getCommandsByWorkspaces(workspaceIds: number[]): Map<number, CommandListItem[]> {
+    const result = new Map<number, CommandListItem[]>();
+    for (const wsId of workspaceIds) {
+      result.set(wsId, this.getCommands(wsId));
+    }
+    return result;
+  }
+
+  getAssignedWorkspaceIds(commandId: number): (number | null)[] {
+    const stmt = this.db.prepare(
+      'SELECT workspace_id FROM command_assignments WHERE command_id = ?'
+    );
+    const rows = stmt.all(commandId) as { workspace_id: number | null }[];
+    return rows.map(r => r.workspace_id);
+  }
+
+  getCommandById(id: number): CommandListItem | null {
+    const stmt = this.db.prepare('SELECT id, name, icon, color, content FROM commands WHERE id = ?');
+    const row = stmt.get(id) as CommandListItem | undefined;
+    return row ?? null;
+  }
+
   close(): void {
     this.db.close();
   }

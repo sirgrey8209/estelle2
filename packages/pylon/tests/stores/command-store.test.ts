@@ -118,6 +118,42 @@ describe('CommandStore', () => {
     });
   });
 
+  describe('getCommandsByWorkspaces', () => {
+    it('should return commands grouped by workspaceId', () => {
+      const globalCmd = store.createCommand('Global', 'star', null, 'g');
+      store.assignCommand(globalCmd, null);
+      const wsCmd = store.createCommand('WS', 'zap', null, 'w');
+      store.assignCommand(wsCmd, 42);
+
+      const result = store.getCommandsByWorkspaces([42, 99]);
+      expect(result.get(42)).toHaveLength(2);
+      expect(result.get(99)).toHaveLength(1);
+    });
+  });
+
+  describe('getAssignedWorkspaceIds', () => {
+    it('should return assigned workspace ids', () => {
+      const id = store.createCommand('Cmd', null, null, 'c');
+      store.assignCommand(id, null);
+      store.assignCommand(id, 42);
+      const wsIds = store.getAssignedWorkspaceIds(id);
+      expect(wsIds).toContain(null);
+      expect(wsIds).toContain(42);
+    });
+  });
+
+  describe('getCommandById', () => {
+    it('should return full command data', () => {
+      const id = store.createCommand('Cmd', 'star', '#ff0', 'content');
+      const cmd = store.getCommandById(id);
+      expect(cmd).toEqual({ id, name: 'Cmd', icon: 'star', color: '#ff0', content: 'content' });
+    });
+
+    it('should return null for non-existent id', () => {
+      expect(store.getCommandById(999)).toBeNull();
+    });
+  });
+
   describe('assignCommand / unassignCommand', () => {
     it('should assign command to workspace', () => {
       const id = store.createCommand('Cmd', null, null, 'c');
