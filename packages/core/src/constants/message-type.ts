@@ -218,10 +218,6 @@ export const MessageType = {
   WIDGET_ERROR: 'widget_error',
 
   // === Command ===
-  /** 커맨드 목록 요청 (Client → Pylon) */
-  COMMAND_LIST_REQUEST: 'command_list_request',
-  /** 커맨드 목록 응답 (Pylon → Client) */
-  COMMAND_LIST: 'command_list',
   /** 커맨드 실행 (Client → Pylon) */
   COMMAND_EXECUTE: 'command_execute',
   /** 커맨드 생성 (Client → Pylon) */
