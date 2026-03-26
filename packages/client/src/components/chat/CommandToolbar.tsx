@@ -1,10 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
-import { Plus, X, Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useCommandStore, CommandItem } from '../../stores/commandStore';
 import { executeCommand, createCommand, updateCommand, deleteCommand } from '../../services/relaySender';
-
-const STORAGE_KEY = 'estelle:commandToolbarExpanded';
 
 interface CommandToolbarProps {
   conversationId: number | null;
@@ -225,10 +223,6 @@ function ContextMenu({
  */
 export function CommandToolbar({ conversationId }: CommandToolbarProps) {
   const commands = useCommandStore((state) => state.commands);
-  const [expanded, setExpanded] = useState(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored !== null ? stored === 'true' : true;
-  });
   const [showForm, setShowForm] = useState(false);
   const [editingCommand, setEditingCommand] = useState<CommandItem | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -236,18 +230,6 @@ export function CommandToolbar({ conversationId }: CommandToolbarProps) {
     x: number;
     y: number;
   } | null>(null);
-
-  const toggleExpanded = useCallback(() => {
-    setExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem(STORAGE_KEY, String(next));
-      if (!next) {
-        setShowForm(false);
-        setEditingCommand(null);
-      }
-      return next;
-    });
-  }, []);
 
   const handleExecute = useCallback(
     (cmdId: number) => {
@@ -304,53 +286,32 @@ export function CommandToolbar({ conversationId }: CommandToolbarProps) {
 
   return (
     <div className="relative px-3 py-1.5">
-      <div className="flex items-center gap-1.5">
-        {/* 접기/펼치기 토글 */}
+      <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+        {/* 커맨드 버튼들 */}
+        {commands.map((cmd) => (
+          <button
+            key={cmd.id}
+            onClick={() => handleExecute(cmd.id)}
+            onContextMenu={(e) => handleContextMenu(e, cmd)}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors whitespace-nowrap shrink-0"
+            title={cmd.name}
+          >
+            <CommandIcon icon={cmd.icon} color={cmd.color} />
+            <span>{cmd.name}</span>
+          </button>
+        ))}
+
+        {/* + 추가 버튼 */}
         <button
-          onClick={toggleExpanded}
-          className="flex items-center justify-center w-5 h-5 rounded hover:bg-secondary/50 transition-colors shrink-0"
-          title={expanded ? '툴바 접기' : '툴바 펼치기'}
+          onClick={() => {
+            setShowForm(true);
+            setEditingCommand(null);
+          }}
+          className="flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border hover:bg-secondary/50 transition-colors shrink-0"
+          title="커맨드 추가"
         >
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
+          <Plus className="h-3 w-3 text-muted-foreground" />
         </button>
-
-        {expanded ? (
-          <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
-            {/* 커맨드 버튼들 */}
-            {commands.map((cmd) => (
-              <button
-                key={cmd.id}
-                onClick={() => handleExecute(cmd.id)}
-                onContextMenu={(e) => handleContextMenu(e, cmd)}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors whitespace-nowrap shrink-0"
-                title={cmd.name}
-              >
-                <CommandIcon icon={cmd.icon} color={cmd.color} />
-                <span>{cmd.name}</span>
-              </button>
-            ))}
-
-            {/* + 추가 버튼 */}
-            <button
-              onClick={() => {
-                setShowForm(true);
-                setEditingCommand(null);
-              }}
-              className="flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border hover:bg-secondary/50 transition-colors shrink-0"
-              title="커맨드 추가"
-            >
-              <Plus className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            커맨드 {commands.length}개
-          </span>
-        )}
       </div>
 
       {/* 추가 폼 */}
