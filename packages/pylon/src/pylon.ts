@@ -997,10 +997,6 @@ export class Pylon {
     }
 
     // ===== Command =====
-    if (type === 'command_list_request') {
-      this.handleCommandListRequest(payload, from);
-      return;
-    }
     if (type === 'command_execute') {
       this.handleCommandExecute(payload, from);
       return;
@@ -2958,7 +2954,13 @@ Message: ${message}
     const workspaces = this.deps.workspaceStore.getAllWorkspaces();
     const activeState = this.deps.workspaceStore.getActiveState();
 
-    // 각 워크스페이스에 태스크/워커 정보 추가
+    // 커맨드 조회
+    const workspaceIds = workspaces.map(ws => ws.workspaceId);
+    const commandsByWs = this.deps.commandStore
+      ? this.deps.commandStore.getCommandsByWorkspaces(workspaceIds)
+      : new Map();
+
+    // 각 워크스페이스에 태스크/워커/커맨드 정보 추가
     const workspacesWithTasks = workspaces.map((ws) => {
       const taskResult = this.deps.taskManager.listTasks(ws.workingDir);
       const workerStatus = this.deps.workerManager.getWorkerStatus(ws.workspaceId, ws.workingDir);
@@ -2967,6 +2969,7 @@ Message: ${message}
         ...ws,
         tasks: taskResult.success ? taskResult.tasks : [],
         workerStatus,
+        commands: commandsByWs.get(ws.workspaceId) ?? [],
       };
     });
 
@@ -3717,29 +3720,6 @@ Message: ${message}
   // ==========================================================================
 
   /**
-   * command_list_request 처리
-   *
-   * @description
-   * 워크스페이스에 할당된 커맨드 목록을 조회하여 요청한 클라이언트에게 응답합니다.
-   */
-  private handleCommandListRequest(
-    payload: Record<string, unknown> | undefined,
-    from: MessageFrom | undefined
-  ): void {
-    if (!this.deps.commandStore) return;
-
-    const workspaceId = payload?.workspaceId as number;
-    if (!workspaceId || !from?.deviceId) return;
-
-    const commands = this.deps.commandStore.getCommands(workspaceId);
-    this.send({
-      type: 'command_list',
-      payload: { commands },
-      to: [from.deviceId],
-    });
-  }
-
-  /**
    * command_execute 처리
    *
    * @description
@@ -3807,7 +3787,14 @@ Message: ${message}
       });
     }
 
-    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+    const createdCommand = this.deps.commandStore.getCommandById(commandId);
+    this.send({
+      type: 'command_changed',
+      payload: {
+        added: [{ command: createdCommand, workspaceIds }],
+      },
+      broadcast: 'clients',
+    });
   }
 
   /**
@@ -3832,7 +3819,14 @@ Message: ${message}
     if (payload?.content !== undefined) fields.content = payload.content as string;
 
     this.deps.commandStore.updateCommand(commandId, fields);
-    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+    const updatedCommand = this.deps.commandStore.getCommandById(commandId);
+    this.send({
+      type: 'command_changed',
+      payload: {
+        updated: [updatedCommand],
+      },
+      broadcast: 'clients',
+    });
   }
 
   /**
@@ -3851,7 +3845,13 @@ Message: ${message}
     if (!commandId) return;
 
     this.deps.commandStore.deleteCommand(commandId);
-    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+    this.send({
+      type: 'command_changed',
+      payload: {
+        removed: [commandId],
+      },
+      broadcast: 'clients',
+    });
   }
 
   /**
@@ -3876,6 +3876,6 @@ Message: ${message}
     } else {
       this.deps.commandStore.unassignCommand(commandId, workspaceId ?? null);
     }
-    this.send({ type: 'command_changed', payload: {}, broadcast: 'clients' });
+    this.broadcastWorkspaceList();
   }
 }

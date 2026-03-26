@@ -117,6 +117,13 @@ export interface SetSystemPromptResult {
   error?: string;
 }
 
+/** 커맨드 변경 delta 타입 */
+export interface CommandChangedDelta {
+  added?: { command: unknown; workspaceIds: (number | null)[] }[];
+  removed?: number[];
+  updated?: unknown[];
+}
+
 /** NotifyCommandChanged 결과 타입 */
 export interface NotifyCommandChangedResult {
   success: boolean;
@@ -183,6 +190,7 @@ interface PylonRequest {
   code?: string;
   height?: number;
   agent?: AgentType;
+  delta?: CommandChangedDelta;
 }
 
 // ============================================================================
@@ -590,11 +598,14 @@ export class PylonClient {
    * 커맨드 변경 알림
    * MCP 도구에서 커맨드를 생성/수정/삭제/할당한 후 호출하여
    * PylonMcpServer를 통해 모든 클라이언트에 command_changed를 브로드캐스트합니다.
+   *
+   * @param delta - 변경 delta (있으면 command_changed에 포함, 없으면 broadcastWorkspaceList 트리거)
    */
-  async notifyCommandChanged(): Promise<NotifyCommandChangedResult> {
+  async notifyCommandChanged(delta?: CommandChangedDelta): Promise<NotifyCommandChangedResult> {
     return this._sendRequest<NotifyCommandChangedResult>({
       action: 'notify_command_changed',
-    });
+      delta,
+    } as PylonRequest);
   }
 
   // ============================================================================

@@ -544,12 +544,16 @@ async function main(): Promise<void> {
     broadcastWidgetReady: (sessionId, conversationId, toolUseId) => {
       pylon.broadcastWidgetReady(sessionId, conversationId, toolUseId);
     },
-    onCommandChanged: () => {
-      deps.relayClient.send({
-        type: 'command_changed',
-        payload: {},
-        broadcast: 'clients',
-      });
+    onCommandChanged: (delta) => {
+      if (delta) {
+        deps.relayClient.send({
+          type: 'command_changed',
+          payload: delta,
+          broadcast: 'clients',
+        });
+      } else {
+        pylon.broadcastWorkspaceList();
+      }
     },
   });
 

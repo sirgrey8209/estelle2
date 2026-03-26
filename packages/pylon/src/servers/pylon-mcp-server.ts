@@ -134,7 +134,11 @@ export interface PylonMcpServerOptions {
     toolUseId: string,
   ) => void;
   /** 커맨드 변경 시 호출되는 콜백 (MCP 도구에서 커맨드 CRUD 후) */
-  onCommandChanged?: () => void;
+  onCommandChanged?: (delta?: {
+    added?: { command: unknown; workspaceIds: (number | null)[] }[];
+    removed?: number[];
+    updated?: unknown[];
+  }) => void;
 }
 
 /** 요청 타입 */
@@ -167,6 +171,12 @@ interface McpRequest {
   code?: string;
   /** Inline Widget 높이 (run_widget_inline 액션에서 사용) */
   height?: number;
+  /** 커맨드 변경 delta (notify_command_changed 액션에서 사용) */
+  delta?: {
+    added?: { command: unknown; workspaceIds: (number | null)[] }[];
+    removed?: number[];
+    updated?: unknown[];
+  };
 }
 
 /** 파일 정보 타입 */
@@ -362,7 +372,11 @@ export class PylonMcpServer {
     conversationId: ConversationId,
     toolUseId: string,
   ) => void;
-  private _onCommandChanged?: () => void;
+  private _onCommandChanged?: (delta?: {
+    added?: { command: unknown; workspaceIds: (number | null)[] }[];
+    removed?: number[];
+    updated?: unknown[];
+  }) => void;
 
   /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
   private readonly _pendingWidgets: Map<number, PendingWidget> = new Map();
@@ -666,7 +680,7 @@ export class PylonMcpServer {
 
     // notify_command_changed 액션 처리 (conversationId 불필요)
     if (request.action === 'notify_command_changed') {
-      this._onCommandChanged?.();
+      this._onCommandChanged?.(request.delta);
       return { success: true } as McpResponse;
     }
 

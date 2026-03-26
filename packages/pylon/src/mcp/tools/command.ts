@@ -17,7 +17,7 @@
 
 import path from 'path';
 import { CommandStore } from '../../stores/command-store.js';
-import { PylonClient } from '../pylon-client.js';
+import { PylonClient, type CommandChangedDelta } from '../pylon-client.js';
 
 // ============================================================================
 // 타입
@@ -76,11 +76,13 @@ function createPylonClient(): PylonClient {
 /**
  * 커맨드 변경 알림 (실패해도 무시)
  * CRUD 자체는 성공했으므로, 알림 실패가 전체 작업을 실패시키면 안 됨.
+ *
+ * @param delta - 변경 delta (있으면 command_changed에 포함, 없으면 broadcastWorkspaceList 트리거)
  */
-async function notifyCommandChangedSafe(): Promise<void> {
+async function notifyCommandChangedSafe(delta?: CommandChangedDelta): Promise<void> {
   try {
     const client = createPylonClient();
-    await client.notifyCommandChanged();
+    await client.notifyCommandChanged(delta);
   } catch {
     // 알림 실패는 무시 (CRUD 자체는 성공)
   }
@@ -147,16 +149,18 @@ export async function executeCreateCommand(
     );
 
     // 워크스페이스 할당 (지정된 경우)
-    if (args.workspaceIds && args.workspaceIds.length > 0) {
-      for (const wsId of args.workspaceIds) {
-        store.assignCommand(commandId, wsId);
-      }
-    } else {
-      // 기본: 글로벌(null) 할당
-      store.assignCommand(commandId, null);
+    const assignedIds = (args.workspaceIds && args.workspaceIds.length > 0)
+      ? args.workspaceIds
+      : [null];
+
+    for (const wsId of assignedIds) {
+      store.assignCommand(commandId, wsId);
     }
 
-    await notifyCommandChangedSafe();
+    const createdCommand = store.getCommandById(commandId);
+    await notifyCommandChangedSafe({
+      added: [{ command: createdCommand, workspaceIds: assignedIds }],
+    });
 
     return createSuccessResponse({
       success: true,
@@ -216,7 +220,10 @@ export async function executeUpdateCommand(
       return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
     }
 
-    await notifyCommandChangedSafe();
+    const updatedCommand = store.getCommandById(args.commandId);
+    await notifyCommandChangedSafe({
+      updated: [updatedCommand],
+    });
 
     return createSuccessResponse({
       success: true,
@@ -255,7 +262,9 @@ export async function executeDeleteCommand(
       return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
     }
 
-    await notifyCommandChangedSafe();
+    await notifyCommandChangedSafe({
+      removed: [args.commandId],
+    });
 
     return createSuccessResponse({
       success: true,
