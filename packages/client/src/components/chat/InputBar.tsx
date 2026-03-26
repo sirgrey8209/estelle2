@@ -390,7 +390,10 @@ export function InputBar({ disabled = false, onSend, onStop }: InputBarProps) {
       )}
 
       {/* 커맨드 툴바 */}
-      <CommandToolbar conversationId={conversationId} />
+      <CommandToolbar
+        conversationId={conversationId}
+        workspaceId={selectedConversation?.workspaceId ? parseInt(selectedConversation.workspaceId, 10) : null}
+      />
 
       {/* 자동 제안 칩 */}
       <SuggestionChips onSelect={(text) => setText(text)} enabled={autoSuggest} />

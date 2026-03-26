@@ -6,6 +6,7 @@ import { executeCommand, createCommand, updateCommand, deleteCommand } from '../
 
 interface CommandToolbarProps {
   conversationId: number | null;
+  workspaceId: number | null;
 }
 
 /**
@@ -221,8 +222,9 @@ function ContextMenu({
  * - 커맨드 버튼 목록 (가로 스크롤)
  * - 추가/수정/삭제 인라인 UI
  */
-export function CommandToolbar({ conversationId }: CommandToolbarProps) {
-  const commands = useCommandStore((state) => state.commands);
+export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarProps) {
+  const commandsByWorkspace = useCommandStore((state) => state.commandsByWorkspace);
+  const commands = workspaceId ? (commandsByWorkspace.get(workspaceId) ?? []) : [];
   const [showForm, setShowForm] = useState(false);
   const [editingCommand, setEditingCommand] = useState<CommandItem | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -281,8 +283,6 @@ export function CommandToolbar({ conversationId }: CommandToolbarProps) {
     setShowForm(false);
     setEditingCommand(null);
   }, []);
-
-  if (commands.length === 0 && !showForm && !editingCommand) return null;
 
   return (
     <div className="relative px-3 py-1.5">

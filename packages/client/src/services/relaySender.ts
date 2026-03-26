@@ -601,19 +601,6 @@ export function sendWidgetCheck(
 // ============================================================================
 
 /**
- * 커맨드 목록 요청
- * - workspaceId에서 pylonId 추출하여 해당 Pylon에만 전송
- */
-export function requestCommandList(workspaceId: number): boolean {
-  const pylonId = getPylonIdFromWorkspace(workspaceId);
-  return sendMessage({
-    type: MessageType.COMMAND_LIST_REQUEST,
-    payload: { workspaceId },
-    to: [pylonId],
-  });
-}
-
-/**
  * 커맨드 실행
  * - conversationId에서 pylonId 추출하여 해당 Pylon에만 전송
  */

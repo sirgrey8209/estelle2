@@ -16,9 +16,9 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { sendWidgetCheck, sendWidgetClaim, requestCommandList } from '../services/relaySender';
+import { sendWidgetCheck, sendWidgetClaim } from '../services/relaySender';
 import { useCommandStore } from '../stores/commandStore';
-import type { CommandItem } from '../stores/commandStore';
+import type { CommandDelta } from '../stores/commandStore';
 // import { debugLog } from '../stores/debugStore';
 
 /**
@@ -139,9 +139,13 @@ export function routeMessage(message: RelayMessage): void {
       syncOrchestrator.onWorkspaceListReceived(selectedConversation?.conversationId ?? null);
       console.log('[Router] After onWorkspaceListReceived, workspaceSync:', useSyncStore.getState().workspaceSync);
 
-      // 커맨드 목록 요청 (워크스페이스가 선택되어 있으면)
-      if (selectedConversation?.workspaceId) {
-        requestCommandList(parseInt(selectedConversation.workspaceId, 10));
+      // 각 워크스페이스의 커맨드를 commandStore에 저장
+      if (workspaces) {
+        for (const ws of workspaces as any[]) {
+          if (ws.workspaceId && ws.commands) {
+            useCommandStore.getState().setWorkspaceCommands(ws.workspaceId, ws.commands);
+          }
+        }
       }
 
       break;
@@ -547,21 +551,13 @@ export function routeMessage(message: RelayMessage): void {
       break;
     }
 
-    // === 커맨드 목록 응답 ===
-    case MessageType.COMMAND_LIST: {
-      const { commands } = payload as { commands: CommandItem[] };
-      if (commands) {
-        useCommandStore.getState().setCommands(commands);
-      }
-      break;
-    }
-
-    // === 커맨드 변경 알림 → 목록 재요청 ===
+    // === 커맨드 변경 알림 (delta 적용) ===
     case MessageType.COMMAND_CHANGED: {
-      const selectedConversation = useWorkspaceStore.getState().selectedConversation;
-      if (selectedConversation?.workspaceId) {
-        requestCommandList(parseInt(selectedConversation.workspaceId, 10));
+      const delta = payload as CommandDelta;
+      if (delta.added || delta.removed || delta.updated) {
+        useCommandStore.getState().applyDelta(delta);
       }
+      // delta 없음 = assign 같은 전체 갱신 → broadcastWorkspaceList가 와서 처리됨
       break;
     }
 
