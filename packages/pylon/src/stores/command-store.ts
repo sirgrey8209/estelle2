@@ -53,12 +53,11 @@ export class CommandStore {
 
       CREATE TABLE IF NOT EXISTS command_assignments (
         command_id INTEGER NOT NULL REFERENCES commands(id) ON DELETE CASCADE,
-        workspace_id INTEGER,
+        workspace_id INTEGER NOT NULL DEFAULT 0,
         UNIQUE(command_id, workspace_id)
       );
 
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_ca_unique
-      ON command_assignments (command_id, COALESCE(workspace_id, -1));
+      UPDATE command_assignments SET workspace_id = 0 WHERE workspace_id IS NULL;
     `);
   }
 
@@ -69,13 +68,13 @@ export class CommandStore {
     this.stmtDeleteCommand = this.db.prepare('DELETE FROM commands WHERE id = ?');
     this.stmtGetContent = this.db.prepare('SELECT content FROM commands WHERE id = ?');
     this.stmtGetCommands = this.db.prepare(
-      'SELECT c.id, c.name, c.icon, c.color, c.content FROM commands c INNER JOIN command_assignments ca ON c.id = ca.command_id WHERE ca.workspace_id IS NULL OR ca.workspace_id = ?'
+      'SELECT DISTINCT c.id, c.name, c.icon, c.color, c.content FROM commands c INNER JOIN command_assignments ca ON c.id = ca.command_id WHERE ca.workspace_id = 0 OR ca.workspace_id = ?'
     );
     this.stmtAssign = this.db.prepare(
       'INSERT OR IGNORE INTO command_assignments (command_id, workspace_id) VALUES (?, ?)'
     );
     this.stmtUnassign = this.db.prepare(
-      'DELETE FROM command_assignments WHERE command_id = ? AND workspace_id IS ?'
+      'DELETE FROM command_assignments WHERE command_id = ? AND workspace_id = ?'
     );
   }
 
@@ -116,11 +115,11 @@ export class CommandStore {
   }
 
   assignCommand(commandId: number, workspaceId: number | null): void {
-    this.stmtAssign.run(commandId, workspaceId);
+    this.stmtAssign.run(commandId, workspaceId ?? 0);
   }
 
   unassignCommand(commandId: number, workspaceId: number | null): void {
-    this.stmtUnassign.run(commandId, workspaceId);
+    this.stmtUnassign.run(commandId, workspaceId ?? 0);
   }
 
   getCommandsByWorkspaces(workspaceIds: number[]): Map<number, CommandListItem[]> {
@@ -135,8 +134,8 @@ export class CommandStore {
     const stmt = this.db.prepare(
       'SELECT workspace_id FROM command_assignments WHERE command_id = ?'
     );
-    const rows = stmt.all(commandId) as { workspace_id: number | null }[];
-    return rows.map(r => r.workspace_id);
+    const rows = stmt.all(commandId) as { workspace_id: number }[];
+    return rows.map(r => r.workspace_id === 0 ? null : r.workspace_id);
   }
 
   getCommandById(id: number): CommandListItem | null {

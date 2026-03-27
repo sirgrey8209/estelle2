@@ -140,6 +140,13 @@ describe('CommandStore', () => {
       expect(wsIds).toContain(null);
       expect(wsIds).toContain(42);
     });
+
+    it('should convert internal 0 back to null for global assignments', () => {
+      const id = store.createCommand('Cmd', null, null, 'c');
+      store.assignCommand(id, null);
+      const wsIds = store.getAssignedWorkspaceIds(id);
+      expect(wsIds).toEqual([null]);
+    });
   });
 
   describe('getCommandById', () => {
@@ -185,6 +192,16 @@ describe('CommandStore', () => {
 
       const commands = store.getCommands(42);
       expect(commands).toHaveLength(1);
+    });
+
+    it('should not return duplicates when command is both global and workspace-assigned', () => {
+      const id = store.createCommand('Both', 'star', null, 'both content');
+      store.assignCommand(id, null); // global (internally 0)
+      store.assignCommand(id, 42);  // workspace-specific
+
+      const commands = store.getCommands(42);
+      expect(commands).toHaveLength(1);
+      expect(commands[0].name).toBe('Both');
     });
   });
 });
