@@ -232,6 +232,8 @@ export const MessageType = {
   COMMAND_ASSIGN: 'command_assign',
   /** 커맨드 변경 알림 (Pylon → Client) */
   COMMAND_CHANGED: 'command_changed',
+  /** 커맨드 관리 대화 생성 (Client → Pylon) */
+  COMMAND_MANAGE_CONVERSATION: 'command_manage_conversation',
 
   // === Utility ===
   /** 연결 유지 확인 요청 */

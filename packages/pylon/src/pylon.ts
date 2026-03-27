@@ -1035,6 +1035,10 @@ export class Pylon {
       this.handleCommandAssign(payload, from);
       return;
     }
+    if (type === 'command_manage_conversation') {
+      this.handleCommandManageConversation(payload, from);
+      return;
+    }
 
     // ===== Widget 세션 유효성 확인 =====
     if (type === 'widget_check') {
@@ -3895,5 +3899,61 @@ Message: ${message}
       this.deps.commandStore.unassignCommand(commandId, workspaceId ?? null);
     }
     this.broadcastWorkspaceList();
+  }
+
+  /**
+   * command_manage_conversation 처리
+   *
+   * @description
+   * 커맨드 관리용 대화를 생성하고, 초기 컨텍스트와 하드코딩된 프롬프트를 전송한 뒤
+   * 해당 대화로 자동 전환합니다.
+   */
+  private handleCommandManageConversation(
+    payload: Record<string, unknown> | undefined,
+    from: MessageFrom | undefined
+  ): void {
+    if (!this.deps.commandStore) return;
+
+    const workspaceId = payload?.workspaceId as number;
+    const commandId = payload?.commandId as number | undefined;
+    if (!workspaceId) return;
+
+    // 워크스페이스 확인
+    const workspace = this.deps.workspaceStore.getWorkspace(workspaceId);
+    if (!workspace) return;
+
+    // 대화 생성
+    const convName = commandId ? '커맨드 수정' : '커맨드 생성';
+    const conversation = this.deps.workspaceStore.createConversation(workspaceId, convName);
+    if (!conversation) return;
+
+    // 기존 메시지 정리 (ID 재사용 대비)
+    this.clearMessagesForConversation(conversation.conversationId);
+
+    // 초기 컨텍스트 전송
+    this.sendInitialContext(conversation.conversationId);
+
+    // 하드코딩된 프롬프트 전송
+    let prompt: string;
+    if (commandId) {
+      prompt = `이 워크스페이스(id: ${workspaceId}, name: ${workspace.name})에서 커맨드(id: ${commandId})를 수정하거나 삭제하려고 해요.\nget_command로 현재 상태를 확인하고, update_command 또는 delete_command로 처리해 주세요.`;
+    } else {
+      prompt = `이 워크스페이스(id: ${workspaceId}, name: ${workspace.name})에서 새 커맨드를 만들려고 해요.\nlist_commands로 기존 커맨드를 확인하고, create_command로 새 커맨드를 만들어 주세요.\n사용자에게 어떤 커맨드를 만들고 싶은지 물어봐 주세요.`;
+    }
+
+    this.handleClaudeSend(
+      { conversationId: conversation.conversationId, message: prompt },
+      from
+    );
+
+    // 해당 대화로 자동 전환
+    this.deps.workspaceStore.setActiveConversation(conversation.conversationId as ConversationId);
+    this.broadcastWorkspaceList();
+    this.saveWorkspaceStore().catch(() => {});
+
+    // 세션 뷰어 등록
+    if (from?.deviceId) {
+      this.registerSessionViewer(from.deviceId, conversation.conversationId);
+    }
   }
 }
