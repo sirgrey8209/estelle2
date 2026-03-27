@@ -1783,15 +1783,27 @@ export class Pylon {
     if (from?.deviceId === undefined) return;
     const workspaces = this.deps.workspaceStore.getAllWorkspaces();
     const activeState = this.deps.workspaceStore.getActiveState();
+
+    // 커맨드 조회 (broadcastWorkspaceList와 동일한 패턴)
+    const workspaceIds = workspaces.map(ws => ws.workspaceId);
+    const commandsByWs = this.deps.commandStore
+      ? this.deps.commandStore.getCommandsByWorkspaces(workspaceIds)
+      : new Map();
+
+    const workspacesWithCommands = workspaces.map((ws) => ({
+      ...ws,
+      commands: commandsByWs.get(ws.workspaceId) ?? [],
+    }));
+
     this.send({
       type: 'workspace_list_result',
       to: [from.deviceId],
       payload: {
         deviceId: this.config.deviceId,
-        workspaces,
+        workspaces: workspacesWithCommands,
         activeWorkspaceId: activeState.activeWorkspaceId,
         activeConversationId: activeState.activeConversationId,
-        account: this.cachedAccount,  // 계정 정보 포함
+        account: this.cachedAccount,
       },
     });
   }
