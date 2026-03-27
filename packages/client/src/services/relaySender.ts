@@ -659,6 +659,19 @@ export function deleteCommand(commandId: number): boolean {
 }
 
 /**
+ * 커맨드 관리 대화 생성 요청
+ * - commandId 없으면 생성 모드, 있으면 편집 모드
+ */
+export function commandManageConversation(workspaceId: number, commandId?: number): boolean {
+  const pylonId = getPylonIdFromWorkspace(workspaceId);
+  return sendMessage({
+    type: MessageType.COMMAND_MANAGE_CONVERSATION,
+    payload: { workspaceId, commandId },
+    to: [pylonId],
+  });
+}
+
+/**
  * Widget 소유권 요청 전송
  *
  * ready 상태의 위젯에 대해 소유권을 요청합니다.
