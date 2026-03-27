@@ -139,6 +139,10 @@ export interface PylonMcpServerOptions {
     removed?: number[];
     updated?: unknown[];
   }) => void;
+  /** 대화 생성 후 초기 메시지 전송 콜백 */
+  onConversationInitialMessage?: (conversationId: number, message: string) => void;
+  /** 대화 생성 후 자동 전환 콜백 */
+  onConversationAutoSelect?: (conversationId: number) => void;
 }
 
 /** 요청 타입 */
@@ -177,6 +181,10 @@ interface McpRequest {
     removed?: number[];
     updated?: unknown[];
   };
+  /** 대화 생성 후 전송할 초기 메시지 (create_conversation 액션에서 사용) */
+  initialMessage?: string;
+  /** 대화 생성 후 자동 전환 여부 (create_conversation 액션에서 사용) */
+  autoSelect?: boolean;
 }
 
 /** 파일 정보 타입 */
@@ -377,6 +385,8 @@ export class PylonMcpServer {
     removed?: number[];
     updated?: unknown[];
   }) => void;
+  private _onConversationInitialMessage?: (conversationId: number, message: string) => void;
+  private _onConversationAutoSelect?: (conversationId: number) => void;
 
   /** 대기 중인 위젯 Map (conversationId → PendingWidget) */
   private readonly _pendingWidgets: Map<number, PendingWidget> = new Map();
@@ -405,6 +415,8 @@ export class PylonMcpServer {
     this._onWidgetEvent = options?.onWidgetEvent;
     this._broadcastWidgetReady = options?.broadcastWidgetReady;
     this._onCommandChanged = options?.onCommandChanged;
+    this._onConversationInitialMessage = options?.onConversationInitialMessage;
+    this._onConversationAutoSelect = options?.onConversationAutoSelect;
   }
 
   // ============================================================================
@@ -796,7 +808,7 @@ export class PylonMcpServer {
         return this._handleGetStatus(conversationId as ConversationId);
 
       case 'create_conversation':
-        return this._handleCreateConversation(conversationId as ConversationId, request.name, request.files);
+        return this._handleCreateConversation(conversationId as ConversationId, request.name, request.files, request.initialMessage, request.autoSelect);
 
       case 'delete_conversation':
         return this._handleDeleteConversation(conversationId as ConversationId, request.target);
@@ -1297,6 +1309,8 @@ export class PylonMcpServer {
     conversationId: ConversationId,
     name?: string,
     files?: string[],
+    initialMessage?: string,
+    autoSelect?: boolean,
   ): McpResponse {
     // 대화 존재 확인 및 workspaceId 추출
     const conversation = this._workspaceStore.getConversation(conversationId);
@@ -1357,8 +1371,18 @@ export class PylonMcpServer {
       };
     }
 
-    // 대화 생성 콜백 호출
+    // 대화 생성 콜백 호출 (초기 컨텍스트 전송)
     this._onConversationCreate?.(newConversation.conversationId);
+
+    // 초기 메시지 전송 (초기 컨텍스트 뒤에 전송)
+    if (initialMessage) {
+      this._onConversationInitialMessage?.(newConversation.conversationId, initialMessage);
+    }
+
+    // 자동 전환
+    if (autoSelect) {
+      this._onConversationAutoSelect?.(newConversation.conversationId);
+    }
 
     return response;
   }

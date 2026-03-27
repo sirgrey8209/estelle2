@@ -191,6 +191,8 @@ interface PylonRequest {
   height?: number;
   agent?: AgentType;
   delta?: CommandChangedDelta;
+  initialMessage?: string;
+  autoSelect?: boolean;
 }
 
 // ============================================================================
@@ -322,6 +324,8 @@ export class PylonClient {
     name?: string,
     files?: string[],
     agent?: AgentType,
+    initialMessage?: string,
+    autoSelect?: boolean,
   ): Promise<ConversationResult> {
     if (!toolUseId || toolUseId === '') {
       return {
@@ -336,6 +340,8 @@ export class PylonClient {
       name,
       files,
       agent,
+      initialMessage,
+      autoSelect,
     });
   }
 

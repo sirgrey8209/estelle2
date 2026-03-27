@@ -89,7 +89,7 @@ function createPylonClient(): PylonClient {
  * @returns MCP 표준 응답
  */
 export async function executeCreateConversation(
-  args: { name?: string; files?: string[]; agent?: string },
+  args: { name?: string; files?: string[]; agent?: string; initialMessage?: string; autoSelect?: boolean },
   meta: ToolMeta,
 ): Promise<ToolResult> {
   try {
@@ -99,6 +99,8 @@ export async function executeCreateConversation(
       args.name,
       args.files,
       args.agent as AgentType | undefined,
+      args.initialMessage,
+      args.autoSelect,
     );
 
     if (!result.success) {
@@ -225,6 +227,14 @@ export function getCreateConversationToolDefinition(): ToolDefinition {
           type: 'string',
           enum: ['claude', 'codex'],
           description: '사용할 에이전트 (선택, 기본값: "claude")',
+        },
+        initialMessage: {
+          type: 'string',
+          description: '대화 생성 후 자동으로 전송할 초기 메시지 (선택)',
+        },
+        autoSelect: {
+          type: 'boolean',
+          description: '생성 후 해당 대화로 자동 전환 (선택, 기본값: false)',
         },
       },
       required: [],

@@ -544,6 +544,16 @@ async function main(): Promise<void> {
     broadcastWidgetReady: (sessionId, conversationId, toolUseId) => {
       pylon.broadcastWidgetReady(sessionId, conversationId, toolUseId);
     },
+    onConversationInitialMessage: (conversationId: number, message: string) => {
+      // 초기 컨텍스트(sendInitialContext)는 이미 onConversationCreate에서 전송됨
+      // initialMessage는 그 뒤에 사용자 메시지로 전송
+      pylon.triggerClaudeSend(conversationId, message);
+    },
+    onConversationAutoSelect: (conversationId: number) => {
+      deps.workspaceStore.setActiveConversation(conversationId as ConversationId);
+      pylon.broadcastWorkspaceList();
+      pylon.triggerSaveWorkspaceStore().catch(() => {});
+    },
     onCommandChanged: (delta) => {
       if (delta) {
         deps.relayClient.send({

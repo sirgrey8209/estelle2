@@ -662,6 +662,24 @@ export class Pylon {
     this.sendInitialContext(conversationId);
   }
 
+  /**
+   * 사용자 메시지 전송 트리거 (외부에서 호출 가능)
+   *
+   * @description
+   * MCP create_conversation의 initialMessage 등에서 사용합니다.
+   * 내부 handleClaudeSend를 호출하여 Claude에게 메시지를 전송합니다.
+   */
+  triggerClaudeSend(conversationId: number, message: string): void {
+    this.handleClaudeSend({ conversationId, message }, undefined);
+  }
+
+  /**
+   * 워크스페이스 저장 트리거 (외부에서 호출 가능)
+   */
+  triggerSaveWorkspaceStore(): Promise<void> {
+    return this.saveWorkspaceStore();
+  }
+
   // ==========================================================================
   // Public 메서드 - 메시지 처리
   // ==========================================================================
