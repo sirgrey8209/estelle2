@@ -98,10 +98,23 @@ async function waitForPort(port: number, maxRetries = 10): Promise<void> {
 }
 
 /**
- * 사용 가능한 랜덤 포트 반환
+ * 사용 가능한 랜덤 포트 반환 (OS가 할당한 포트를 사용하여 충돌 방지)
  */
-function getRandomPort(): number {
-  return 10000 + Math.floor(Math.random() * 50000);
+async function getRandomPort(): Promise<number> {
+  const { createServer } = await import('net');
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address();
+      if (addr && typeof addr === 'object') {
+        const port = addr.port;
+        srv.close(() => resolve(port));
+      } else {
+        srv.close(() => reject(new Error('Failed to get port')));
+      }
+    });
+    srv.on('error', reject);
+  });
 }
 
 describe('PylonMcpServer', () => {
@@ -114,13 +127,13 @@ describe('PylonMcpServer', () => {
   // encodeConversationId(1, 1, 1) = (1 << 17) | (1 << 10) | 1 = 132097
   const TEST_CONVERSATION_ID = 132097;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // WorkspaceStore 설정: 워크스페이스와 대화 생성
     workspaceStore = new WorkspaceStore(PYLON_ID);
     const { workspace } = workspaceStore.createWorkspace('Test Workspace', 'C:\\test');
     workspaceStore.createConversation(workspace.workspaceId, 'Test Conversation');
 
-    TEST_PORT = getRandomPort();
+    TEST_PORT = await getRandomPort();
     server = new PylonMcpServer(workspaceStore, { port: TEST_PORT });
   });
 
@@ -954,7 +967,7 @@ describe('PylonMcpServer', () => {
       // 기존 서버 종료
       await server.close();
       // 새 포트 할당 (포트 충돌 방지)
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
       // toolUseId → conversationId 조회 콜백 설정
       const serverWithLookup = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1230,7 +1243,7 @@ describe('PylonMcpServer', () => {
       // 기존 서버 종료
       await server.close();
       // 새 포트 할당 (포트 충돌 방지)
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
       // toolUseId → conversationId 조회 콜백 설정
       const serverWithLookup = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1322,7 +1335,7 @@ describe('PylonMcpServer', () => {
       let receivedConversationId: number | null = null;
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1365,7 +1378,7 @@ describe('PylonMcpServer', () => {
       const receivedIds: number[] = [];
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1408,7 +1421,7 @@ describe('PylonMcpServer', () => {
     it('should_create_conversation_normally_when_callback_not_provided', async () => {
       // Arrange - onConversationCreate 콜백 없이 서버 생성
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       const serverWithoutCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1448,7 +1461,7 @@ describe('PylonMcpServer', () => {
       let callbackCalled = false;
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       const serverWithCallback = new PylonMcpServer(workspaceStore, {
         port: TEST_PORT,
@@ -1508,7 +1521,7 @@ describe('PylonMcpServer', () => {
       const TEST_TOOL_USE_ID_WIDGET_2 = 'toolu_test_widget_dup_456';
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       let sessionCount = 0;
       let cancelSessionCalled = false;
@@ -1583,7 +1596,7 @@ describe('PylonMcpServer', () => {
       let sessionStarted = false;
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       // Mock WidgetManager - prepareSession 후 pending 확인
       const mockWidgetManager = {
@@ -1638,7 +1651,7 @@ describe('PylonMcpServer', () => {
       const MOCK_SESSION_ID = 'find-test-session-id';
 
       await server.close();
-      TEST_PORT = getRandomPort();
+      TEST_PORT = await getRandomPort();
 
       // Mock WidgetManager
       const mockWidgetManager = {
@@ -1699,7 +1712,7 @@ describe('PylonMcpServer', () => {
         let cancelledSessionId: string | null = null;
 
         await server.close();
-        TEST_PORT = getRandomPort();
+        TEST_PORT = await getRandomPort();
 
         // Mock WidgetManager - owner를 설정해야 onWidgetClose가 호출됨
         const MOCK_OWNER_CLIENT_ID = 42;

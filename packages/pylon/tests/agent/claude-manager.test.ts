@@ -1268,7 +1268,7 @@ describe('AgentManager', () => {
       manager = createManager({
         adapter: {
           async *query(options) {
-            receivedOptions = options;
+            receivedOptions ??= options;
             yield { type: 'system', subtype: 'init', session_id: 'new-session' };
           },
         },
@@ -1303,7 +1303,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
+              receivedOptions ??= options;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
               yield {
                 type: 'result',
@@ -1331,7 +1331,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
+              receivedOptions ??= options;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1354,7 +1354,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
+              receivedOptions ??= options;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1381,7 +1381,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedPrompt = options.prompt;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1409,7 +1409,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedPrompt = options.prompt;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1434,7 +1434,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedPrompt = options.prompt;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1458,7 +1458,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedPrompt = options.prompt;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1486,7 +1486,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedPrompt = options.prompt;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1512,7 +1512,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
+              receivedOptions ??= options;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1537,7 +1537,7 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
+              receivedOptions ??= options;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },
@@ -1568,8 +1568,8 @@ describe('AgentManager', () => {
         manager = createManager({
           adapter: {
             async *query(options) {
-              receivedOptions = options;
-              receivedPrompt = options.prompt;
+              receivedOptions ??= options;
+              receivedPrompt ??= options.prompt;
               yield { type: 'system', subtype: 'init', session_id: 'sess-1' };
             },
           },

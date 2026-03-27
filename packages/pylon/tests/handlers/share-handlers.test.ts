@@ -99,8 +99,21 @@ async function waitForPort(port: number, maxRetries = 10): Promise<void> {
 /**
  * 사용 가능한 랜덤 포트 반환
  */
-function getRandomPort(): number {
-  return 10000 + Math.floor(Math.random() * 50000);
+async function getRandomPort(): Promise<number> {
+  const { createServer } = await import('net');
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address();
+      if (addr && typeof addr === 'object') {
+        const port = addr.port;
+        srv.close(() => resolve(port));
+      } else {
+        srv.close(() => reject(new Error('Failed to get port')));
+      }
+    });
+    srv.on('error', reject);
+  });
 }
 
 // ============================================================================
@@ -119,7 +132,7 @@ describe('PylonMcpServer Share Actions', () => {
   // encodeConversationId(1, 1, 1) = (1 << 17) | (1 << 10) | 1 = 132097
   const TEST_CONVERSATION_ID = 132097;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // WorkspaceStore 설정: 워크스페이스와 대화 생성
     workspaceStore = new WorkspaceStore(PYLON_ID);
     const { workspace } = workspaceStore.createWorkspace('Test Workspace', 'C:\\test');
@@ -131,7 +144,7 @@ describe('PylonMcpServer Share Actions', () => {
     // MessageStore 설정
     messageStore = new MessageStore(':memory:');
 
-    TEST_PORT = getRandomPort();
+    TEST_PORT = await getRandomPort();
 
     // PylonMcpServer에 ShareStore와 MessageStore 전달 (아직 구현되지 않음)
     // 이 테스트는 구현 전에 실패해야 함
