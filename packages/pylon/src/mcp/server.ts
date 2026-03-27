@@ -9,7 +9,7 @@
  * - send_file: 사용자에게 파일 전송
  * - link_doc / unlink_doc / list_docs: 문서 연결 관리
  * - get_status: 현재 대화/Pylon 상태 조회
- * - create_command / update_command / delete_command / list_commands / assign_command: 커맨드 관리
+ * - create_command / update_command / delete_command / list_commands / get_command / assign_command / unassign_command: 커맨드 관리
  */
 
 import fs from 'fs';
@@ -59,12 +59,16 @@ import {
   executeUpdateCommand,
   executeDeleteCommand,
   executeListCommands,
+  executeGetCommand,
   executeAssignCommand,
+  executeUnassignCommand,
   getCreateCommandToolDefinition,
   getUpdateCommandToolDefinition,
   getDeleteCommandToolDefinition,
   getListCommandsToolDefinition,
+  getGetCommandToolDefinition,
   getAssignCommandToolDefinition,
+  getUnassignCommandToolDefinition,
 } from './tools/command.js';
 
 const WORKING_DIR = process.env.ESTELLE_WORKING_DIR || process.cwd();
@@ -136,7 +140,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     getUpdateCommandToolDefinition(),
     getDeleteCommandToolDefinition(),
     getListCommandsToolDefinition(),
+    getGetCommandToolDefinition(),
     getAssignCommandToolDefinition(),
+    getUnassignCommandToolDefinition(),
   ],
 }));
 
@@ -228,8 +234,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       );
       return result as unknown as Record<string, unknown>;
     }
+    case 'get_command': {
+      const result = await executeGetCommand(
+        args as { commandId?: number },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
     case 'assign_command': {
       const result = await executeAssignCommand(
+        args as { commandId?: number; workspaceIds?: (number | null)[] },
+      );
+      return result as unknown as Record<string, unknown>;
+    }
+    case 'unassign_command': {
+      const result = await executeUnassignCommand(
         args as { commandId?: number; workspaceIds?: (number | null)[] },
       );
       return result as unknown as Record<string, unknown>;

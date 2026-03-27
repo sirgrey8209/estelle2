@@ -7,7 +7,9 @@
  * - update_command: 커맨드 수정
  * - delete_command: 커맨드 삭제
  * - list_commands: 커맨드 목록 조회
+ * - get_command: 커맨드 상세 조회
  * - assign_command: 워크스페이스 할당 변경
+ * - unassign_command: 워크스페이스 할당 해제
  *
  * 커맨드는 특정 대화와 무관한 글로벌 데이터이므로,
  * CommandStore에 직접 접근하여 CRUD를 수행합니다.
@@ -307,6 +309,39 @@ export async function executeListCommands(
 }
 
 // ============================================================================
+// executeGetCommand
+// ============================================================================
+
+/**
+ * get_command MCP 도구 실행
+ *
+ * @param args - 도구 인자 (commandId)
+ * @returns MCP 표준 응답
+ */
+export async function executeGetCommand(
+  args: { commandId?: number },
+): Promise<ToolResult> {
+  if (args.commandId === undefined || args.commandId === null) {
+    return createErrorResponse('커맨드 ID를 입력해주세요 (commandId 필수)');
+  }
+  try {
+    const store = getCommandStore();
+    const command = store.getCommandById(args.commandId);
+    if (!command) {
+      return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
+    }
+    const workspaceIds = store.getAssignedWorkspaceIds(args.commandId);
+    return createSuccessResponse({
+      success: true,
+      command: { ...command, workspaceIds },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return createErrorResponse(`커맨드 조회 실패: ${message}`);
+  }
+}
+
+// ============================================================================
 // executeAssignCommand
 // ============================================================================
 
@@ -358,6 +393,46 @@ export async function executeAssignCommand(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return createErrorResponse(`워크스페이스 할당 실패: ${message}`);
+  }
+}
+
+// ============================================================================
+// executeUnassignCommand
+// ============================================================================
+
+/**
+ * unassign_command MCP 도구 실행
+ *
+ * @param args - 도구 인자 (commandId, workspaceIds)
+ * @returns MCP 표준 응답
+ */
+export async function executeUnassignCommand(
+  args: { commandId?: number; workspaceIds?: (number | null)[] },
+): Promise<ToolResult> {
+  if (args.commandId === undefined || args.commandId === null) {
+    return createErrorResponse('커맨드 ID를 입력해주세요 (commandId 필수)');
+  }
+  if (!args.workspaceIds || !Array.isArray(args.workspaceIds)) {
+    return createErrorResponse('워크스페이스 ID 배열을 입력해주세요 (workspaceIds 필수)');
+  }
+  try {
+    const store = getCommandStore();
+    const content = store.getContent(args.commandId);
+    if (content === null) {
+      return createErrorResponse(`커맨드를 찾을 수 없어요 (id: ${args.commandId})`);
+    }
+    for (const wsId of args.workspaceIds) {
+      store.unassignCommand(args.commandId, wsId);
+    }
+    await notifyCommandChangedSafe();
+    return createSuccessResponse({
+      success: true,
+      commandId: args.commandId,
+      unassignedWorkspaceIds: args.workspaceIds,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return createErrorResponse(`워크스페이스 할당 해제 실패: ${message}`);
   }
 }
 
@@ -479,6 +554,26 @@ export function getListCommandsToolDefinition(): ToolDefinition {
 }
 
 /**
+ * get_command 도구 정의 반환
+ */
+export function getGetCommandToolDefinition(): ToolDefinition {
+  return {
+    name: 'get_command',
+    description: '커맨드 ID로 상세 정보를 조회합니다. 할당된 워크스페이스 목록도 포함됩니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commandId: {
+          type: 'integer',
+          description: '조회할 커맨드 ID',
+        },
+      },
+      required: ['commandId'],
+    },
+  };
+}
+
+/**
  * assign_command 도구 정의 반환
  */
 export function getAssignCommandToolDefinition(): ToolDefinition {
@@ -496,6 +591,31 @@ export function getAssignCommandToolDefinition(): ToolDefinition {
           type: 'array',
           items: { type: ['integer', 'null'] },
           description: '할당할 워크스페이스 ID 배열 (null은 글로벌)',
+        },
+      },
+      required: ['commandId', 'workspaceIds'],
+    },
+  };
+}
+
+/**
+ * unassign_command 도구 정의 반환
+ */
+export function getUnassignCommandToolDefinition(): ToolDefinition {
+  return {
+    name: 'unassign_command',
+    description: '커맨드의 워크스페이스 할당을 해제합니다. null은 글로벌 할당 해제입니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        commandId: {
+          type: 'integer',
+          description: '할당 해제할 커맨드 ID',
+        },
+        workspaceIds: {
+          type: 'array',
+          items: { type: ['integer', 'null'] },
+          description: '할당 해제할 워크스페이스 ID 배열 (null은 글로벌 해제)',
         },
       },
       required: ['commandId', 'workspaceIds'],
