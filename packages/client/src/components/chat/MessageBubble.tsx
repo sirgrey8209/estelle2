@@ -6,8 +6,10 @@ import type {
   ToolCompleteMessage,
   ErrorMessage,
   UserResponseMessage,
+  CommandExecuteMessage,
 } from '@estelle/core';
 import { ToolCard, type ChildToolInfo, type McpFileInfo } from './ToolCard';
+import { CommandBubble } from './CommandBubble';
 import { cn } from '../../lib/utils';
 import { MarkdownContent } from '../../lib/markdown';
 
@@ -57,6 +59,19 @@ export function MessageBubble({
   const isToolComplete = message.type === 'tool_complete';
   const isError = message.type === 'error';
   const isUserResponse = message.type === 'user_response';
+
+  // command_execute: 커맨드 실행 버블
+  if (message.type === 'command_execute') {
+    const cmdMsg = message as CommandExecuteMessage;
+    return (
+      <CommandBubble
+        commandName={cmdMsg.commandName}
+        commandIcon={cmdMsg.commandIcon}
+        commandColor={cmdMsg.commandColor}
+        content={cmdMsg.content}
+      />
+    );
+  }
 
   if (isToolStart || isToolComplete) {
     const toolMsg = message as ToolStartMessage | ToolCompleteMessage;

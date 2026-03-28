@@ -2,7 +2,9 @@ import { useCallback, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { Plus } from 'lucide-react';
 import { useCommandStore } from '../../stores/commandStore';
+import { useConversationStore } from '../../stores/conversationStore';
 import { executeCommand, commandManageConversation } from '../../services/relaySender';
+import type { StoreMessage } from '@estelle/core';
 
 interface CommandToolbarProps {
   conversationId: number | null;
@@ -69,9 +71,29 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
         return; // 롱프레스 후 클릭 무시
       }
       if (conversationId == null) return;
+
+      // commandStore에서 커맨드 정보 가져오기
+      const cmd = commands.find((c) => c.id === cmdId);
+      if (cmd) {
+        // optimistic update: command_execute 임시 메시지 추가
+        const tempMessage = {
+          id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          role: 'user' as const,
+          type: 'command_execute' as const,
+          content: cmd.content,
+          timestamp: Date.now(),
+          commandId: cmd.id,
+          commandName: cmd.name,
+          commandIcon: cmd.icon,
+          commandColor: cmd.color,
+          temporary: true,
+        } as StoreMessage;
+        useConversationStore.getState().addMessage(conversationId, tempMessage);
+      }
+
       executeCommand(cmdId, conversationId);
     },
-    [conversationId]
+    [conversationId, commands]
   );
 
   const handlePointerDown = useCallback((cmdId: number) => {
