@@ -27,14 +27,14 @@ export function CommandBubble({ commandName, commandIcon, commandColor, content 
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="my-1">
+    <div className="my-0.5 ml-2 rounded border border-l-2 border-primary bg-muted overflow-hidden max-w-[400px]">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+        className="w-full flex items-center px-2 py-1 hover:bg-muted/50 transition-colors"
       >
         <BubbleIcon icon={commandIcon} color={commandColor} />
-        <span className="font-medium">{commandName}</span>
-        <span className="text-muted-foreground">실행</span>
+        <span className="ml-1.5 text-sm font-medium">{commandName}</span>
+        <span className="flex-1 ml-1.5 text-xs text-muted-foreground">실행</span>
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         ) : (
@@ -42,7 +42,7 @@ export function CommandBubble({ commandName, commandIcon, commandColor, content 
         )}
       </button>
       {expanded && (
-        <div className="mt-1 px-3 py-2 text-xs text-muted-foreground bg-secondary/30 rounded-lg whitespace-pre-wrap">
+        <div className="border-t border-border/50 px-2 py-1 text-xs text-muted-foreground whitespace-pre-wrap">
           {content}
         </div>
       )}
