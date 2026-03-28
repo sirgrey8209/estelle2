@@ -897,6 +897,55 @@ function handleClaudeEventForConversation(
       break;
     }
 
+    case 'userMessage': {
+      const messages = store.getState(conversationId)?.messages ?? [];
+      const lastMsg = messages[messages.length - 1];
+
+      const realMessage: StoreMessage = {
+        id: (event.id as string) || `user-${Date.now()}`,
+        role: 'user',
+        type: 'text',
+        content: (event.content as string) || '',
+        timestamp: (event.timestamp as number) || Date.now(),
+        ...(event.attachments ? { attachments: event.attachments as any[] } : {}),
+      };
+
+      if (lastMsg && (lastMsg as any).temporary) {
+        // 임시 메시지 → 실제 메시지로 교체
+        const updated = [...messages.slice(0, -1), realMessage];
+        store.setMessages(conversationId, updated);
+      } else {
+        // 다른 클라이언트 → 새로 추가
+        store.addMessage(conversationId, realMessage);
+      }
+      break;
+    }
+
+    case 'commandExecute': {
+      const messages = store.getState(conversationId)?.messages ?? [];
+      const lastMsg = messages[messages.length - 1];
+
+      const realMessage: StoreMessage = {
+        id: (event.id as string) || `cmd-${Date.now()}`,
+        role: 'user',
+        type: 'command_execute',
+        content: (event.content as string) || '',
+        timestamp: (event.timestamp as number) || Date.now(),
+        commandId: event.commandId as number,
+        commandName: (event.commandName as string) || '',
+        commandIcon: (event.commandIcon as string | null) ?? null,
+        commandColor: (event.commandColor as string | null) ?? null,
+      } as StoreMessage;
+
+      if (lastMsg && (lastMsg as any).temporary) {
+        const updated = [...messages.slice(0, -1), realMessage];
+        store.setMessages(conversationId, updated);
+      } else {
+        store.addMessage(conversationId, realMessage);
+      }
+      break;
+    }
+
     default:
       break;
   }

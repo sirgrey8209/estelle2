@@ -95,6 +95,7 @@ export function ChatArea() {
           type: 'text',
           content: pending.text,
           timestamp: Date.now(),
+          temporary: true,
           attachments: pending.attachments.map((a, i) => ({
             filename: a.fileName,
             path: pending.pylonPaths[i] || a.uri,
@@ -188,6 +189,7 @@ export function ChatArea() {
       type: 'text',
       content: text,
       timestamp: Date.now(),
+      temporary: true,
       attachments: attachments?.map((a) => ({
         filename: a.fileName,
         path: a.uri,
