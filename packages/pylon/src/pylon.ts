@@ -3768,7 +3768,8 @@ Message: ${message}
    * command_execute 처리
    *
    * @description
-   * 커맨드 ID로 저장된 content를 조회하고 claude_send와 동일하게 처리합니다.
+   * 커맨드 ID로 전체 커맨드 데이터를 조회하여 command_execute 타입으로 저장하고,
+   * commandExecute 이벤트를 브로드캐스트한 뒤, Claude에게는 content만 전달합니다.
    */
   private handleCommandExecute(
     payload: Record<string, unknown> | undefined,
@@ -3780,8 +3781,9 @@ Message: ${message}
     const conversationId = payload?.conversationId as number;
     if (!commandId || !conversationId) return;
 
-    const content = this.deps.commandStore.getContent(commandId);
-    if (!content) {
+    // 커맨드 전체 데이터 조회
+    const command = this.deps.commandStore.getCommandById(commandId);
+    if (!command) {
       if (from?.deviceId) {
         this.send({
           type: 'error',
@@ -3792,11 +3794,42 @@ Message: ${message}
       return;
     }
 
-    // 기존 claude_send 처리와 동일하게 처리
-    this.handleClaudeSend(
-      { conversationId, message: content },
-      from
+    // 1. messageStore에 command_execute 타입으로 저장
+    this.deps.messageStore.addCommandExecuteMessage(
+      conversationId,
+      command.content,
+      command.id,
+      command.name,
+      command.icon,
+      command.color,
     );
+    this.scheduleSaveMessages(conversationId);
+
+    // 2. claude_event(commandExecute) 브로드캐스트
+    this.send({
+      type: 'claude_event',
+      payload: {
+        conversationId,
+        event: {
+          type: 'commandExecute',
+          content: command.content,
+          timestamp: Date.now(),
+          commandId: command.id,
+          commandName: command.name,
+          commandIcon: command.icon,
+          commandColor: command.color,
+        },
+      },
+      broadcast: 'clients',
+    });
+
+    // 3. Claude에게는 일반 텍스트로 전달
+    const workingDir = this.getWorkingDirForConversation(conversationId as ConversationId);
+    if (workingDir) {
+      this.deps.agentManager.sendMessage(conversationId, command.content, {
+        workingDir,
+      });
+    }
   }
 
   /**
