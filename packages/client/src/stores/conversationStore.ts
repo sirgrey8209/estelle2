@@ -352,7 +352,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       : 0;
     const historyIds = new Set(messages.map((m) => m.id));
     const realtimeMessages = state.messages.filter(
-      (m) => !historyIds.has(m.id) && m.timestamp > historyLastTimestamp
+      (m) => !historyIds.has(m.id) && m.timestamp > historyLastTimestamp && !(m as any).temporary
     );
 
     // 히스토리 + 실시간 메시지 (시간순 정렬)

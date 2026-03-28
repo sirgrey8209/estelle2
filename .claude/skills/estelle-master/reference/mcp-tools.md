@@ -1,6 +1,6 @@
 # Estelle MCP 도구 레퍼런스
 
-> 코드 기반 분석 (2026-03-16)
+> 코드 기반 분석 (2026-03-28)
 
 ## MCP 서버 구조
 
@@ -141,6 +141,31 @@ Pylon
 ### 제약
 
 - 현재 대화는 삭제 불가
+
+### 처리 흐름
+
+MCP 도구 경로와 Client UI 경로가 동일한 정리 로직을 사용:
+
+```
+MCP 도구 경로:
+  _handleDeleteConversation()
+    1. target 검색 (ID 또는 이름)
+    2. 현재 대화 삭제 차단
+    3. onConversationDelete 콜백 → Pylon.triggerConversationDelete()
+
+Client UI 경로:
+  ChatHeader → relaySender.deleteConversation()
+    → CONVERSATION_DELETE 메시지 → Pylon.handleConversationDelete()
+```
+
+두 경로 모두 `handleConversationDelete()`에서 처리:
+
+1. `agentManager.stop()` — Agent 세션 정리 (try-catch, 실패해도 삭제 계속)
+2. `cancelWidgetForConversation()` — Widget 세션 정리
+3. `clearMessagesForConversation()` — SQLite 메시지 삭제
+4. `workspaceStore.deleteConversation()` — 메모리 상태 제거
+5. `broadcastWorkspaceList()` — 클라이언트 동기화
+6. `saveWorkspaceStore()` — 영속 저장소 저장
 
 ---
 
@@ -454,6 +479,10 @@ toolUseId → conversationId 매핑
 ---
 
 ## 주요 업데이트 (2026-03-03 이후)
+- `delete_conversation` MCP 경로와 Client UI 경로 통일 — 동일한 정리 로직 사용 (2026-03-28)
+- `delete_conversation` 삭제 시 Agent 세션 정리 추가 (`agentManager.stop()`) (2026-03-28)
+- `handleWorkspaceDelete`에 Agent/Widget 정리 추가 (2026-03-28)
+- PylonMcpServer에 `onConversationDelete` 콜백 추가, `triggerConversationDelete` public wrapper 추가 (2026-03-28)
 - `run_widget` 도구 추가 (CLI 기반 인터랙티브 위젯)
 - `run_widget_inline` 도구 추가 (HTML/JS 인라인 위젯)
 - `create_conversation`에 `agent` 파라미터 추가 ("claude" 또는 "codex")
