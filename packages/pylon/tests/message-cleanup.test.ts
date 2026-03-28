@@ -293,7 +293,7 @@ describe('메시지 정리', () => {
       });
 
       // Assert: agent stop 실패에도 불구하고 대화는 삭제되어야 함
-      expect(deps.workspaceStore.getConversation(conversation.conversationId)).toBeFalsy();
+      expect(deps.workspaceStore.getConversation(conversation.conversationId)).toBeNull();
     });
   });
 
