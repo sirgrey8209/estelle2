@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { Plus } from 'lucide-react';
 import { useCommandStore } from '../../stores/commandStore';
@@ -53,98 +53,196 @@ function CommandIcon({ icon, color }: { icon: string | null; color: string | nul
 
 /**
  * 커맨드 툴바
- * - 커맨드 버튼 목록 (가로 스크롤)
- * - + 버튼 → 새 커맨드 생성 대화
- * - 롱프레스 → 커맨드 편집 대화
+ * - 클릭으로 선택, 선택된 상태에서 클릭으로 실행
+ * - 선택된 커맨드 버튼 롱프레스 → 게이지 애니메이션 후 커맨드 편집 대화
+ * - + 버튼 → 선택 후 클릭으로 새 커맨드 생성 대화
  */
 export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarProps) {
   const commandsByWorkspace = useCommandStore((state) => state.commandsByWorkspace);
   const commands = workspaceId ? (commandsByWorkspace.get(workspaceId) ?? []) : [];
 
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFired = useRef(false);
+  const [selectedId, setSelectedId] = useState<number | 'add' | null>(null);
+  const [longPressProgress, setLongPressProgress] = useState(0);
 
-  const handleExecute = useCallback(
+  const longPressFired = useRef(false);
+  const longPressStart = useRef<number | null>(null);
+  const longPressRaf = useRef<number | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // Outside click: deselect when clicking outside toolbar
+  useEffect(() => {
+    if (selectedId == null) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setSelectedId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [selectedId]);
+
+  const handleCommandClick = useCallback(
     (cmdId: number) => {
       if (longPressFired.current) {
         longPressFired.current = false;
         return; // 롱프레스 후 클릭 무시
       }
-      if (conversationId == null) return;
 
-      // commandStore에서 커맨드 정보 가져오기
-      const cmd = commands.find((c) => c.id === cmdId);
-      if (cmd) {
-        // optimistic update: command_execute 임시 메시지 추가
-        const tempMessage = {
-          id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          role: 'user' as const,
-          type: 'command_execute' as const,
-          content: cmd.content,
-          timestamp: Date.now(),
-          commandId: cmd.id,
-          commandName: cmd.name,
-          commandIcon: cmd.icon,
-          commandColor: cmd.color,
-          temporary: true,
-        } as StoreMessage;
-        useConversationStore.getState().addMessage(conversationId, tempMessage);
+      if (selectedId === cmdId) {
+        // 선택된 버튼 클릭 → 실행 후 선택 해제
+        if (conversationId == null) return;
+
+        const cmd = commands.find((c) => c.id === cmdId);
+        if (cmd) {
+          // optimistic update: command_execute 임시 메시지 추가
+          const tempMessage = {
+            id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            role: 'user' as const,
+            type: 'command_execute' as const,
+            content: cmd.content,
+            timestamp: Date.now(),
+            commandId: cmd.id,
+            commandName: cmd.name,
+            commandIcon: cmd.icon,
+            commandColor: cmd.color,
+            temporary: true,
+          } as StoreMessage;
+          useConversationStore.getState().addMessage(conversationId, tempMessage);
+        }
+
+        executeCommand(cmdId, conversationId);
+        setSelectedId(null);
+      } else {
+        // 미선택 또는 다른 버튼 클릭 → 선택
+        setSelectedId(cmdId);
       }
-
-      executeCommand(cmdId, conversationId);
     },
-    [conversationId, commands]
+    [selectedId, conversationId, commands]
   );
 
-  const handlePointerDown = useCallback((cmdId: number) => {
-    longPressFired.current = false;
-    longPressTimer.current = setTimeout(() => {
-      longPressFired.current = true;
-      if (workspaceId) {
-        commandManageConversation(workspaceId, cmdId);
-      }
-      longPressTimer.current = null;
-    }, 500); // 500ms 롱프레스
-  }, [workspaceId]);
-
-  const handlePointerUp = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+  const handleAddClick = useCallback(() => {
+    if (longPressFired.current) {
+      longPressFired.current = false;
+      return;
     }
+
+    if (selectedId === 'add') {
+      // 선택된 상태에서 클릭 → 실행 후 선택 해제
+      if (workspaceId) {
+        commandManageConversation(workspaceId);
+      }
+      setSelectedId(null);
+    } else {
+      // 미선택 → 선택
+      setSelectedId('add');
+    }
+  }, [selectedId, workspaceId]);
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressRaf.current != null) {
+      cancelAnimationFrame(longPressRaf.current);
+      longPressRaf.current = null;
+    }
+    longPressStart.current = null;
+    setLongPressProgress(0);
   }, []);
 
+  const handlePointerDown = useCallback(
+    (cmdId: number) => {
+      // 롱프레스는 선택된 커맨드 버튼에서만 동작
+      if (selectedId !== cmdId) return;
+
+      longPressFired.current = false;
+      longPressStart.current = performance.now();
+
+      const animate = () => {
+        if (longPressStart.current == null) return;
+
+        const elapsed = performance.now() - longPressStart.current;
+        const progress = Math.min(elapsed / 500, 1);
+        setLongPressProgress(progress);
+
+        if (progress >= 1) {
+          // 게이지 완료 → 커맨드 편집 대화
+          longPressFired.current = true;
+          if (workspaceId) {
+            commandManageConversation(workspaceId, cmdId);
+          }
+          longPressStart.current = null;
+          longPressRaf.current = null;
+          setLongPressProgress(0);
+          return;
+        }
+
+        longPressRaf.current = requestAnimationFrame(animate);
+      };
+
+      longPressRaf.current = requestAnimationFrame(animate);
+    },
+    [selectedId, workspaceId]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    cancelLongPress();
+  }, [cancelLongPress]);
+
   return (
-    <div className="relative px-3 py-1.5">
+    <div className="relative px-3 py-1.5" ref={toolbarRef}>
       <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
         {/* 커맨드 버튼들 */}
-        {commands.map((cmd) => (
-          <button
-            key={cmd.id}
-            onClick={() => handleExecute(cmd.id)}
-            onPointerDown={() => handlePointerDown(cmd.id)}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors whitespace-nowrap shrink-0"
-            title={cmd.name}
-          >
-            <CommandIcon icon={cmd.icon} color={cmd.color} />
-            <span>{cmd.name}</span>
-          </button>
-        ))}
+        {commands.map((cmd) => {
+          const isSelected = selectedId === cmd.id;
+          return (
+            <button
+              key={cmd.id}
+              onClick={() => handleCommandClick(cmd.id)}
+              onPointerDown={() => handlePointerDown(cmd.id)}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              className={`relative flex items-center gap-1 text-xs rounded-md border transition-colors whitespace-nowrap shrink-0 overflow-hidden ${
+                isSelected
+                  ? 'px-2 py-1 ring-1 ring-primary border-primary bg-secondary/50 hover:bg-secondary'
+                  : 'p-1 border-border bg-secondary/50 hover:bg-secondary'
+              }`}
+              title={cmd.name}
+            >
+              {/* Long press gauge */}
+              {isSelected && longPressProgress > 0 && (
+                <div
+                  className="absolute inset-0 bg-primary/20 origin-left"
+                  style={{ transform: `scaleX(${longPressProgress})` }}
+                />
+              )}
+              <span className="relative flex items-center gap-1">
+                <CommandIcon icon={cmd.icon} color={cmd.color} />
+                {isSelected && <span>{cmd.name}</span>}
+              </span>
+            </button>
+          );
+        })}
 
         {/* + 추가 버튼 */}
-        <button
-          onClick={() => {
-            if (workspaceId) {
-              commandManageConversation(workspaceId);
-            }
-          }}
-          className="flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border hover:bg-secondary/50 transition-colors shrink-0"
-          title="커맨드 추가"
-        >
-          <Plus className="h-3 w-3 text-muted-foreground" />
-        </button>
+        {(() => {
+          const isAddSelected = selectedId === 'add';
+          return (
+            <button
+              onClick={handleAddClick}
+              className={`flex items-center justify-center rounded-md border transition-colors shrink-0 ${
+                isAddSelected
+                  ? 'gap-1 px-2 py-1 ring-1 ring-primary border-primary bg-secondary/50 hover:bg-secondary'
+                  : 'w-6 h-6 border-dashed border-border hover:bg-secondary/50'
+              }`}
+              title="커맨드 추가"
+            >
+              <Plus className="h-3 w-3 text-muted-foreground" />
+              {isAddSelected && <span className="text-xs whitespace-nowrap">커맨드 추가</span>}
+            </button>
+          );
+        })()}
       </div>
     </div>
   );
