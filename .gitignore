@@ -85,3 +85,4 @@ packages/app/.packages
 packages/app/build/
 packages/app/.flutter-plugins
 packages/app/.flutter-plugins-dependencies
+.worktrees/
