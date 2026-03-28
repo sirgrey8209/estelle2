@@ -512,6 +512,9 @@ async function main(): Promise<void> {
     onConversationCreate: (conversationId: number) => {
       pylon.triggerInitialContext(conversationId);
     },
+    onConversationDelete: (conversationId: number) => {
+      return pylon.triggerConversationDelete(conversationId);
+    },
     widgetManager: deps.widgetManager as WidgetManager | undefined,
     onWidgetRender: (conversationId, toolUseId, sessionId, view, ownerClientId) => {
       console.log(`[Pylon] onWidgetRender: owner=${ownerClientId}`);
