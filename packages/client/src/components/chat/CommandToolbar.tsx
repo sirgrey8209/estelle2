@@ -209,10 +209,10 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
               onPointerDown={() => handlePointerDown(cmd.id)}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
-              className={`relative flex items-center gap-1 text-xs rounded-md border transition-colors whitespace-nowrap shrink-0 overflow-hidden ${
+              className={`relative flex items-center gap-1 text-xs rounded-md transition-colors whitespace-nowrap shrink-0 overflow-hidden ${
                 isSelected
-                  ? 'px-2 py-1 ring-1 ring-primary border-primary bg-secondary/50 hover:bg-secondary'
-                  : 'p-1 border-border bg-secondary/50 hover:bg-secondary'
+                  ? 'px-2 py-1 border-2 border-primary bg-secondary/50 hover:bg-secondary'
+                  : 'p-1 border border-border bg-secondary/50 hover:bg-secondary'
               }`}
               title={cmd.name}
             >
@@ -239,7 +239,7 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
               onClick={handleAddClick}
               className={`flex items-center justify-center rounded-md border transition-colors shrink-0 ${
                 isAddSelected
-                  ? 'gap-1 px-2 py-1 ring-1 ring-primary border-primary bg-secondary/50 hover:bg-secondary'
+                  ? 'gap-1 px-2 py-1 border-2 border-primary bg-secondary/50 hover:bg-secondary'
                   : 'w-6 h-6 border-dashed border-border hover:bg-secondary/50'
               }`}
               title="커맨드 추가"
