@@ -1851,6 +1851,17 @@ export class Pylon {
     const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (workspace) {
       for (const conv of workspace.conversations) {
+        // Agent 세션 정리
+        try {
+          if (this.deps.agentManager.hasActiveSession(conv.conversationId)) {
+            this.deps.agentManager.stop(conv.conversationId);
+          }
+        } catch (err) {
+          this.deps.logger.error(`[Pylon] Failed to stop agent on workspace delete: ${err}`);
+        }
+        // 위젯 정리
+        this.deps.mcpServer?.cancelWidgetForConversation(conv.conversationId);
+        // 메시지 정리
         this.clearMessagesForConversation(conv.conversationId);
       }
     }

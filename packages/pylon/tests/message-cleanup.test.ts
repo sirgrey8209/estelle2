@@ -196,6 +196,25 @@ describe('메시지 정리', () => {
       // messageStore.clear() 또는 unloadCache()가 호출되어야 함
       expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
+
+    it('should_stop_agent_sessions_for_all_conversations_when_workspace_deleted', async () => {
+      // Arrange: 워크스페이스와 여러 대화 생성
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
+      const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
+      (deps.agentManager.hasActiveSession as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      // Act: 워크스페이스 삭제
+      pylon.handleMessage({
+        type: 'workspace_delete',
+        from: { deviceId: 'client-1' },
+        payload: { workspaceId: workspace.workspaceId },
+      });
+
+      // Assert: 모든 대화의 agent 세션이 정리되어야 함
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conv1.conversationId);
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conv2.conversationId);
+    });
   });
 
   // ==========================================================================
