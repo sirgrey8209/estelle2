@@ -674,6 +674,17 @@ export class Pylon {
   }
 
   /**
+   * 대화 삭제 트리거 (외부에서 호출 가능)
+   *
+   * @description
+   * MCP delete_conversation 등에서 대화 삭제를 요청할 때 호출합니다.
+   * agent 정리, widget 정리, 메시지 정리, store 삭제를 모두 수행합니다.
+   */
+  triggerConversationDelete(conversationId: number): boolean {
+    return this.handleConversationDelete({ conversationId });
+  }
+
+  /**
    * 워크스페이스 저장 트리거 (외부에서 호출 가능)
    */
   triggerSaveWorkspaceStore(): Promise<void> {
@@ -1851,6 +1862,17 @@ export class Pylon {
     const workspace = this.deps.workspaceStore.getWorkspace(workspaceId as number);
     if (workspace) {
       for (const conv of workspace.conversations) {
+        // Agent 세션 정리
+        try {
+          if (this.deps.agentManager.hasActiveSession(conv.conversationId)) {
+            this.deps.agentManager.stop(conv.conversationId);
+          }
+        } catch (err) {
+          this.deps.logger.error(`[Pylon] Failed to stop agent on workspace delete: ${err}`);
+        }
+        // 위젯 정리
+        this.deps.mcpServer?.cancelWidgetForConversation(conv.conversationId);
+        // 메시지 정리
         this.clearMessagesForConversation(conv.conversationId);
       }
     }
@@ -2024,11 +2046,20 @@ export class Pylon {
   /**
    * conversation_delete 처리
    */
-  private handleConversationDelete(payload: Record<string, unknown> | undefined): void {
+  private handleConversationDelete(payload: Record<string, unknown> | undefined): boolean {
     const { conversationId } = payload || {};
-    if (!conversationId) return;
+    if (!conversationId) return false;
 
     const eid = conversationId as ConversationId;
+
+    // Agent 세션 정리 (있으면)
+    try {
+      if (this.deps.agentManager.hasActiveSession(eid)) {
+        this.deps.agentManager.stop(eid);
+      }
+    } catch (err) {
+      this.deps.logger.error(`[Pylon] Failed to stop agent session on delete: ${err}`);
+    }
 
     // 위젯 정리 (있으면)
     this.deps.mcpServer?.cancelWidgetForConversation(conversationId as number);
@@ -2043,6 +2074,7 @@ export class Pylon {
         this.deps.logger.error(`[Pylon] Failed to save after conversation delete: ${err}`);
       });
     }
+    return success;
   }
 
   /**

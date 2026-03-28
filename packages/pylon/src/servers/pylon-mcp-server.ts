@@ -112,6 +112,8 @@ export interface PylonMcpServerOptions {
   onNewSession?: (conversationId: number) => void;
   /** 대화 생성 시 호출되는 콜백 (create_conversation 성공 시) */
   onConversationCreate?: (conversationId: number) => void;
+  /** 대화 삭제 시 호출되는 콜백 (delete_conversation 성공 시) */
+  onConversationDelete?: (conversationId: number) => boolean;
   /** 작업 계속 시 호출되는 콜백 (continue_task 성공 시) */
   onContinueTask?: (conversationId: number, reason?: string) => void;
   /** Widget 세션 관리자 (run_widget 액션에 필요) */
@@ -369,6 +371,7 @@ export class PylonMcpServer {
   private _messageStore?: MessageStore;
   private _onNewSession?: (conversationId: number) => void;
   private _onConversationCreate?: (conversationId: number) => void;
+  private _onConversationDelete?: (conversationId: number) => boolean;
   private _onContinueTask?: (conversationId: number, reason?: string) => void;
   private _widgetManager?: WidgetManager;
   private _onWidgetRender?: (conversationId: number, toolUseId: string, sessionId: string, view: ViewNode, ownerClientId: number) => void;
@@ -407,6 +410,7 @@ export class PylonMcpServer {
     this._messageStore = options?.messageStore;
     this._onNewSession = options?.onNewSession;
     this._onConversationCreate = options?.onConversationCreate;
+    this._onConversationDelete = options?.onConversationDelete;
     this._onContinueTask = options?.onContinueTask;
     this._widgetManager = options?.widgetManager;
     this._onWidgetRender = options?.onWidgetRender;
@@ -1473,8 +1477,10 @@ export class PylonMcpServer {
       name: targetConversation.name,
     };
 
-    // 삭제 실행
-    const success = this._workspaceStore.deleteConversation(targetConversationId);
+    // 삭제 실행 (콜백을 통해 Pylon의 정리 로직을 재사용)
+    const success = this._onConversationDelete
+      ? this._onConversationDelete(targetConversationId)
+      : this._workspaceStore.deleteConversation(targetConversationId);
     if (!success) {
       return {
         success: false,
@@ -1482,8 +1488,10 @@ export class PylonMcpServer {
       };
     }
 
-    // 변경 알림
-    this._onChange?.();
+    // 콜백이 없는 경우에만 직접 변경 알림 (콜백 내부에서 broadcast/save 처리)
+    if (!this._onConversationDelete) {
+      this._onChange?.();
+    }
 
     return {
       success: true,

@@ -196,6 +196,25 @@ describe('메시지 정리', () => {
       // messageStore.clear() 또는 unloadCache()가 호출되어야 함
       expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
     });
+
+    it('should_stop_agent_sessions_for_all_conversations_when_workspace_deleted', async () => {
+      // Arrange: 워크스페이스와 여러 대화 생성
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      const conv1 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
+      const conv2 = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv2')!;
+      (deps.agentManager.hasActiveSession as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      // Act: 워크스페이스 삭제
+      pylon.handleMessage({
+        type: 'workspace_delete',
+        from: { deviceId: 'client-1' },
+        payload: { workspaceId: workspace.workspaceId },
+      });
+
+      // Assert: 모든 대화의 agent 세션이 정리되어야 함
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conv1.conversationId);
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conv2.conversationId);
+    });
   });
 
   // ==========================================================================
@@ -242,6 +261,58 @@ describe('메시지 정리', () => {
 
       // Assert: 메시지 캐시도 클리어되어야 함
       expect(deps.messageStore.getMessages(conversation.conversationId)).toHaveLength(0);
+    });
+
+    it('should_stop_agent_session_when_conversation_deleted', () => {
+      // Arrange: 워크스페이스와 대화 생성, agent 세션 활성화
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
+      (deps.agentManager.hasActiveSession as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      // Act: 대화 삭제
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        from: { deviceId: 'client-1' },
+        payload: { conversationId: conversation.conversationId },
+      });
+
+      // Assert: agentManager.stop이 호출되어야 함
+      expect(deps.agentManager.stop).toHaveBeenCalledWith(conversation.conversationId);
+    });
+
+    it('should_not_call_agent_stop_when_no_active_session', () => {
+      // Arrange: 워크스페이스와 대화 생성, agent 세션 없음
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
+      (deps.agentManager.hasActiveSession as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+      // Act: 대화 삭제
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        from: { deviceId: 'client-1' },
+        payload: { conversationId: conversation.conversationId },
+      });
+
+      // Assert: agentManager.stop이 호출되지 않아야 함
+      expect(deps.agentManager.stop).not.toHaveBeenCalled();
+    });
+
+    it('should_continue_deletion_even_if_agent_stop_throws', () => {
+      // Arrange: agent stop이 에러를 던지도록 설정
+      const { workspace } = deps.workspaceStore.createWorkspace('Test', 'C:\\test');
+      const conversation = deps.workspaceStore.createConversation(workspace.workspaceId, 'Conv1')!;
+      (deps.agentManager.hasActiveSession as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (deps.agentManager.stop as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('stop failed'); });
+
+      // Act: 대화 삭제
+      pylon.handleMessage({
+        type: 'conversation_delete',
+        from: { deviceId: 'client-1' },
+        payload: { conversationId: conversation.conversationId },
+      });
+
+      // Assert: agent stop 실패에도 불구하고 대화는 삭제되어야 함
+      expect(deps.workspaceStore.getConversation(conversation.conversationId)).toBeNull();
     });
   });
 
