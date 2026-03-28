@@ -16,7 +16,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useSyncStore } from '../stores/syncStore';
 import { syncOrchestrator } from '../services/syncOrchestrator';
 import { clearDraftText } from '../components/chat/InputBar';
-import { sendWidgetCheck, sendWidgetClaim } from '../services/relaySender';
+import { sendWidgetCheck, sendWidgetClaim, selectConversation } from '../services/relaySender';
 import { useCommandStore } from '../stores/commandStore';
 import type { CommandDelta } from '../stores/commandStore';
 // import { debugLog } from '../stores/debugStore';
@@ -32,13 +32,14 @@ export function routeMessage(message: RelayMessage): void {
   switch (type) {
     // === Workspace 목록 ===
     case MessageType.WORKSPACE_LIST_RESULT: {
-      const { deviceId, deviceName, workspaces, activeWorkspaceId, activeConversationId, account } = payload as {
+      const { deviceId, deviceName, workspaces, activeWorkspaceId, activeConversationId, account, forceSelectConversationId } = payload as {
         deviceId: string | number;
         deviceName?: string;
         workspaces?: WorkspaceWithActive[];
         activeWorkspaceId?: string;
         activeConversationId?: string;
         account?: { current: string; subscriptionType: string };
+        forceSelectConversationId?: number;
       };
 
       console.log('[Router] workspace_list_result payload:', { deviceId, account });
@@ -146,6 +147,11 @@ export function routeMessage(message: RelayMessage): void {
             useCommandStore.getState().setWorkspaceCommands(ws.workspaceId, ws.commands);
           }
         }
+      }
+
+      // 강제 대화 전환 (커맨드 관리 대화 생성 등)
+      if (forceSelectConversationId) {
+        selectConversation(forceSelectConversationId);
       }
 
       break;

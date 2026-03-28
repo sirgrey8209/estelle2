@@ -2466,8 +2466,9 @@ export class Pylon {
 
   /**
    * 초기 컨텍스트 전송 (대화 생성/새 세션 시)
+   * @param additionalMessage - 시스템 리마인더 뒤에 추가할 메시지 (한 번에 전송)
    */
-  private sendInitialContext(conversationId: number): void {
+  private sendInitialContext(conversationId: number, additionalMessage?: string): void {
     const conversation = this.deps.workspaceStore.getConversation(conversationId as ConversationId);
     if (!conversation) return;
 
@@ -2496,11 +2497,16 @@ export class Pylon {
       catch { return null; }
     });
 
-    const systemReminder = buildInitialReminder(
+    let systemReminder = buildInitialReminder(
       conversation.name || '',
       linkedDocs,
       autorunDoc ? { autorunDoc } : undefined
     );
+
+    // 추가 메시지가 있으면 시스템 리마인더에 합쳐서 한 번에 전송
+    if (additionalMessage) {
+      systemReminder = systemReminder + '\n\n' + additionalMessage;
+    }
 
     this.deps.agentManager.sendMessage(conversationId, systemReminder, {
       workingDir,
@@ -2983,8 +2989,9 @@ Message: ${message}
 
   /**
    * 워크스페이스 목록 브로드캐스트
+   * @param options.forceSelectConversationId - 클라이언트가 강제로 전환할 대화 ID
    */
-  broadcastWorkspaceList(): void {
+  broadcastWorkspaceList(options?: { forceSelectConversationId?: number }): void {
     const workspaces = this.deps.workspaceStore.getAllWorkspaces();
     const activeState = this.deps.workspaceStore.getActiveState();
 
@@ -3007,14 +3014,18 @@ Message: ${message}
       };
     });
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       deviceId: this.config.deviceId,
       deviceInfo: this.deviceInfo,
       workspaces: workspacesWithTasks,
       activeWorkspaceId: activeState.activeWorkspaceId,
       activeConversationId: activeState.activeConversationId,
-      account: this.cachedAccount,  // 캐싱된 계정 정보 사용
+      account: this.cachedAccount,
     };
+
+    if (options?.forceSelectConversationId) {
+      payload.forceSelectConversationId = options.forceSelectConversationId;
+    }
 
     this.log(`[Broadcast] workspace_list_result account: ${JSON.stringify(this.cachedAccount)}`);
 
@@ -3942,10 +3953,7 @@ Message: ${message}
     // 기존 메시지 정리 (ID 재사용 대비)
     this.clearMessagesForConversation(conversation.conversationId);
 
-    // 초기 컨텍스트 전송
-    this.sendInitialContext(conversation.conversationId);
-
-    // 하드코딩된 프롬프트 전송
+    // 하드코딩된 프롬프트
     let prompt: string;
     if (commandId) {
       prompt = `이 워크스페이스(id: ${workspaceId}, name: ${workspace.name})에서 커맨드(id: ${commandId})를 수정하거나 삭제하려고 해요.\nget_command로 현재 상태를 확인하고, update_command 또는 delete_command로 처리해 주세요.`;
@@ -3953,14 +3961,12 @@ Message: ${message}
       prompt = `이 워크스페이스(id: ${workspaceId}, name: ${workspace.name})에서 새 커맨드를 만들려고 해요.\nlist_commands로 기존 커맨드를 확인하고, create_command로 새 커맨드를 만들어 주세요.\n사용자에게 어떤 커맨드를 만들고 싶은지 물어봐 주세요.`;
     }
 
-    this.handleClaudeSend(
-      { conversationId: conversation.conversationId, message: prompt },
-      from
-    );
+    // 초기 컨텍스트 + 프롬프트를 합쳐서 한 번에 전송
+    this.sendInitialContext(conversation.conversationId, prompt);
 
     // 해당 대화로 자동 전환
     this.deps.workspaceStore.setActiveConversation(conversation.conversationId as ConversationId);
-    this.broadcastWorkspaceList();
+    this.broadcastWorkspaceList({ forceSelectConversationId: conversation.conversationId });
     this.saveWorkspaceStore().catch(() => {});
 
     // 세션 뷰어 등록
