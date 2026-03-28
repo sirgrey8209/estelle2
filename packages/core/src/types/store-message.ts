@@ -25,6 +25,7 @@
  * - `file_attachment`: 파일 첨부
  * - `user_response`: 사용자 응답 (권한/질문)
  * - `system`: 시스템 메시지 (세션 재시작 등)
+ * - `command_execute`: 커맨드 실행 메시지
  */
 export type StoreMessageType =
   | 'text'
@@ -35,7 +36,8 @@ export type StoreMessageType =
   | 'aborted'
   | 'file_attachment'
   | 'user_response'
-  | 'system';
+  | 'system'
+  | 'command_execute';
 
 // ============================================================================
 // Base Interface
@@ -61,6 +63,9 @@ export interface BaseStoreMessage {
 
   /** 메시지 생성 시간 (Unix timestamp) */
   timestamp: number;
+
+  /** 임시 메시지 여부 (UI에서만 표시, 히스토리에 포함하지 않음) */
+  temporary?: boolean;
 }
 
 // ============================================================================
@@ -340,6 +345,36 @@ export interface UserResponseMessage extends BaseStoreMessage {
 }
 
 /**
+ * 커맨드 실행 메시지
+ *
+ * @description
+ * 사용자가 커맨드를 실행했을 때 생성되는 메시지입니다.
+ * 일반 텍스트 메시지 대신 커맨드 실행 버블로 표시됩니다.
+ */
+export interface CommandExecuteMessage extends BaseStoreMessage {
+  /** 역할: 항상 'user' */
+  role: 'user';
+
+  /** 타입: 항상 'command_execute' */
+  type: 'command_execute';
+
+  /** 메시지 내용 */
+  content: string;
+
+  /** 커맨드 ID */
+  commandId: number;
+
+  /** 커맨드 이름 */
+  commandName: string;
+
+  /** 커맨드 아이콘 (선택적) */
+  commandIcon: string | null;
+
+  /** 커맨드 색상 (선택적) */
+  commandColor: string | null;
+}
+
+/**
  * 시스템 메시지
  *
  * @description
@@ -378,6 +413,7 @@ export type StoreMessage =
   | AbortedMessage
   | FileAttachmentMessage
   | UserResponseMessage
+  | CommandExecuteMessage
   | SystemMessage;
 
 // ============================================================================
@@ -557,6 +593,16 @@ export function isUserResponseMessage(value: unknown): value is UserResponseMess
 }
 
 /**
+ * CommandExecuteMessage 타입 가드
+ *
+ * @param msg - 확인할 StoreMessage
+ * @returns CommandExecuteMessage 타입이면 true
+ */
+export function isCommandExecuteMessage(msg: StoreMessage): msg is CommandExecuteMessage {
+  return msg.role === 'user' && msg.type === 'command_execute';
+}
+
+/**
  * SystemMessage 타입 가드
  *
  * @param value - 확인할 값
@@ -593,6 +639,7 @@ export function isStoreMessage(value: unknown): value is StoreMessage {
     isAbortedMessage(value) ||
     isFileAttachmentMessage(value) ||
     isUserResponseMessage(value) ||
-    isSystemMessage(value)
+    isSystemMessage(value) ||
+    (isObject(value) && value.role === 'user' && value.type === 'command_execute')
   );
 }

@@ -42,6 +42,7 @@ import type {
   ResultMessage,
   AbortedMessage,
   FileAttachmentMessage,
+  CommandExecuteMessage,
   SystemMessage,
   Attachment,
   FileInfo,
@@ -59,6 +60,7 @@ export type {
   ResultMessage,
   AbortedMessage,
   FileAttachmentMessage,
+  CommandExecuteMessage,
   SystemMessage,
   Attachment,
   FileInfo,
@@ -665,6 +667,19 @@ export class MessageStore {
         base.file_info = JSON.stringify((msg as FileAttachmentMessage).file);
         break;
 
+      case 'command_execute': {
+        const cmdMsg = msg as CommandExecuteMessage;
+        base.content = cmdMsg.content;
+        // 커맨드 메타데이터를 tool_input 컬럼에 JSON으로 저장 (기존 컬럼 재활용)
+        base.tool_input = JSON.stringify({
+          commandId: cmdMsg.commandId,
+          commandName: cmdMsg.commandName,
+          commandIcon: cmdMsg.commandIcon,
+          commandColor: cmdMsg.commandColor,
+        });
+        break;
+      }
+
       case 'system':
         base.content = (msg as SystemMessage).content;
         break;
@@ -778,6 +793,21 @@ export class MessageStore {
           type: 'file_attachment',
           file: row.file_info ? JSON.parse(row.file_info) : {},
         } as FileAttachmentMessage;
+
+      case 'command_execute': {
+        const meta = row.tool_input ? JSON.parse(row.tool_input) : {};
+        return {
+          id,
+          timestamp,
+          role: 'user' as const,
+          type: 'command_execute' as const,
+          content: row.content || '',
+          commandId: meta.commandId,
+          commandName: meta.commandName,
+          commandIcon: meta.commandIcon ?? null,
+          commandColor: meta.commandColor ?? null,
+        };
+      }
 
       case 'system':
         return {
@@ -1026,6 +1056,41 @@ export class MessageStore {
       role: 'assistant',
       type: 'file_attachment',
       file: fileInfo,
+    };
+
+    this.stmtInsert.run(this._messageToRow(sessionId, msg));
+    return this.getMessages(sessionId);
+  }
+
+  /**
+   * 커맨드 실행 메시지 추가
+   *
+   * @param sessionId - 세션 ID
+   * @param content - 메시지 내용
+   * @param commandId - 커맨드 ID
+   * @param commandName - 커맨드 이름
+   * @param commandIcon - 커맨드 아이콘 (또는 null)
+   * @param commandColor - 커맨드 색상 (또는 null)
+   * @returns 업데이트된 메시지 배열
+   */
+  addCommandExecuteMessage(
+    sessionId: number,
+    content: string,
+    commandId: number,
+    commandName: string,
+    commandIcon: string | null,
+    commandColor: string | null,
+  ): StoreMessage[] {
+    const msg: CommandExecuteMessage = {
+      id: generateMessageId(),
+      timestamp: Date.now(),
+      role: 'user',
+      type: 'command_execute',
+      content,
+      commandId,
+      commandName,
+      commandIcon,
+      commandColor,
     };
 
     this.stmtInsert.run(this._messageToRow(sessionId, msg));
