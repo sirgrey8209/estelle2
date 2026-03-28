@@ -151,6 +151,10 @@ export function routeMessage(message: RelayMessage): void {
 
       // 강제 대화 전환 (커맨드 관리 대화 생성 등)
       if (forceSelectConversationId) {
+        // 로컬 상태 전환 (workspaceStore + conversationStore)
+        workspaceStore.selectConversation(pylonId, forceSelectConversationId);
+        useConversationStore.getState().setCurrentConversation(forceSelectConversationId);
+        // 서버에 대화 선택 알림
         selectConversation(forceSelectConversationId);
       }
 
