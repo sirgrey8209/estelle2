@@ -674,6 +674,17 @@ export class Pylon {
   }
 
   /**
+   * 대화 삭제 트리거 (외부에서 호출 가능)
+   *
+   * @description
+   * MCP delete_conversation 등에서 대화 삭제를 요청할 때 호출합니다.
+   * agent 정리, widget 정리, 메시지 정리, store 삭제를 모두 수행합니다.
+   */
+  triggerConversationDelete(conversationId: number): boolean {
+    return this.handleConversationDelete({ conversationId });
+  }
+
+  /**
    * 워크스페이스 저장 트리거 (외부에서 호출 가능)
    */
   triggerSaveWorkspaceStore(): Promise<void> {
