@@ -2024,11 +2024,20 @@ export class Pylon {
   /**
    * conversation_delete 처리
    */
-  private handleConversationDelete(payload: Record<string, unknown> | undefined): void {
+  private handleConversationDelete(payload: Record<string, unknown> | undefined): boolean {
     const { conversationId } = payload || {};
-    if (!conversationId) return;
+    if (!conversationId) return false;
 
     const eid = conversationId as ConversationId;
+
+    // Agent 세션 정리 (있으면)
+    try {
+      if (this.deps.agentManager.hasActiveSession(eid)) {
+        this.deps.agentManager.stop(eid);
+      }
+    } catch (err) {
+      this.deps.logger.error(`[Pylon] Failed to stop agent session on delete: ${err}`);
+    }
 
     // 위젯 정리 (있으면)
     this.deps.mcpServer?.cancelWidgetForConversation(conversationId as number);
@@ -2043,6 +2052,7 @@ export class Pylon {
         this.deps.logger.error(`[Pylon] Failed to save after conversation delete: ${err}`);
       });
     }
+    return success;
   }
 
   /**
