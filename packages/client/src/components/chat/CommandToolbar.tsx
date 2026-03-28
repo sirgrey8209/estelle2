@@ -57,6 +57,8 @@ function CommandIcon({ icon, color }: { icon: string | null; color: string | nul
  * - 선택된 커맨드 버튼 롱프레스 → 게이지 애니메이션 후 커맨드 편집 대화
  * - + 버튼 → 선택 후 클릭으로 새 커맨드 생성 대화
  */
+const LONG_PRESS_DURATION = 500;
+
 export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarProps) {
   const commandsByWorkspace = useCommandStore((state) => state.commandsByWorkspace);
   const commands = workspaceId ? (commandsByWorkspace.get(workspaceId) ?? []) : [];
@@ -85,6 +87,15 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
     };
   }, [selectedId]);
 
+  // Cleanup rAF on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressRaf.current != null) {
+        cancelAnimationFrame(longPressRaf.current);
+      }
+    };
+  }, []);
+
   const handleCommandClick = useCallback(
     (cmdId: number) => {
       if (longPressFired.current) {
@@ -100,7 +111,7 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
         if (cmd) {
           // optimistic update: command_execute 임시 메시지 추가
           const tempMessage = {
-            id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
             role: 'user' as const,
             type: 'command_execute' as const,
             content: cmd.content,
@@ -125,11 +136,6 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
   );
 
   const handleAddClick = useCallback(() => {
-    if (longPressFired.current) {
-      longPressFired.current = false;
-      return;
-    }
-
     if (selectedId === 'add') {
       // 선택된 상태에서 클릭 → 실행 후 선택 해제
       if (workspaceId) {
@@ -163,7 +169,7 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
         if (longPressStart.current == null) return;
 
         const elapsed = performance.now() - longPressStart.current;
-        const progress = Math.min(elapsed / 500, 1);
+        const progress = Math.min(elapsed / LONG_PRESS_DURATION, 1);
         setLongPressProgress(progress);
 
         if (progress >= 1) {
@@ -213,7 +219,7 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
               {/* Long press gauge */}
               {isSelected && longPressProgress > 0 && (
                 <div
-                  className="absolute inset-0 bg-primary/20 origin-left"
+                  className="absolute inset-0 bg-primary/20 origin-left transition-none"
                   style={{ transform: `scaleX(${longPressProgress})` }}
                 />
               )}
@@ -239,7 +245,7 @@ export function CommandToolbar({ conversationId, workspaceId }: CommandToolbarPr
               title="커맨드 추가"
             >
               <Plus className="h-3 w-3 text-muted-foreground" />
-              {isAddSelected && <span className="text-xs whitespace-nowrap">커맨드 추가</span>}
+              {isAddSelected && <span className="text-xs text-muted-foreground whitespace-nowrap">커맨드 추가</span>}
             </button>
           );
         })()}
